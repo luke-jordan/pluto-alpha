@@ -12,6 +12,7 @@ const chai = require('chai');
 const expect = chai.expect;
 chai.use(require('sinon-chai'));
 chai.use(require('chai-as-promised'));
+
 const proxyquire = require('proxyquire').noCallThru();
 
 const tinyPostStub = sinon.stub();
@@ -23,6 +24,8 @@ const fetchMlBoostsStub = sinon.stub();
 const fetchAudienceStub = sinon.stub();
 const accountStatusStub = sinon.stub();
 const extractAccountIdsStub = sinon.stub();
+
+const publishEventStub = sinon.stub();
 const momentStub = sinon.stub();
 
 class MockLambdaClient {
@@ -40,6 +43,9 @@ const handler = proxyquire('../boost-ml-handler', {
         'fetchActiveMlBoosts': fetchMlBoostsStub,
         'findLastLogForBoost': findBoostLogStub,
         'fetchBoostAudience': fetchAudienceStub
+    },
+    'publish-common': {
+        'publishMultiUserEvent': publishEventStub
     },
     'aws-sdk': {
         'Lambda': MockLambdaClient  
@@ -93,7 +99,7 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
     });
 
     beforeEach(() => helper.resetStubs(fetchMlBoostsStub, fetchAudienceStub, updateStatusStub, accountStatusStub, extractAccountIdsStub,
-        findUserIdsStub, tinyPostStub, findBoostLogStub, lamdbaInvokeStub));
+        findUserIdsStub, tinyPostStub, findBoostLogStub, lamdbaInvokeStub, publishEventStub));
 
     it('Handles ml boost that are only offered once', async () => {
         const mockAccountIds = ['account-id-1', 'account-id-2'];
@@ -146,7 +152,7 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
         const resultOfBoost = await handler.processMlBoosts({});
 
         expect(resultOfBoost).to.exist;
-        expect(resultOfBoost).to.deep.equal({ result: 'SUCCESS' });
+        expect(resultOfBoost).to.deep.equal({ result: 'SUCCESS', boostsProcessed: 1, offersMade: 1 });
         
         expect(fetchMlBoostsStub).to.have.been.calledOnceWithExactly();
         expect(accountStatusStub).to.have.been.calledOnceWithExactly({ boostIds: [testBoostId], accountIds: mockAccountIds });
@@ -224,7 +230,7 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
         const resultOfBoost = await handler.processMlBoosts({});
 
         expect(resultOfBoost).to.exist;
-        expect(resultOfBoost).to.deep.equal({ result: 'SUCCESS' });
+        expect(resultOfBoost).to.deep.equal({ result: 'SUCCESS', boostsProcessed: 1, offersMade: 2 });
 
 
         expect(fetchMlBoostsStub).to.have.been.calledOnceWithExactly();
@@ -250,5 +256,42 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
 
         // helper.logNestedMatches(expectedStatusUpdateInstruction, updateStatusStub.getCall(0).args[0][0]);
         expect(updateStatusStub).to.have.been.calledOnceWithExactly([expectedStatusUpdateInstruction]);
+    });
+
+    it('Restricts to certain number at max', async () => {
+        const mlParameters = { onlyOfferOnce: false, maxUsersPerOfferRun: { basis: 'ABSOLUTE', value: 10 }};
+        fetchMlBoostsStub.resolves([mockMlBoostFromRds(mlParameters)]);
+
+        const mockAccountIds = Array(15).fill().map((_, index) => `account-id-${index}`);
+        extractAccountIdsStub.resolves(mockAccountIds);
+        
+        const userIdMap = mockAccountIds.reduce((obj, accountId, index) => ({ ...obj, [accountId]: `user-id-${index}` }), {});
+        findUserIdsStub.resolves(userIdMap);
+        
+        const offerDecisions = Object.values(userIdMap).map((userId) => ({ 'user_id': userId, 'should_offer': true }));
+        tinyPostStub.resolves({ body: JSON.stringify(offerDecisions) });
+
+        const mockMoment = moment();
+        momentStub.returns(mockMoment.clone());
+        lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 200 }) });
+        updateStatusStub.resolves([{ boostId: testBoostId, updatedTime: testUpdatedTime }]);
+
+        const resultOfBoost = await handler.processMlBoosts({});
+        expect(resultOfBoost).to.deep.equal({ result: 'SUCCESS', boostsProcessed: 1, offersMade: 10 });
+        
+        expect(accountStatusStub).to.have.not.been.called;
+        
+        // here is the point -- only ten of these
+        const expectedStatusUpdateInstruction = {
+            boostId: testBoostId,
+            accountIds: mockAccountIds.slice(0, 10),
+            newStatus: 'OFFERED',
+            expiryTime: mockMoment.clone().add(24, 'hours'),
+            logType: 'ML_BOOST_OFFERED'
+        };
+
+        // helper.logNestedMatches(expectedStatusUpdateInstruction, updateStatusStub.getCall(0).args[0][0]);
+        expect(updateStatusStub).to.have.been.calledOnceWithExactly([expectedStatusUpdateInstruction]);
+        expect(publishEventStub).to.have.been.calledOnceWith(Object.values(userIdMap).slice(0, 10), 'BOOST_OFFERED_GAME');
     });
 });
