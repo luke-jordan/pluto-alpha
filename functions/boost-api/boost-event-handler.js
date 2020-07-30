@@ -192,15 +192,26 @@ const checkAndMarkSaveForPool = async (boostsForStatusChange, event) => {
 const publishStatusTriggered = (status, boost, userIds) => 
     publisher.publishMultiUserEvent(userIds, `BOOST_${status}_${boost.boostType}`, { context: util.constructBoostContext(boost) });
 
-const publishStatusLogs = async (offeredOrPendingBoosts, boostStatusChangeDict, affectedAccountsDict) => {
-    const boostIds = Object.keys(boostStatusChangeDict);
-    const publishPromises = boostIds.filter((boostId) => Array.isArray(boostStatusChangeDict[boostId])).map((boostId) => {
+const mapBoostToPublish = (boostId, offeredOrPendingBoosts, boostStatusChangeDict, affectedAccountsDict) => {
+    try {
         const relevantBoost = offeredOrPendingBoosts.find((boost) => boost.boostId === boostId);
         // expiry, redemption, etc., taken care of in their dedicated handlers (though may adjust that)
         const activeStatussesTriggered = boostStatusChangeDict[boostId].filter((status) => util.ACTIVE_BOOST_STATUS.includes(status));
         const userIds = Object.values(affectedAccountsDict[boostId]).map(({ userId }) => userId);
         return activeStatussesTriggered.map((status) => publishStatusTriggered(status, relevantBoost, userIds));
-    }).reduce((allList, thisList) => [...allList, ...thisList], []);
+    } catch (err) {
+        logger('Error publishing status change, passed boost status change map: ', JSON.stringify(boostStatusChangeDict));
+        logger('And passed affected accounts dict: ', JSON.stringify(affectedAccountsDict));
+        logger('And was processing boost ID: ', boostId);
+        logger('FATAL_ERROR: Error publishing status change: ', err);
+    }
+};
+
+const publishStatusLogs = async (offeredOrPendingBoosts, boostStatusChangeDict, affectedAccountsDict) => {
+    const boostIds = Object.keys(boostStatusChangeDict);
+    const publishPromises = boostIds.filter((boostId) => Array.isArray(boostStatusChangeDict[boostId])).
+        map((boostId) => mapBoostToPublish(boostId, offeredOrPendingBoosts, boostStatusChangeDict, affectedAccountsDict)).
+        reduce((allList, thisList) => [...allList, ...thisList], []);
     logger('Assembled status log publication promises, about to trigger');
     await Promise.all(publishPromises);
     logger('Completed dispatching status log events');
@@ -343,8 +354,11 @@ const processEventForExistingBoosts = async (event) => {
         await Promise.all(withdrawalRelatedBoosts.map((boost) => publishWithdrawalLog(boost, boostStatusChangeDict[boost.boostId][0], affectedAccountsDict[boost.boostId])));
     }
 
-    logger('Completed processing, publish status changes made');
-    await publishStatusLogs(offeredOrPendingBoosts, boostStatusChangeDict, affectedAccountsDict);
+    const nonRedemptionBoosts = boostsForStatusChange.filter((boost) => !boostStatusChangeDict[boost.boostId].includes('REDEEMED'));
+    if (nonRedemptionBoosts.length > 0) {
+        logger('Completed processing, publish status changes made');
+        await publishStatusLogs(nonRedemptionBoosts, boostStatusChangeDict, affectedAccountsDict);    
+    }
 
     return {
         result: 'SUCCESS',
