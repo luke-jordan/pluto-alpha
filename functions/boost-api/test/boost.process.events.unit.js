@@ -23,6 +23,8 @@ const fetchUncreatedBoostStub = sinon.stub();
 
 const redemptionHandlerStub = sinon.stub();
 
+const publishMultiStub = sinon.stub();
+
 const proxyquire = require('proxyquire').noCallThru();
 
 const handler = proxyquire('../boost-event-handler', {
@@ -36,6 +38,9 @@ const handler = proxyquire('../boost-event-handler', {
     },
     './boost-redemption-handler': {
         'redeemOrRevokeBoosts': redemptionHandlerStub
+    },
+    'publish-common': {
+        'publishMultiUserEvent': publishMultiStub
     }
 });
 
@@ -44,7 +49,10 @@ describe('*** UNIT TEST FRIEND BOOST ***', () => {
     const mockBoostId = uuid();
     const mockCreatedMoment = moment().subtract(1, 'day');
 
-    const mockBoost = {
+    const mockUserId = uuid();
+    const mockAccountId = uuid();
+
+    const mockFriendBoost = {
         boostId: mockBoostId,
         boostType: 'SOCIAL',
         boostCategory: 'NUMBER_FRIENDS',
@@ -60,9 +68,9 @@ describe('*** UNIT TEST FRIEND BOOST ***', () => {
         boostAudience: 'GENERAL'
     };
 
+    beforeEach(() => helper.resetStubs(findBoostStub, getAccountIdStub, findAccountsToRedeemStub, updateBoostAccountStub, fetchUncreatedBoostStub, redemptionHandlerStub, publishMultiStub));
+
     it('Processes a friend number boost correctly', async () => {
-        const mockUserId = uuid();
-        const mockAccountId = uuid();
         const mockBoostAmount = 100000; // $10
 
         const mockFriend = (createdDaysAgo) => ({ relationshipId: uuid(), creationTimeMillis: moment().subtract(createdDaysAgo, 'days').valueOf() });
@@ -74,7 +82,7 @@ describe('*** UNIT TEST FRIEND BOOST ***', () => {
         };
 
         getAccountIdStub.resolves(mockAccountId);
-        findBoostStub.resolves([mockBoost]);
+        findBoostStub.resolves([mockFriendBoost]);
         const mockAccountMap = { [mockAccountId]: { userId: mockUserId, status: 'OFFERED' }};
         findAccountsToRedeemStub.resolves([{ 
             boostId: mockBoostId,
@@ -96,7 +104,7 @@ describe('*** UNIT TEST FRIEND BOOST ***', () => {
 
         // likewise
         const expectedRedemptionCall = {
-            redemptionBoosts: [mockBoost], 
+            redemptionBoosts: [mockFriendBoost], 
             revocationBoosts: [], 
             affectedAccountsDict: { [mockBoostId]: mockAccountMap }, 
             event: { ...testEvent, accountId: mockAccountId }
@@ -116,6 +124,55 @@ describe('*** UNIT TEST FRIEND BOOST ***', () => {
         };
         expect(updateBoostAccountStub).to.have.been.calledOnceWithExactly([expectedBoostUpdate]);
         expect(updateBoostRedemptionStub).to.have.been.calledOnce; // also sufficiently covered elsewhere
+    });
+
+    it('Handles multiple boosts correctly, when one is not triggered', async () => {
+        const testEvent = {
+            accountId: mockAccountId,
+            eventType: 'SAVING_PAYMENT_SUCCESSFUL',
+            timeInMillis: moment().valueOf(),
+            eventContext: {
+                transactionId: 'some-transaction',
+                savedAmount: '5000000::HUNDREDTH_CENT::USD',
+                firstSave: false
+            }
+        };
+
+        const mockSaveBoost = { 
+            boostId: 'save-boost-id',
+            statusConditions: { UNLOCKED: ['save_event_greater_than #{200000::HUNDREDTH_CENT::USD}'] },
+            boostType: 'SIMPLE',
+            boostCategory: 'SIMPLE_SAVE',
+            boostAmount: 100000,
+            boostUnit: 'HUNDREDTH_CENT',
+            boostCurrency: 'USD',
+            fromBonusPoolId: 'primary_bonus_pool',
+            fromFloatId: 'primary_cash',
+            forClientId: 'some_client_co',
+            boostStartTime: moment().subtract(2, 'days'),
+            boostEndTime: moment().add(5, 'days')
+        };
+        
+        findBoostStub.resolves([mockSaveBoost, mockFriendBoost]);
+        fetchUncreatedBoostStub.resolves([]);
+
+        redemptionHandlerStub.resolves([{ transferTransactionId: 'some-id' }]);
+
+        const mockAccountUserMap = { 
+            [mockAccountId]: { userId: mockUserId, status: 'OFFERED' }
+        }; 
+        findAccountsToRedeemStub.resolves([{
+            boostId: 'save-boost-id',
+            accountUserMap: mockAccountUserMap
+        }]);
+
+        const result = await handler.handleBatchOfQueuedEvents(helper.composeSqsBatch([testEvent]));
+        expect(result).to.exist;
+
+        expect(redemptionHandlerStub).to.not.have.been.called;
+        
+        expect(publishMultiStub).to.have.been.calledOnce; // because multiple users may be triggered
+        expect(publishMultiStub).to.have.been.calledWith([mockUserId], 'BOOST_UNLOCKED_SIMPLE');
     });
 
 });
