@@ -204,12 +204,14 @@ const mapBoostToPublish = (boostId, offeredOrPendingBoosts, boostStatusChangeDic
         logger('And passed affected accounts dict: ', JSON.stringify(affectedAccountsDict));
         logger('And was processing boost ID: ', boostId);
         logger('FATAL_ERROR: Error publishing status change: ', err);
+        return [];
     }
 };
 
 const publishStatusLogs = async (offeredOrPendingBoosts, boostStatusChangeDict, affectedAccountsDict) => {
     const boostIds = Object.keys(boostStatusChangeDict);
-    const publishPromises = boostIds.filter((boostId) => Array.isArray(boostStatusChangeDict[boostId])).
+    const publishPromises = boostIds.
+        filter((boostId) => Array.isArray(boostStatusChangeDict[boostId]) && boostStatusChangeDict[boostId].length > 0).
         map((boostId) => mapBoostToPublish(boostId, offeredOrPendingBoosts, boostStatusChangeDict, affectedAccountsDict)).
         reduce((allList, thisList) => [...allList, ...thisList], []);
     logger('Assembled status log publication promises, about to trigger');
