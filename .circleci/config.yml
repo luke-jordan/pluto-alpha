@@ -15,10 +15,10 @@ jobs:
       - run:
           name: Search for commited credentials
           command: |
-            cd $HOME/app
+            cd /mnt/ramdisk
             git clone https://github.com/awslabs/git-secrets
             cd git-secrets && sudo make install
-            cd $HOME/app
+            cd /mnt/ramdisk
             git secrets --install
             git secrets --register-aws
             git secrets --scan -r
@@ -52,7 +52,7 @@ jobs:
           command: |
             # Util is trivial so we skip for now
             echo "Linting and testing modules"
-            cd $HOME/app
+            cd /mnt/ramdisk
             mv .circleci/execute_test_lint.sh ./
             /bin/sh execute_test_lint.sh modules/rds-common
             /bin/sh execute_test_lint.sh modules/dynamo-common
@@ -62,7 +62,7 @@ jobs:
       - run:
           name: Prune module dependencies then copy into modules themselves
           command: |
-            cd $HOME/app
+            cd /mnt/ramdisk
             npm prune --production
             echo "Prune complete, remove old symlinks"
             rm modules/rds-common/node_modules && rm modules/dynamo-common/node_modules && rm modules/publish-common/node_modules
@@ -90,7 +90,7 @@ jobs:
       - run:
           name: Install dependencies for our functions, if not stored
           command: |
-            cd $HOME/app
+            cd /mnt/ramdisk
             mv .circleci/install_function_dependencies.sh ./
             /bin/sh install_function_dependencies.sh
 
@@ -119,7 +119,7 @@ jobs:
             /bin/sh execute_test_lint.sh functions/warmup link-only
             
             echo "Uploading coverage reports"
-            cd $HOME/app
+            cd /mnt/ramdisk
             npm install --save-dev codecov
             node_modules/codecov/bin/codecov
 
@@ -153,7 +153,7 @@ jobs:
                 echo "On branch $CIRCLE_BRANCH, building artifacts."
 
                 echo "First, we do a prune production on the consolidated bundle"
-                cd $HOME/app
+                cd /mnt/ramdisk
                 npm prune --production
 
                 echo "Then we delete aws-sdk, since provided in lambda runtime, and huge size duplicated"
@@ -165,55 +165,55 @@ jobs:
 
                 echo "Now ready to zip code bundles and upload them"
 
-                cd $HOME/app/functions/db-migration
+                cd /mnt/ramdisk/functions/db-migration
                 echo $CIRCLE_SHA1 > last_commit.txt
                 zip -rq $HOME/deploy_db_migration_$CIRCLE_SHA1.zip .
 
-                cd $HOME/app/functions/float-api
+                cd /mnt/ramdisk/functions/float-api
                 echo $CIRCLE_SHA1 > last_commit.txt
                 zip -rq $HOME/deploy_float_api_$CIRCLE_SHA1.zip .
 
-                cd $HOME/app/functions/user-activity-api
+                cd /mnt/ramdisk/functions/user-activity-api
                 echo $CIRCLE_SHA1 > last_commit.txt
                 zip -rq $HOME/deploy_user_act_$CIRCLE_SHA1.zip .
 
-                cd $HOME/app/functions/user-existence-api
+                cd /mnt/ramdisk/functions/user-existence-api
                 echo $CIRCLE_SHA1 > last_commit.txt
                 zip -rq $HOME/deploy_user_existence_api_$CIRCLE_SHA1.zip .
 
-                cd $HOME/app/functions/friend-api
+                cd /mnt/ramdisk/functions/friend-api
                 echo $CIRCLE_SHA1 > last_commit.txt
                 zip -rq $HOME/deploy_friend_api_$CIRCLE_SHA1.zip .
 
-                cd $HOME/app/functions/boost-api
+                cd /mnt/ramdisk/functions/boost-api
                 echo $CIRCLE_SHA1 > last_commit.txt
                 zip -rq $HOME/deploy_boost_api_$CIRCLE_SHA1.zip .
 
-                cd $HOME/app/functions/snippet-api
+                cd /mnt/ramdisk/functions/snippet-api
                 echo $CIRCLE_SHA1 > last_commit.txt
                 zip -rq $HOME/deploy_snippet_api_$CIRCLE_SHA1.zip .
 
-                cd $HOME/app/functions/audience-selection
+                cd /mnt/ramdisk/functions/audience-selection
                 echo $CIRCLE_SHA1 > last_commit.txt
                 zip -rq $HOME/deploy_audience_selection_$CIRCLE_SHA1.zip .
 
-                cd $HOME/app/functions/user-messaging-api
+                cd /mnt/ramdisk/functions/user-messaging-api
                 echo $CIRCLE_SHA1 > last_commit.txt
                 zip -rq $HOME/deploy_user_messaging_api_$CIRCLE_SHA1.zip .
 
-                cd $HOME/app/functions/referral-api
+                cd /mnt/ramdisk/functions/referral-api
                 echo $CIRCLE_SHA1 > last_commit.txt
                 zip -rq $HOME/deploy_referral_api_$CIRCLE_SHA1.zip .
 
-                cd $HOME/app/functions/admin-api
+                cd /mnt/ramdisk/functions/admin-api
                 echo $CIRCLE_SHA1 > last_commit.txt
                 zip -rq $HOME/deploy_admin_api_$CIRCLE_SHA1.zip .
 
-                cd $HOME/app/functions/third-parties
+                cd /mnt/ramdisk/functions/third-parties
                 echo $CIRCLE_SHA1 > last_commit.txt
                 zip -rq $HOME/deploy_third_parties_$CIRCLE_SHA1.zip .
 
-                cd $HOME/app/functions/warmup
+                cd /mnt/ramdisk/functions/warmup
                 echo $CIRCLE_SHA1 > last_commit.text
                 zip -rq $HOME/deploy_ops_warmup_$CIRCLE_SHA1.zip .
 
@@ -244,16 +244,16 @@ jobs:
 
                 /home/circleci/bin/aws s3 cp deploy_ops_warmup_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/ops_warmup/$CIRCLE_SHA1.zip
 
-                /home/circleci/bin/aws s3 sync $HOME/app/templates/emails/ s3://$CIRCLE_BRANCH.jupiter.templates/emails/
-                /home/circleci/bin/aws s3 sync $HOME/app/templates/payment/ s3://$CIRCLE_BRANCH.jupiter.templates/payment/
-                /home/circleci/bin/aws s3 sync $HOME/app/templates/rds s3://jupiter.db.migration.scripts/$CIRCLE_BRANCH/ops/
+                /home/circleci/bin/aws s3 sync /mnt/ramdisk/templates/emails/ s3://$CIRCLE_BRANCH.jupiter.templates/emails/
+                /home/circleci/bin/aws s3 sync /mnt/ramdisk/templates/payment/ s3://$CIRCLE_BRANCH.jupiter.templates/payment/
+                /home/circleci/bin/aws s3 sync /mnt/ramdisk/templates/rds s3://jupiter.db.migration.scripts/$CIRCLE_BRANCH/ops/
              fi
 
       - run:
           name: handle cloud components
           command: |
-             export TF_VERSION=$(cat $HOME/app/terraform/terraform_version)
-             cd $HOME/app
+             export TF_VERSION=$(cat /mnt/ramdisk/terraform/terraform_version)
+             cd /mnt/ramdisk
              ./audit_iam.sh
 
              if [ ! -f /tmp/terraform/terraform ]; then
@@ -262,7 +262,7 @@ jobs:
              fi
 
              export PATH="/tmp/terraform:$PATH"
-             cd $HOME/app/terraform
+             cd /mnt/ramdisk/terraform
 
              if [ $CIRCLE_BRANCH == 'master' ] || [ $CIRCLE_BRANCH == 'staging' ] ; then
                 echo "Fetch private credentials used in some lambdas"
