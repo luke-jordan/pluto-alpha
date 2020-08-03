@@ -2,6 +2,9 @@
 
 const logger = require('debug')('jupiter:boosts:handler');
 const config = require('config');
+const moment = require('moment');
+
+const uuid = require('uuid/v4');
 const statusCodes = require('statuses');
 
 const boostRedemptionHandler = require('./boost-redemption-handler');
@@ -14,6 +17,13 @@ const AWS = require('aws-sdk');
 
 AWS.config.update({ region: config.get('aws.region') });
 const lambda = new AWS.Lambda();
+
+const Redis = require('ioredis');
+const redis = new Redis({
+    host: config.get('cache.config.host'),
+    port: config.get('cache.config.port'),
+    retryStrategy: () => `dont retry`
+});
 
 const expireFinishedTournaments = async (boost) => {
     // for now, we only care enough if this is a friend tournament
@@ -158,5 +168,93 @@ module.exports.processUserBoostResponse = async (event) => {
     } catch (err) {
         logger('FATAL_ERROR: ', err);
         return { statusCode: statusCodes('Internal Server Error'), body: JSON.stringify(err.message) };
+    }
+};
+
+const fetchBoostFromCacheOrDB = async (boostId) => {
+    const cacheKey = `${config.get('cache.prefix.gameBoost')}::${boostId}`;
+
+    const cacheResult = await redis.get(cacheKey);
+    logger('Got cached game boost: ', cacheResult);
+    if (typeof cacheResult === 'string' && cacheResult.length > 0) {
+        return JSON.parse(cacheResult);
+    }
+
+    const boost = await persistence.fetchBoost(boostId);
+    logger('Got boost from persistence: ', boost);
+    await redis.set(cacheKey, JSON.stringify(boost), 'EX', config.get('cache.ttl.gameBoost'));
+
+    return boost;
+};
+
+const handleGameInitialisation = async (boostId, systemWideUserId) => {
+    logger('Initialising game for boost id: ', boostId, 'And user ', systemWideUserId);
+    const boost = await fetchBoostFromCacheOrDB(boostId);
+    logger('Got boost:', boost);
+
+    const { timeLimitSeconds } = boost.gameParams;
+
+    const currentTime = moment().valueOf();
+    const gameEndTime = currentTime + (timeLimitSeconds * 1000);
+
+    const sessionId = uuid();
+    const gameLogContext = { boostId, systemWideUserId, currentTime, gameEndTime, currentScore: 0 };
+    const gameState = JSON.stringify({ [sessionId]: [gameLogContext], gameEndTime });
+
+    const cacheKey = `${config.get('cache.prefix.gameSession')}::${sessionId}`;
+    await redis.set(cacheKey, gameState, 'EX', config.get('cache.ttl.gameSession'));
+
+    return { statusCode: 200, body: JSON.stringify({ sessionId })};
+};
+
+const handleInterimGameResult = async (sessionId, systemWideUserId, currentScore) => {
+    logger('Storing intering game results in cache');
+    const cacheKey = `${config.get('cache.prefix.gameSession')}::${sessionId}`;
+
+    const cacheResult = await redis.get(cacheKey);
+    const cachedGameState = JSON.parse(cacheResult);
+    logger('Got cached game state:', cachedGameState);
+
+    // handle event validation here
+
+    // consider simply replacing old game state with new game state, albiet current method helps track events better
+    cachedGameState[sessionId].push({ currentTime: moment().valueOf(), currentScore });
+    logger('New game state:', cachedGameState);
+    
+    await redis.set(cacheKey, cachedGameState, 'EX', config.get('cache.ttl.gameSession'));
+
+    return { statusCode: 200, body: JSON.stringify({ result: 'SUCCESS' })};
+};
+
+/**
+ * 
+ * @param {object} event 
+ */
+module.exports.cacheGameResponse = async (event) => {
+    try {
+        const userDetails = util.extractUserDetails(event);
+        if (!userDetails) {
+            return { statusCode: statusCodes('Forbidden') };
+        }
+
+        const { systemWideUserId } = userDetails;
+        const { boostId, eventType, gameLogContext } = util.extractEventBody(event);
+
+        if (eventType === 'INITIALIZE') {
+            return handleGameInitialisation(boostId, systemWideUserId);
+        }
+        
+        if (eventType === 'GAME_IN_PROGRESS') {
+            const { sessionId, currentScore } = gameLogContext;
+            return handleInterimGameResult(sessionId, systemWideUserId, currentScore);
+        }
+
+        if (eventType === 'USER_GAME_COMPLETION') {
+            // consolidate cached game score
+            // handle winning user or loser
+            // return final score and result
+        }
+    } catch (err) {
+        return { statusCode: 500, body: JSON.stringify(err.message) };
     }
 };

@@ -11,13 +11,19 @@
     },
     "cache": {
         "config": {
+            "port": 6739,
+            "host": "localhost"
         },
         "prefix": {
             "accountId": "ACCOUNT_ID",
-            "profile": "FRIEND_PROFILE"
+            "profile": "FRIEND_PROFILE",
+            "gameBoost": "GAME_BOOST",
+            "gameSession": "GAME_SESSION"
         },
         "ttl": {
-            "accountId": 3600
+            "accountId": 3600,
+            "gameBoost": 3600,
+            "gameSession": 300
         }
     },
     "time": {

@@ -27,7 +27,7 @@ const fetchUserDefaultAccount = async (systemWideUserId) => {
     logger('Retrieved accounts: ', userAccounts);
     const persistedId = Array.isArray(userAccounts) && userAccounts.length > 0 ? userAccounts[0] : null;
     if (persistedId) {
-        redis.set(cacheKey, persistedId, 'EX', config.get('cache.ttl.accountId'));
+        await redis.set(cacheKey, persistedId, 'EX', config.get('cache.ttl.accountId'));
     }
     return persistedId;
 };
