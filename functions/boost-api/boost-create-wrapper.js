@@ -28,7 +28,7 @@ const isValidFriendTournament = (event) => {
     const params = boostUtil.extractEventBody(event);
     logger('Checking if friend tournament ... ');
     if (params.boostAudienceSelection) {
-        logger('Have an audience selection, canont be friend based');
+        logger('Have an audience selection, cannot be friend based');
         return false;
     }
 

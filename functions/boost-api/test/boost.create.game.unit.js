@@ -280,7 +280,7 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
 
         const lambdaPayload = JSON.parse(lambdaInvokeStub.getCall(0).args[0].Payload);
         expect(lambdaPayload).to.deep.equal(expectedMsgInstruct);
-        expect(alterBoostStub).to.have.been.calledOnceWithExactly(testBoostId, mockMsgIdDict, true);
+        expect(alterBoostStub).to.have.been.calledOnceWithExactly(testBoostId, mockMsgIdDict, false); // the false is NB!
 
         expect(publishMultiStub).to.have.been.calledThrice; // we emit OFFERED as well, because we need it included
     });

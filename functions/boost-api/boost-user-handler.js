@@ -34,11 +34,11 @@ const recordGameResult = async (params, boost, accountId) => {
         timeTakenMillis: params.timeTakenMillis 
     };
     
-    if (params.numberTaps) {
+    if (typeof params.numberTaps === 'number') {
         gameLogContext.numberTaps = params.numberTaps;
     }
 
-    if (params.percentDestroyed) {
+    if (typeof params.percentDestroyed === 'number') {
         gameLogContext.percentDestroyed = params.percentDestroyed;
     }
 

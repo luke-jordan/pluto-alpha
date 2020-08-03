@@ -23,7 +23,7 @@ const STANDARD_GAME_ACTIONS = {
 };
 
 const STANDARD_BOOST_TYPES = {
-    'GAME': ['CHASE_ARROW', 'TAP_SCREEN', 'DESTROY_IMAGE'],
+    'GAME': ['CHASE_ARROW', 'TAP_SCREEN', 'DESTROY_IMAGE', 'MATCH_TILES'],
     'SIMPLE': ['SIMPLE_SAVE', 'ROUND_UP', 'TARGET_BALANCE'],
     'REFERRAL': ['USER_CODE_USED'],
     'SOCIAL': ['FRIENDS_ADDED', 'NUMBER_FRIENDS'],
@@ -37,9 +37,11 @@ const obtainStdAction = (msgKey) => (Reflect.has(STANDARD_GAME_ACTIONS, msgKey) 
 const convertParamsToRedemptionCondition = (gameParams) => {
     const conditions = [];
     const timeLimitMillis = gameParams.timeLimitSeconds * 1000;
+    // starting to make "number taps" generic, here using it for, in effect, "number matches"
     switch (gameParams.gameType) {
         case 'CHASE_ARROW':
-        case 'TAP_SCREEN': {
+        case 'TAP_SCREEN': 
+        case 'MATCH_TILES': {
             if (gameParams.winningThreshold) {
                 conditions.push(`number_taps_greater_than #{${gameParams.winningThreshold}::${timeLimitMillis}}`);
             }
@@ -355,6 +357,8 @@ const publishBoostUserLogs = async (initiator, accountIds, boostContext, default
 };
 
 const storeMessageInstructions = async (eventParams, boostParams) => {
+    const { boostId, initialStatus, boostAudienceType } = boostParams;
+    
     const messagePayloads = eventParams.messagesToCreate.map((msg) => createMsgInstructionFromDefinition(msg, boostParams, eventParams.gameParams));
     logger('Assembled message payloads: ', messagePayloads);
 
@@ -365,10 +369,12 @@ const storeMessageInstructions = async (eventParams, boostParams) => {
     const messageInstructionResults = await Promise.all(messageInvocations);
     logger('Result of message instruct invocation: ', messageInstructionResults);
     
-    const shouldOfferBoost = !['EVENT_DRIVEN', 'ML_DETERMINED'].includes(boostParams.boostAudienceType);
-    const boostHasAccounts = boostParams.accountIds.length > 0; 
-    const updatedBoost = await persistence.setBoostMessages(boostParams.boostId, messageInstructionResults, shouldOfferBoost && boostHasAccounts);
-    logger('And result of update: ', updatedBoost);
+    // do not set boosts to offered unless they are (1) not already unlocked or further, and (2) not event or ML driven
+    const shouldOfferBoost = isInitialStatusBefore(initialStatus, 'UNLOCKED') && !['EVENT_DRIVEN', 'ML_DETERMINED'].includes(boostAudienceType);
+    const boostHasAccounts = boostParams.accountIds.length > 0;
+
+    const updatedBoost = await persistence.setBoostMessages(boostId, messageInstructionResults, shouldOfferBoost && boostHasAccounts);
+    logger('And result of update on set boost messages: ', updatedBoost);
 
     return messageInstructionResults;
 };
@@ -518,11 +524,12 @@ module.exports.createBoost = async (event) => {
             accountIds,
             creatingUserId: instructionToRds.creatingUserId, 
             boostAudienceType,
+            initialStatus: params.initialStatus,
             audienceId: params.audienceId,
             boostEndTime
         };
 
-        logger('Passing boost params to message create: ', boostParams);
+        logger('Passing boost params to message create: ', JSON.stringify(boostParams));
 
         persistedBoost.messageInstructions = await storeMessageInstructions(params, boostParams);
     }
