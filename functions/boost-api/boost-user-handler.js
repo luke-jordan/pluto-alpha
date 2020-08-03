@@ -208,7 +208,7 @@ const handleGameInitialisation = async (boostId, systemWideUserId) => {
 };
 
 const handleInterimGameResult = async (sessionId, systemWideUserId, currentScore) => {
-    logger('Storing intering game results in cache');
+    logger('Storing interim game results in cache');
     const cacheKey = `${config.get('cache.prefix.gameSession')}::${sessionId}`;
 
     const cacheResult = await redis.get(cacheKey);
@@ -240,7 +240,7 @@ module.exports.cacheGameResponse = async (event) => {
         const { systemWideUserId } = userDetails;
         const { boostId, eventType, gameLogContext } = util.extractEventBody(event);
 
-        if (eventType === 'INITIALIZE') {
+        if (eventType === 'INITIALISE') {
             return handleGameInitialisation(boostId, systemWideUserId);
         }
         
