@@ -61,7 +61,7 @@ const sortAndRankBestScores = (boostGameLogs, accountIds) => {
     
     boostGameLogs.forEach((log) => {
         const { accountId, logContext } = log;
-        const accountScore = logContext.numberTaps || logContext.percentDestroyed;
+        const accountScore = scoreType === 'NUMBER' ? logContext.numberTaps : logContext.percentDestroyed;
         
         if (!highScoreMap.has(accountId) || highScoreMap.get(accountId) < accountScore) {
             highScoreMap.set(accountId, accountScore);

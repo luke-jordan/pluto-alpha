@@ -273,6 +273,84 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
         expect(multiTableArgs[0]).to.deep.equal(insertFirstDef);
     });
 
+    it('Handles initial status unlocked properly', async () => {    
+        queryStub.onFirstCall().resolves([{ 'account_id': 'account-1' }, { 'account_id': 'account-2' }]);
+        uuidStub.onFirstCall().returns(testBoostId);
+
+        multiTableStub.resolves([
+            [{ 'boost_id': testBoostId, 'creation_time': moment().format() }],
+            [{ 'insertion_id': 100, 'creation_time': moment().format() }, { 'insertion_id': 101, 'creation_time': moment().format() }]
+        ]);
+
+        const testInstruction = {
+            creatingUserId: 'some-user',
+            label: 'Midweek tile match!',
+            boostType: 'GAME',
+            boostCategory: 'MATCH_TILES',
+            boostAmount: 100000,
+            boostBudget: 200000,
+            boostUnit: 'HUNDREDTH_CENT',
+            boostCurrency: 'USD',
+            fromBonusPoolId: 'primary_bonus_pool',
+            forClientId: 'some_client_co',
+            fromFloatId: 'primary_float',
+            boostStartTime: moment(),
+            boostEndTime: moment().add(1, 'day'),
+            defaultStatus: 'UNLOCKED',
+            statusConditions: { REDEEMED: 'number_taps_greater' },
+            boostAudienceType: 'GENERAL',
+            audienceId: testAudienceId,
+            redemptionMsgInstructions: testRedemptionMsgs,
+            messageInstructionIds: [],
+            gameParams: { gameType: 'MATCH_TILES' } 
+        };
+
+        const resultOfInsertion = await rds.insertBoost(testInstruction);
+        expect(resultOfInsertion).to.exist;
+
+        // first, the instruction to insert the overall boost
+        const expectedFirstRow = {
+            boostId: testBoostId,
+            creatingUserId: 'some-user',
+            label: 'Midweek tile match!',
+            startTime: testInstruction.boostStartTime.format(),
+            endTime: testInstruction.boostEndTime.format(),
+            boostType: 'GAME',
+            boostCategory: 'MATCH_TILES',
+            boostAmount: 100000,
+            boostBudget: 200000,
+            boostRedeemed: 0,
+            boostUnit: 'HUNDREDTH_CENT',
+            boostCurrency: 'USD',
+            fromBonusPoolId: 'primary_bonus_pool',
+            fromFloatId: 'primary_float',
+            forClientId: 'some_client_co',
+            boostAudienceType: 'GENERAL',
+            audienceId: testAudienceId,
+            initialStatus: 'UNLOCKED',
+            statusConditions: { REDEEMED: 'number_taps_greater' },
+            messageInstructionIds: { instructions: [] },
+            gameParams: { gameType: 'MATCH_TILES' }
+        };
+
+        const expectedKeys = Object.keys(expectedFirstRow);
+        const expectedFirstQuery = `insert into ${boostTable} (${extractQueryClause(expectedKeys)}) values %L returning boost_id, creation_time`;
+        const expectedColumnTemplate = extractColumnTemplate(expectedKeys);
+        const insertFirstDef = { query: expectedFirstQuery, columnTemplate: expectedColumnTemplate, rows: [expectedFirstRow]};
+
+        const expectedSecondQuery = `insert into ${boostUserTable} (${extractQueryClause(boostUserKeys)}) values %L returning insertion_id, creation_time`;
+        const expectedJoinTableRows = [
+            { boostId: testBoostId, accountId: 'account-1', boostStatus: 'UNLOCKED' },
+            { boostId: testBoostId, accountId: 'account-2', boostStatus: 'UNLOCKED' }
+        ];
+        const expectedSecondDef = { query: expectedSecondQuery, columnTemplate: extractColumnTemplate(boostUserKeys), rows: expectedJoinTableRows};
+        
+        expect(multiTableStub).to.have.been.calledOnce;
+        const multiTableArgs = multiTableStub.getCall(0).args[0];
+        expect(multiTableArgs[1]).to.deep.equal(expectedSecondDef);
+        expect(multiTableArgs[0]).to.deep.equal(insertFirstDef);
+    });
+
     it('Inserts event-based boost without inserting account records', async () => {
         const testBoostStartTime = moment();
         const testBoostEndTime = moment();
