@@ -23,7 +23,7 @@
         "ttl": {
             "accountId": 3600,
             "gameBoost": 3600,
-            "gameSession": 300
+            "gameSession": 1800
         }
     },
     "time": {
@@ -42,6 +42,10 @@
         "offerToExpiryDefault": {
             "value": 24,
             "unit": "hours"
+        },
+        "minGameResultsInterval": {
+            "value": 15,
+            "unit": "seconds"
         }
     },
     "tables": {

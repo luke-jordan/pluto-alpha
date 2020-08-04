@@ -18,12 +18,8 @@ const AWS = require('aws-sdk');
 AWS.config.update({ region: config.get('aws.region') });
 const lambda = new AWS.Lambda();
 
-const Redis = require('ioredis');
-const redis = new Redis({
-    host: config.get('cache.config.host'),
-    port: config.get('cache.config.port'),
-    retryStrategy: () => `dont retry`
-});
+const Redis = require('redis');
+const redis = Redis.createClient();
 
 const expireFinishedTournaments = async (boost) => {
     // for now, we only care enough if this is a friend tournament
@@ -188,7 +184,9 @@ const fetchBoostFromCacheOrDB = async (boostId) => {
 };
 
 const handleGameInitialisation = async (boostId, systemWideUserId) => {
-    logger('Initialising game for boost id: ', boostId, 'And user ', systemWideUserId);
+    logger('Initialising game for boost id: ', boostId, 'And user ', systemWideUserId)
+    const sessionId = uuid();
+
     const boost = await fetchBoostFromCacheOrDB(boostId);
     logger('Got boost:', boost);
 
@@ -197,31 +195,47 @@ const handleGameInitialisation = async (boostId, systemWideUserId) => {
     const currentTime = moment().valueOf();
     const gameEndTime = currentTime + (timeLimitSeconds * 1000);
 
-    const sessionId = uuid();
-    const gameLogContext = { boostId, systemWideUserId, currentTime, gameEndTime, currentScore: 0 };
-    const gameState = JSON.stringify({ [sessionId]: [gameLogContext], gameEndTime });
+    const gameState = JSON.stringify({
+        boostId,
+        systemWideUserId,
+        gameEndTime,
+        [sessionId]: [{ timestamp: currentTime, userScore: 0 }]
+    });
 
+    logger('Initialised game. Sending details to cache: ', gameState);
     const cacheKey = `${config.get('cache.prefix.gameSession')}::${sessionId}`;
     await redis.set(cacheKey, gameState, 'EX', config.get('cache.ttl.gameSession'));
 
     return { statusCode: 200, body: JSON.stringify({ sessionId })};
 };
 
-const handleInterimGameResult = async (sessionId, systemWideUserId, currentScore) => {
+const hasValidInterval = (sessionId, gameState) => {
+    const sessionGameResults = gameState[sessionId];
+    const mostRecentGameResult = sessionGameResults[sessionGameResults.length -1]
+    logger('Got most recent game result: ', mostRecentGameResult)
+    const intervalBetweenResults = moment().diff(moment(mostRecentGameResult.timestamp), 'seconds');
+    logger(`Interval between game results: ${intervalBetweenResults} seconds`);
+
+    return intervalBetweenResults >= config.get('time.minGameResultsInterval.value');
+}
+
+const handleInterimGameResult = async (sessionId, currentTime, currentScore) => {
     logger('Storing interim game results in cache');
     const cacheKey = `${config.get('cache.prefix.gameSession')}::${sessionId}`;
-
     const cacheResult = await redis.get(cacheKey);
     const cachedGameState = JSON.parse(cacheResult);
-    logger('Got cached game state:', cachedGameState);
+    logger('Got cached game state: ', cachedGameState);
 
-    // handle event validation here
+    if (!hasValidInterval(sessionId, cachedGameState)) {
+        return { statusCode: statusCodes('Forbidden') };
+    }
 
-    // consider simply replacing old game state with new game state, albiet current method helps track events better
-    cachedGameState[sessionId].push({ currentTime: moment().valueOf(), currentScore });
-    logger('New game state:', cachedGameState);
-    
-    await redis.set(cacheKey, cachedGameState, 'EX', config.get('cache.ttl.gameSession'));
+    cachedGameState[sessionId].push({
+        timestamp: currentTime,
+        userScore: currentScore
+    });
+    logger('New game state: ', cachedGameState);
+    await redis.set(cacheKey, JSON.stringify(cachedGameState), 'EX', config.get('cache.ttl.gameSession'));
 
     return { statusCode: 200, body: JSON.stringify({ result: 'SUCCESS' })};
 };
@@ -245,8 +259,9 @@ module.exports.cacheGameResponse = async (event) => {
         }
         
         if (eventType === 'GAME_IN_PROGRESS') {
+            const currentTime = moment().valueOf();
             const { sessionId, currentScore } = gameLogContext;
-            return handleInterimGameResult(sessionId, systemWideUserId, currentScore);
+            return handleInterimGameResult(sessionId, currentTime, currentScore);
         }
 
         if (eventType === 'USER_GAME_COMPLETION') {
