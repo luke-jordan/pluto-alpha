@@ -105,10 +105,12 @@ module.exports.fetchUserBoosts = async (accountId, { excludedStatus, changedSinc
     const flagRestriction = flags ? `and ${boostMainTable}.flags && $${typeIndex + excludedType.length + (changedSinceTime ? 1 : 0)} ` : '';
     const finalClause = `${updatedTimeRestriction}${flagRestriction}`;
 
-    const selectBoostQuery = `select ${columns}, ${endTimeColumn} from ${boostMainTable} inner join ${boostAccountJoinTable} ` + 
-       `on ${boostMainTable}.boost_id = ${boostAccountJoinTable}.boost_id where account_id = $1 and ` + 
-       `boost_status not in (${extractArrayIndices(excludedStatus, statusIndex)}) and ` +
-       `boost_type not in (${extractArrayIndices(excludedType, typeIndex)}) ${finalClause}` +
+    const selectBoostQuery = `select ${columns}, ${endTimeColumn} ` +
+        `from ${boostMainTable} inner join ${boostAccountJoinTable} ` + 
+            `on ${boostMainTable}.boost_id = ${boostAccountJoinTable}.boost_id ` +
+        `where account_id = $1 and ` + 
+        `boost_status not in (${extractArrayIndices(excludedStatus, statusIndex)}) and ` +
+        `boost_type not in (${extractArrayIndices(excludedType, typeIndex)}) ${finalClause}` +
        `order by ${boostAccountJoinTable}.creation_time desc`;
 
     const values = [accountId, ...excludedStatus, ...excludedType];
@@ -135,6 +137,11 @@ module.exports.findAccountsForUser = async (userId = 'some-user-uid') => {
 };
 
 module.exports.fetchUserBoostLogs = async (accountId, boostIds, logType) => {
+    // to allow for empty calls (makes some parallism upstream simpler)
+    if (boostIds.length === 0) {
+        return [];
+    }
+
     const fixedParams = 2;
     const findQuery = `select * from ${config.get('tables.boostLogTable')} where account_id = $1 and log_type = $2 and ` +
         `boost_id in (${extractArrayIndices(boostIds, fixedParams + 1)})`;
