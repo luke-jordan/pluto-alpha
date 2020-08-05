@@ -135,6 +135,11 @@ module.exports.findAccountsForUser = async (userId = 'some-user-uid') => {
 };
 
 module.exports.fetchUserBoostLogs = async (accountId, boostIds, logType) => {
+    // to allow for empty calls (makes some parallism upstream simpler)
+    if (boostIds.length === 0) {
+        return [];
+    }
+
     const fixedParams = 2;
     const findQuery = `select * from ${config.get('tables.boostLogTable')} where account_id = $1 and log_type = $2 and ` +
         `boost_id in (${extractArrayIndices(boostIds, fixedParams + 1)})`;

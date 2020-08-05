@@ -220,16 +220,21 @@ describe('*** UNIT TEST BOOST DETAILS (CHANGED AND SPECIFIED) ***', () => {
 
         const mockLockContext = { numberTaps: 10, ranking: 1 };
         const mockGameLog = { accountId: testAccountId, boostId: testBoostId, logType: 'GAME_OUTCOME', logContext: mockLockContext };
-        fetchBoostLogsStub.resolves([mockGameLog]);
+
+        const mockStatusContext = { newStatus: 'REDEEMED', boostAmount: 6 };
+        const mockRedeemLog = { accountId: testAccountId, boostId: testBoostId, logType: 'STATUS_CHANGE', logContext: mockStatusContext };
+        
+        fetchBoostLogsStub.withArgs(testAccountId, [testBoostId], 'GAME_OUTCOME').resolves([mockGameLog]);
+        fetchBoostLogsStub.withArgs(testAccountId, [testBoostId], 'STATUS_CHANGE').resolves([mockRedeemLog]);
 
         const resultOfChangeFetch = await handler.listChangedBoosts(wrapEvent({}, testUserId, 'ORDINARY_USER'));
         const bodyOfResult = helper.standardOkayChecks(resultOfChangeFetch);
 
-        const expectedBoost = { ...mockBoost, boostType: 'GAME', boostStatus: 'REDEEMED', gameLogs: [mockGameLog] }; 
+        const expectedBoost = { ...mockBoost, boostType: 'GAME', boostStatus: 'REDEEMED', gameLogs: [mockGameLog], statusChangeLogs: [mockRedeemLog] }; 
         const fetchedBoost = bodyOfResult[0];
         expect(fetchedBoost).to.deep.equal(expectedBoost);
 
-        expect(fetchBoostLogsStub).to.have.been.calledOnceWithExactly(testAccountId, [testBoostId], 'GAME_OUTCOME');
+        expect(fetchBoostLogsStub).to.have.been.calledTwice; // content of call is covered above
     });
 
     it('Attach game outcome result to game logs, lost tournament', async () => {
@@ -242,16 +247,18 @@ describe('*** UNIT TEST BOOST DETAILS (CHANGED AND SPECIFIED) ***', () => {
 
         const mockLockContext = { numberTaps: 3, ranking: 4 };
         const mockGameLog = { accountId: testAccountId, boostId: testBoostId, logType: 'GAME_OUTCOME', logContext: mockLockContext };
-        fetchBoostLogsStub.resolves([mockGameLog]);
+        
+        fetchBoostLogsStub.withArgs(testAccountId, [testBoostId], 'GAME_OUTCOME').resolves([mockGameLog]);
+        fetchBoostLogsStub.withArgs(testAccountId, [testBoostId], 'STATUS_CHANGE').resolves([]);
 
         const resultOfChangeFetch = await handler.listChangedBoosts(wrapEvent({}, testUserId, 'ORDINARY_USER'));
         const bodyOfResult = helper.standardOkayChecks(resultOfChangeFetch);
 
-        const expectedBoost = { ...mockBoost, boostType: 'GAME', boostStatus: 'EXPIRED', gameLogs: [mockGameLog] }; 
+        const expectedBoost = { ...mockBoost, boostType: 'GAME', boostStatus: 'EXPIRED', gameLogs: [mockGameLog], statusChangeLogs: [] }; 
         const fetchedBoost = bodyOfResult[0];
         expect(fetchedBoost).to.deep.equal(expectedBoost);
 
-        expect(fetchBoostLogsStub).to.have.been.calledOnceWithExactly(testAccountId, [testBoostId], 'GAME_OUTCOME');
+        expect(fetchBoostLogsStub).to.have.been.calledTwice; // content of call is covered above
 
         expect(cacheGetStub).to.have.been.calledOnceWithExactly(`ACCOUNT_ID::${testUserId}`);
         expect(findAccountsStub).to.have.been.calledOnceWithExactly(testUserId);

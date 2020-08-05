@@ -98,16 +98,28 @@ module.exports.listUserBoosts = async (event) => {
 // ////////////////////////// BOOST DETAILS //////////////////////////////////////////////////
 // ////////////////////////////////////////////////////////////////////////////////////////////
 
-const addLogsToBoost = (boost, boostGameLogs) => {
-    boost.gameLogs = boostGameLogs ? boostGameLogs.filter((log) => log.boostId === boost.boostId) : [];
+const addLogsToBoost = (boost, allLogs, keyToUse) => {
+    boost[keyToUse] = allLogs ? allLogs.filter((log) => log.boostId === boost.boostId) : [];
     return boost;
 };
 
-const addOutcomeLogsToGameBoosts = async (gameBoosts, allBoosts, accountId) => {
-    const gameBoostIds = gameBoosts.map((boost) => boost.boostId);
-    const gameLogs = await persistence.fetchUserBoostLogs(accountId, gameBoostIds, 'GAME_OUTCOME');
-    const assembledGameBoosts = gameBoosts.map((boost) => addLogsToBoost(boost, gameLogs));
-    const nonGameBoosts = allBoosts.filter((boost) => !gameBoostIds.includes(boost.boostId));
+const addOutcomeLogsToBoosts = async (gameBoosts, allBoosts, accountId) => {
+    const gameBoostIds = gameBoosts.map((boost) => boost.boostId);    
+    const allBoostIds = allBoosts.map(({ boostId }) => boostId);
+
+    const [gameLogs, statusChangeLogs] = await Promise.all([
+        persistence.fetchUserBoostLogs(accountId, gameBoostIds, 'GAME_OUTCOME'),
+        persistence.fetchUserBoostLogs(accountId, allBoostIds, 'STATUS_CHANGE')
+    ]);
+
+    const changeLogsWithContext = statusChangeLogs.filter((log) => !opsUtil.isObjectEmpty(log.logContext));
+
+    const assembledGameBoosts = gameBoosts.map((boost) => addLogsToBoost(boost, gameLogs, 'gameLogs')).
+        map((boost) => addLogsToBoost(boost, changeLogsWithContext, 'statusChangeLogs'));
+
+    const nonGameBoosts = allBoosts.filter((boost) => !gameBoostIds.includes(boost.boostId)).
+        map((boost) => addLogsToBoost(boost, changeLogsWithContext, 'statusChangeLogs'));
+
     return [...assembledGameBoosts, ...nonGameBoosts];
 };
 
@@ -121,7 +133,7 @@ const obtainRedeemedOrActiveBoosts = async (accountId) => {
 
     // if a boost has been redeemed, and it is a game, we attach game outcome logs to tell the user how they did, else just return all
     const redeemedGameBoosts = unitConvertedBoosts.filter((boost) => boost.boostStatus === 'REDEEMED' && boost.boostType === 'GAME');
-    return redeemedGameBoosts.length > 0 ? addOutcomeLogsToGameBoosts(redeemedGameBoosts, unitConvertedBoosts, accountId) : unitConvertedBoosts;    
+    return redeemedGameBoosts.length > 0 ? addOutcomeLogsToBoosts(redeemedGameBoosts, unitConvertedBoosts, accountId) : unitConvertedBoosts;    
 };
 
 const obtainExpiredOrFailedBoosts = async (accountId) => {
@@ -137,7 +149,7 @@ const obtainExpiredOrFailedBoosts = async (accountId) => {
         map(convertBoostToWholeNumber);
     logger('Expired games: ', expiredGameBoosts);
 
-    return expiredGameBoosts.length > 0 ? addOutcomeLogsToGameBoosts(expiredGameBoosts, unitConvertedBoosts, accountId) : unitConvertedBoosts;
+    return expiredGameBoosts.length > 0 ? addOutcomeLogsToBoosts(expiredGameBoosts, unitConvertedBoosts, accountId) : unitConvertedBoosts;
 };
 
 /**
