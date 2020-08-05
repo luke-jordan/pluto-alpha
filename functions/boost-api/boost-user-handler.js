@@ -21,6 +21,10 @@ const lambda = new AWS.Lambda();
 const Redis = require('redis');
 const redis = Redis.createClient();
 
+const promisify = require('util').promisify;
+const redisGet = promisify(redis.get).bind(redis);
+const redisSet = promisify(redis.set).bind(redis);
+
 const expireFinishedTournaments = async (boost) => {
     // for now, we only care enough if this is a friend tournament
     const flags = boost.flags || []; // just as even small chance of accidental fragility here would be a really bad trade-off
@@ -170,7 +174,7 @@ module.exports.processUserBoostResponse = async (event) => {
 const fetchBoostFromCacheOrDB = async (boostId) => {
     const cacheKey = `${config.get('cache.prefix.gameBoost')}::${boostId}`;
 
-    const cacheResult = await redis.get(cacheKey);
+    const cacheResult = await redisGet(cacheKey);
     logger('Got cached game boost: ', cacheResult);
     if (typeof cacheResult === 'string' && cacheResult.length > 0) {
         return JSON.parse(cacheResult);
@@ -178,13 +182,13 @@ const fetchBoostFromCacheOrDB = async (boostId) => {
 
     const boost = await persistence.fetchBoost(boostId);
     logger('Got boost from persistence: ', boost);
-    await redis.set(cacheKey, JSON.stringify(boost), 'EX', config.get('cache.ttl.gameBoost'));
+    await redisSet(cacheKey, JSON.stringify(boost), 'EX', config.get('cache.ttl.gameBoost'));
 
     return boost;
 };
 
 const handleGameInitialisation = async (boostId, systemWideUserId) => {
-    logger('Initialising game for boost id: ', boostId, 'And user ', systemWideUserId)
+    logger('Initialising game for boost id: ', boostId, 'And user ', systemWideUserId);
     const sessionId = uuid();
 
     const boost = await fetchBoostFromCacheOrDB(boostId);
@@ -198,46 +202,68 @@ const handleGameInitialisation = async (boostId, systemWideUserId) => {
     const gameState = JSON.stringify({
         boostId,
         systemWideUserId,
-        gameEndTime,
-        [sessionId]: [{ timestamp: currentTime, userScore: 0 }]
+        gameEndTime: moment(gameEndTime),
+        gameEvents: [{
+            timestamp: moment(currentTime),
+            userScore: 0
+        }]
     });
 
     logger('Initialised game. Sending details to cache: ', gameState);
     const cacheKey = `${config.get('cache.prefix.gameSession')}::${sessionId}`;
-    await redis.set(cacheKey, gameState, 'EX', config.get('cache.ttl.gameSession'));
+    await redisSet(cacheKey, gameState, 'EX', config.get('cache.ttl.gameSession'));
 
     return { statusCode: 200, body: JSON.stringify({ sessionId })};
 };
 
-const hasValidInterval = (sessionId, gameState) => {
-    const sessionGameResults = gameState[sessionId];
-    const mostRecentGameResult = sessionGameResults[sessionGameResults.length -1]
-    logger('Got most recent game result: ', mostRecentGameResult)
-    const intervalBetweenResults = moment().diff(moment(mostRecentGameResult.timestamp), 'seconds');
-    logger(`Interval between game results: ${intervalBetweenResults} seconds`);
+const isValidGameResult = (gameState, currentTime) => {
+    const sessionGameResults = gameState.gameEvents;
+    const mostRecentGameResult = sessionGameResults[sessionGameResults.length - 1];
+    logger('Got most recent game result: ', mostRecentGameResult);
 
-    return intervalBetweenResults >= config.get('time.minGameResultsInterval.value');
-}
+    const intervalBetweenResults = currentTime.diff(moment(mostRecentGameResult.timestamp), 'seconds');
+    logger(`Interval between game results: ${intervalBetweenResults} seconds`);
+    const minInterval = config.get('time.minGameResultsInterval.value');
+
+    if (intervalBetweenResults < minInterval) {
+        return false;
+    }
+
+    const gameEndTime = moment(gameState.gameEndTime).valueOf();
+    if (currentTime.valueOf() > gameEndTime) {
+        return false;
+    }
+
+    return true;
+};
 
 const handleInterimGameResult = async (sessionId, currentTime, currentScore) => {
     logger('Storing interim game results in cache');
     const cacheKey = `${config.get('cache.prefix.gameSession')}::${sessionId}`;
-    const cacheResult = await redis.get(cacheKey);
+    const cacheResult = await redisGet(cacheKey);
     const cachedGameState = JSON.parse(cacheResult);
     logger('Got cached game state: ', cachedGameState);
 
-    if (!hasValidInterval(sessionId, cachedGameState)) {
-        return { statusCode: statusCodes('Forbidden') };
+    if (!isValidGameResult(cachedGameState, currentTime)) {
+        return { statusCode: statusCodes('Bad Request') };
     }
 
-    cachedGameState[sessionId].push({
+    cachedGameState.gameEvents.push({
         timestamp: currentTime,
         userScore: currentScore
     });
+    
     logger('New game state: ', cachedGameState);
-    await redis.set(cacheKey, JSON.stringify(cachedGameState), 'EX', config.get('cache.ttl.gameSession'));
+    await redisSet(cacheKey, JSON.stringify(cachedGameState), 'EX', config.get('cache.ttl.gameSession'));
 
     return { statusCode: 200, body: JSON.stringify({ result: 'SUCCESS' })};
+};
+
+const handleGameCompletion = async (gameContext) => {
+    logger('Handling completion with game context: ', gameContext);
+    // consolidate cached game score
+    // handle winning user or loser
+    // return final score and result
 };
 
 /**
@@ -259,16 +285,15 @@ module.exports.cacheGameResponse = async (event) => {
         }
         
         if (eventType === 'GAME_IN_PROGRESS') {
-            const currentTime = moment().valueOf();
             const { sessionId, currentScore } = gameLogContext;
-            return handleInterimGameResult(sessionId, currentTime, currentScore);
+            return handleInterimGameResult(sessionId, moment(), currentScore);
         }
 
         if (eventType === 'USER_GAME_COMPLETION') {
-            // consolidate cached game score
-            // handle winning user or loser
-            // return final score and result
+            return handleGameCompletion(gameLogContext);
         }
+
+        throw new Error('Unrecognized event');
     } catch (err) {
         return { statusCode: 500, body: JSON.stringify(err.message) };
     }
