@@ -30,7 +30,7 @@
             "unit": "days"
         },
         "expiredCutOff": {
-            "value": 3,
+            "value": 2,
             "unit": "days"
         },
         "offerToExpiryDefault": {

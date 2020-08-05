@@ -112,13 +112,16 @@ const addOutcomeLogsToBoosts = async (gameBoosts, allBoosts, accountId) => {
         persistence.fetchUserBoostLogs(accountId, allBoostIds, 'STATUS_CHANGE')
     ]);
 
+    logger('Status change logs: ', JSON.stringify(statusChangeLogs));
     const changeLogsWithContext = statusChangeLogs.filter((log) => !opsUtil.isObjectEmpty(log.logContext));
+    logger('And with log context: ', changeLogsWithContext);
 
     const assembledGameBoosts = gameBoosts.map((boost) => addLogsToBoost(boost, gameLogs, 'gameLogs')).
         map((boost) => addLogsToBoost(boost, changeLogsWithContext, 'statusChangeLogs'));
 
     const nonGameBoosts = allBoosts.filter((boost) => !gameBoostIds.includes(boost.boostId)).
         map((boost) => addLogsToBoost(boost, changeLogsWithContext, 'statusChangeLogs'));
+    logger('Non game boosts: ', nonGameBoosts);
 
     return [...assembledGameBoosts, ...nonGameBoosts];
 };
@@ -133,7 +136,7 @@ const obtainRedeemedOrActiveBoosts = async (accountId) => {
 
     // if a boost has been redeemed, and it is a game, we attach game outcome logs to tell the user how they did, else just return all
     const redeemedGameBoosts = unitConvertedBoosts.filter((boost) => boost.boostStatus === 'REDEEMED' && boost.boostType === 'GAME');
-    return redeemedGameBoosts.length > 0 ? addOutcomeLogsToBoosts(redeemedGameBoosts, unitConvertedBoosts, accountId) : unitConvertedBoosts;    
+    return addOutcomeLogsToBoosts(redeemedGameBoosts, unitConvertedBoosts, accountId);    
 };
 
 const obtainExpiredOrFailedBoosts = async (accountId) => {
@@ -147,7 +150,7 @@ const obtainExpiredOrFailedBoosts = async (accountId) => {
 
     const expiredGameBoosts = unitConvertedBoosts.filter((boost) => boost.boostStatus === 'EXPIRED' && boost.boostType === 'GAME').
         map(convertBoostToWholeNumber);
-    logger('Expired games: ', expiredGameBoosts);
+    logger('Expired games: ', JSON.stringify(expiredGameBoosts));
 
     return expiredGameBoosts.length > 0 ? addOutcomeLogsToBoosts(expiredGameBoosts, unitConvertedBoosts, accountId) : unitConvertedBoosts;
 };
