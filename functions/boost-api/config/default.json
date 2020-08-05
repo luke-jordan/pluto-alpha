@@ -11,8 +11,6 @@
     },
     "cache": {
         "config": {
-            "port": 6739,
-            "host": "localhost"
         },
         "prefix": {
             "accountId": "ACCOUNT_ID",
