@@ -132,7 +132,11 @@ const obtainRedeemedOrActiveBoosts = async (accountId) => {
     const excludedForActive = ['CREATED', 'OFFERED', 'EXPIRED', 'FAILED'];
     
     const listActiveBoosts = await persistence.fetchUserBoosts(accountId, { changedSinceTime: changeCutOff, excludedStatus: excludedForActive });
-    const unitConvertedBoosts = listActiveBoosts.map(convertBoostToWholeNumber);
+    
+    // makes a mess of a complex query to do either filter or query inside RDS call above, and may need it else
+    const unitConvertedBoosts = listActiveBoosts.filter((boost) => boost.boostStatus === 'REDEEMED' || moment(boost.endTime).isAfter(moment())).
+        map(convertBoostToWholeNumber);
+    logger('Have boosts after filter, and conversion: ', JSON.stringify(unitConvertedBoosts));
 
     // if a boost has been redeemed, and it is a game, we attach game outcome logs to tell the user how they did, else just return all
     const redeemedGameBoosts = unitConvertedBoosts.filter((boost) => boost.boostStatus === 'REDEEMED' && boost.boostType === 'GAME');
@@ -145,9 +149,10 @@ const obtainExpiredOrFailedBoosts = async (accountId) => {
 
     const excludedForExpired = ['CREATED', 'OFFERED', 'PENDING', 'UNLOCKED', 'REDEEMED'];
     const listExpiredBoosts = await persistence.fetchUserBoosts(accountId, { changedSinceTime: expiredCutOff, excludedStatus: excludedForExpired });
-    logger('From persistence: ', listExpiredBoosts);
-    const unitConvertedBoosts = listExpiredBoosts.map(convertBoostToWholeNumber);
+    logger('From persistence, expired boosts: ', JSON.stringify(listExpiredBoosts));
 
+    // getting a few instances of users seeing too many of these, so we are going to send back max two at a time
+    const unitConvertedBoosts = listExpiredBoosts.map(convertBoostToWholeNumber).slice(0, 2);
     const expiredGameBoosts = unitConvertedBoosts.filter((boost) => boost.boostStatus === 'EXPIRED' && boost.boostType === 'GAME').
         map(convertBoostToWholeNumber);
     logger('Expired games: ', JSON.stringify(expiredGameBoosts));

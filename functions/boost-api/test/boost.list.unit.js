@@ -159,7 +159,7 @@ describe('*** UNIT TEST USER BOOST LIST HANDLER ***', () => {
 describe('*** UNIT TEST BOOST DETAILS (CHANGED AND SPECIFIED) ***', () => {
 
     const testStartTime = moment().subtract(1, 'day');
-    const testEndTime = moment();
+    const testEndTime = moment().add(1, 'day');
 
     const testStatusCondition = { UNLOCKED: [`save_completed_by #{${uuid()}}`], REDEEMED: ['number_taps_in_first_N #{1:10000}'] };
 
