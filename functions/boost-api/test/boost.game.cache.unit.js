@@ -1,6 +1,6 @@
 'use strict';
 
-// const logger = require('debug')('jupiter:game:cache-test');
+const logger = require('debug')('jupiter:game:cache-test');
 
 const config = require('config');
 const moment = require('moment');
@@ -170,6 +170,7 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
         const testEndTime = testStartTime.add(2, 'minutes').valueOf();
         const testCurrentTime = testStartTime.add(5, 'milliseconds').valueOf();
 
+        // this then becomes the gameMatch object
         const cachedGameState = {
             boostId: testBoostId,
             systemWideUserId: testSystemId,
@@ -191,7 +192,7 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
             boostId: testBoostId,
             eventType: 'GAME_IN_PROGRESS',
             gameLogContext: {
-                sessionId: testSessionId,
+                sessionId: testSessionId, // becomes { ..., matchId: testMatchId, ... }
                 currentScore: 13
             }
         };
@@ -206,7 +207,21 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
         expect(redisSetStub).to.have.not.been.called;
     });
 
-    // it('Consolidates final game results properly', async () => {
+    it.skip('Consolidates final game results properly', async () => {
+        const proposedSessionObject = {
+            boostId: testBoostId,
+            systemWideUserId: testSystemId,
+            sessionEndTime: 'session start time + session ttl',
+            numberOfPlays: 10,
+            numberOfWins: 5,
+            matchHistory: [
+                { matchId: 'some-match-id', result: 'MATCH_WON' },
+                { matchId: 'another-match-id', result: 'MATCH_LOST' }
+                // ... and so on
+            ],
+            flags: []
+        };
 
-    // });
+        logger('What might be: ', proposedSessionObject);
+    });
 });

@@ -189,10 +189,11 @@ const fetchBoostFromCacheOrDB = async (boostId) => {
 
 const handleGameInitialisation = async (boostId, systemWideUserId) => {
     logger('Initialising game for boost id: ', boostId, 'And user ', systemWideUserId);
-    const sessionId = uuid();
+    const sessionId = uuid(); // only if not provided in event params, else initialise match and exit
 
     const boost = await fetchBoostFromCacheOrDB(boostId);
     logger('Got boost:', boost);
+    // add session initialisation here
 
     const { timeLimitSeconds } = boost.gameParams;
 
@@ -261,9 +262,29 @@ const handleInterimGameResult = async (sessionId, currentTime, currentScore) => 
 
 const handleGameCompletion = async (gameContext) => {
     logger('Handling completion with game context: ', gameContext);
-    // consolidate cached game score
-    // handle winning user or loser
-    // return final score and result
+    const { sessionId, currentScore } = gameContext;
+
+    const sessionCacheKey = `${config.get('cache.prefix.gameSession')}::${sessionId}`;
+    const gameSession = await redisGet(sessionCacheKey);
+    logger('Got game session: ', gameSession);
+
+    const boostCacheKey = `${config.get('cache.prefix.gameBoost')}::${gameSession.boostId}`;
+    const boost = await redisGet(boostCacheKey);
+    logger('Got game boost: ', boost);
+
+    const { winningThreshold } = boost.gameParams;
+
+    if (currentScore >= winningThreshold) {
+        // read session details
+        // if user has won a certain number of times, award boost
+        // else cache thier success and exit returning session id if session is still active
+    }
+
+    // cache their loss and exit returning session id if session active
+};
+
+module.exports.checkForHangingGame = async () => {
+    logger('Checking for hanging matches and sessions');
 };
 
 /**
@@ -281,6 +302,7 @@ module.exports.cacheGameResponse = async (event) => {
         const { boostId, eventType, gameLogContext } = util.extractEventBody(event);
 
         if (eventType === 'INITIALISE') {
+            // if session id, check if user has not exceeded number of plays or other session constraints
             return handleGameInitialisation(boostId, systemWideUserId);
         }
         
