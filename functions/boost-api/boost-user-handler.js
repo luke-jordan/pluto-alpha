@@ -22,8 +22,18 @@ const Redis = require('redis');
 const redis = Redis.createClient();
 
 const promisify = require('util').promisify;
-const redisGet = promisify(redis.get).bind(redis);
 const redisSet = promisify(redis.set).bind(redis);
+const redisGet = promisify(redis.get).bind(redis);
+
+const redisGetParsed = async (cacheKey) => {
+    const cacheResult = await redisGet(cacheKey);
+    logger('Got result from cache: ', cacheResult);
+    if (typeof cacheResult === 'string' && cacheResult.length > 0) {
+        return JSON.parse(cacheResult);
+    }
+
+    return null;
+};
 
 const expireFinishedTournaments = async (boost) => {
     // for now, we only care enough if this is a friend tournament
@@ -72,6 +82,21 @@ const generateUpdateInstruction = (boost, statusResult, accountId) => {
     };
 };
 
+const fetchBoostFromCacheOrDB = async (boostId) => {
+    const cacheKey = `${config.get('cache.prefix.gameBoost')}::${boostId}`;
+    const cacheResult = await redisGetParsed(cacheKey);
+    logger('Got cached game boost: ', cacheResult);
+
+    if (cacheResult) {
+        return cacheResult;
+    }
+
+    const boost = await persistence.fetchBoost(boostId);
+    logger('Got boost from persistence: ', boost);
+    await redisSet(cacheKey, JSON.stringify(boost), 'EX', config.get('cache.ttl.gameBoost'));
+
+    return boost;
+};
 
 /**
  * @param {object} event The event from API GW. Contains a body with the parameters:
@@ -94,7 +119,7 @@ module.exports.processUserBoostResponse = async (event) => {
 
         // todo : make sure boost is available for this account ID
         const [boost, accountId] = await Promise.all([
-            persistence.fetchBoost(boostId), 
+            fetchBoostFromCacheOrDB(boostId), 
             persistence.getAccountIdForUser(systemWideUserId)
         ]);
 
@@ -171,29 +196,12 @@ module.exports.processUserBoostResponse = async (event) => {
     }
 };
 
-const fetchBoostFromCacheOrDB = async (boostId) => {
-    const cacheKey = `${config.get('cache.prefix.gameBoost')}::${boostId}`;
-
-    const cacheResult = await redisGet(cacheKey);
-    logger('Got cached game boost: ', cacheResult);
-    if (typeof cacheResult === 'string' && cacheResult.length > 0) {
-        return JSON.parse(cacheResult);
-    }
-
-    const boost = await persistence.fetchBoost(boostId);
-    logger('Got boost from persistence: ', boost);
-    await redisSet(cacheKey, JSON.stringify(boost), 'EX', config.get('cache.ttl.gameBoost'));
-
-    return boost;
-};
-
 const handleGameInitialisation = async (boostId, systemWideUserId) => {
     logger('Initialising game for boost id: ', boostId, 'And user ', systemWideUserId);
-    const sessionId = uuid(); // only if not provided in event params, else initialise match and exit
+    const sessionId = uuid();
 
     const boost = await fetchBoostFromCacheOrDB(boostId);
     logger('Got boost:', boost);
-    // add session initialisation here
 
     const { timeLimitSeconds } = boost.gameParams;
 
@@ -206,7 +214,7 @@ const handleGameInitialisation = async (boostId, systemWideUserId) => {
         gameEndTime: moment(gameEndTime),
         gameEvents: [{
             timestamp: moment(currentTime),
-            userScore: 0
+            numberMatches: 0
         }]
     });
 
@@ -238,49 +246,29 @@ const isValidGameResult = (gameState, currentTime) => {
     return true;
 };
 
-const handleInterimGameResult = async (sessionId, currentTime, currentScore) => {
+const handleInterimGameResult = async (params) => {
     logger('Storing interim game results in cache');
+    const { sessionId, numberMatches, timestamp } = params;
+
     const cacheKey = `${config.get('cache.prefix.gameSession')}::${sessionId}`;
-    const cacheResult = await redisGet(cacheKey);
-    const cachedGameState = JSON.parse(cacheResult);
+    const cachedGameState = await redisGetParsed(cacheKey);
     logger('Got cached game state: ', cachedGameState);
 
-    if (!isValidGameResult(cachedGameState, currentTime)) {
+    if (!isValidGameResult(cachedGameState, timestamp)) {
         return { statusCode: statusCodes('Bad Request') };
     }
 
-    cachedGameState.gameEvents.push({
-        timestamp: currentTime,
-        userScore: currentScore
-    });
-    
+    cachedGameState.gameEvents.push({ timestamp, numberMatches });
     logger('New game state: ', cachedGameState);
     await redisSet(cacheKey, JSON.stringify(cachedGameState), 'EX', config.get('cache.ttl.gameSession'));
 
     return { statusCode: 200, body: JSON.stringify({ result: 'SUCCESS' })};
 };
 
-const handleGameCompletion = async (gameContext) => {
-    logger('Handling completion with game context: ', gameContext);
-    const { sessionId, currentScore } = gameContext;
-
-    const sessionCacheKey = `${config.get('cache.prefix.gameSession')}::${sessionId}`;
-    const gameSession = await redisGet(sessionCacheKey);
-    logger('Got game session: ', gameSession);
-
-    const boostCacheKey = `${config.get('cache.prefix.gameBoost')}::${gameSession.boostId}`;
-    const boost = await redisGet(boostCacheKey);
-    logger('Got game boost: ', boost);
-
-    const { winningThreshold } = boost.gameParams;
-
-    if (currentScore >= winningThreshold) {
-        // read session details
-        // if user has won a certain number of times, award boost
-        // else cache thier success and exit returning session id if session is still active
-    }
-
-    // cache their loss and exit returning session id if session active
+const handleGameCompletion = async (event, parameters) => {
+    logger('Ending session with parameters: ', parameters);
+    // end session, delete from cache
+    return exports.processUserBoostResponse(event);
 };
 
 module.exports.checkForHangingGame = async () => {
@@ -299,20 +287,19 @@ module.exports.cacheGameResponse = async (event) => {
         }
 
         const { systemWideUserId } = userDetails;
-        const { boostId, eventType, gameLogContext } = util.extractEventBody(event);
+        const params = util.extractEventBody(event);
+        const { boostId, eventType } = params;
 
         if (eventType === 'INITIALISE') {
-            // if session id, check if user has not exceeded number of plays or other session constraints
             return handleGameInitialisation(boostId, systemWideUserId);
         }
         
         if (eventType === 'GAME_IN_PROGRESS') {
-            const { sessionId, currentScore } = gameLogContext;
-            return handleInterimGameResult(sessionId, moment(), currentScore);
+            return handleInterimGameResult(params);
         }
 
         if (eventType === 'USER_GAME_COMPLETION') {
-            return handleGameCompletion(gameLogContext);
+            return handleGameCompletion(event, params);
         }
 
         throw new Error('Unrecognized event');
