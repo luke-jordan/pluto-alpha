@@ -48,11 +48,9 @@ const generateMultiplier = (distribution) => {
     }
 };
 
-const calculateRandomBoostAmount = (boost, isConsolation = false) => {
-    const { distribution, realizedRewardModuloZeroTarget, minRewardAmountPerUser } = isConsolation
-        ? boost.rewardParameters.consolationPrize : boost.rewardParameters;
+const calculateRandomBoostAmount = ({ boostAmount, boostUnit, rewardParameters }) => {
+    const { distribution, realizedRewardModuloZeroTarget, minRewardAmountPerUser } = rewardParameters;
 
-    const boostAmount = opsUtil.convertToUnit(boost.boostAmount, boost.boostUnit, DEFAULT_UNIT);
     const minBoostAmount = minRewardAmountPerUser 
         ? opsUtil.convertToUnit(minRewardAmountPerUser.amount, minRewardAmountPerUser.unit, DEFAULT_UNIT) : 0;
     
@@ -63,7 +61,7 @@ const calculateRandomBoostAmount = (boost, isConsolation = false) => {
     let calculatedBoostAmount = Math.round(multiplier * (boostAmount - minBoostAmount) + minBoostAmount); // todo : use decimal light
     logger('Initial calculated boost amount: ', calculatedBoostAmount);
     
-    const amountToSnapTo = opsUtil.convertToUnit(realizedRewardModuloZeroTarget || 1, boost.boostUnit, DEFAULT_UNIT);
+    const amountToSnapTo = opsUtil.convertToUnit(realizedRewardModuloZeroTarget || 1, boostUnit, DEFAULT_UNIT);
     logger('Will need to snap to modulo 0 of : ', amountToSnapTo, ' current gap: ', calculatedBoostAmount % amountToSnapTo);
     if (calculatedBoostAmount % amountToSnapTo > 0) {
         const amountAboveSnap = calculatedBoostAmount % amountToSnapTo;
@@ -72,11 +70,11 @@ const calculateRandomBoostAmount = (boost, isConsolation = false) => {
 
     // Try again if the calculatedBoostAmount is rounded to a value greater than the boost amount or less than min amount
     if (calculatedBoostAmount > boostAmount) {
-        return calculateRandomBoostAmount(boost);
+        return calculateRandomBoostAmount({ boostAmount, boostUnit, rewardParameters });
     }
 
     logger('Random boost award, calculated amount:', calculatedBoostAmount);
-    return opsUtil.convertToUnit(calculatedBoostAmount, DEFAULT_UNIT, boost.boostUnit);
+    return opsUtil.convertToUnit(calculatedBoostAmount, DEFAULT_UNIT, boostUnit);
 };
 
 const triggerFloatTransfers = async (transferInstructions) => {
@@ -345,41 +343,42 @@ const createPublishEventPromises = (parameters) => {
     return publishPromises;
 };
 
-const calculateConsolationAmount = (boost) => {
-    const { type, consolationAmount } = boost.rewardParameters.consolationPrize;
+const calculateConsolationAmount = ({ boostUnit, rewardParameters }) => {
+    const consolationAmount = rewardParameters.consolationPrize.amount;
+    const boostAmount = opsUtil.convertToUnit(consolationAmount.amount, consolationAmount.unit, boostUnit);
 
-    if (type === 'RANDOM') {
-        const boostAmount = calculateRandomBoostAmount(boost, true);
-        return { boostAmount, amountFromBonus: boostAmount };
+    if (rewardParameters.consolationPrize.type === 'RANDOM') {
+        const calculatedAmount = calculateRandomBoostAmount({ boostAmount, boostUnit, rewardParameters });
+        return { boostAmount: calculatedAmount, amountFromBonus: calculatedAmount };
     }
 
-    const boostAmount = opsUtil.convertToUnit(consolationAmount.amount, consolationAmount.unit, boost.boostUnit);
     return { boostAmount, amountFromBonus: boostAmount };
 };
 
 const fetchConsolationDetails = (boost, affectedAccountDict) => {
     logger('Calculating consolation amount and recipeints');
-    const { consolationAwards } = boost.rewardParameters.consolationPrize;
+    const { boostId, boostUnit, rewardParameters } = boost;
+    const { recipients } = rewardParameters.consolationPrize;
 
-    const accountUserMap = affectedAccountDict[boost.boostId];
+    const accountUserMap = affectedAccountDict[boostId];
     const accountIds = Object.keys(accountUserMap);
     const recipientAccounts = accountIds.filter((accountId) => accountUserMap[accountId].status !== 'REDEEMED');
     logger('Got possible recipients: ', recipientAccounts);
 
     const consolationDetails = {
-        referenceAmounts: calculateConsolationAmount(boost)
+        referenceAmounts: calculateConsolationAmount({ boostUnit, rewardParameters })
     };
     
-    if (consolationAwards.basis === 'ALL') {
+    if (recipients.basis === 'ALL') {
         consolationDetails.recipientAccounts = recipientAccounts;
     }
 
-    if (consolationAwards.basis === 'ABSOLUTE') {
-        consolationDetails.recipientAccounts = recipientAccounts.slice(0, consolationAwards.recipients);
+    if (recipients.basis === 'ABSOLUTE') {
+        consolationDetails.recipientAccounts = recipientAccounts.slice(0, recipients.value);
     }
 
-    if (consolationAwards.basis === 'PROPORTION') {
-        const numberOfRecipients = Math.round(recipientAccounts.length * consolationAwards.recipients);
+    if (recipients.basis === 'PROPORTION') {
+        const numberOfRecipients = Math.round(recipientAccounts.length * recipients.value);
         consolationDetails.recipientAccounts = recipientAccounts.slice(0, numberOfRecipients);
     }
 
@@ -418,17 +417,20 @@ const generateConsolationInstructions = async (boost, affectedAccountDict) => {
 
 /** Used also in expiry handler to set the boost amount once this is done, so exporting */
 module.exports.calculateBoostAmount = (boost, pooledContributionMap) => {
-    const rewardType = boost.rewardParameters ? boost.rewardParameters.rewardType : 'STANDARD';
+    const { boostId, boostUnit, rewardParameters } = boost;
+
+    const rewardType = rewardParameters ? rewardParameters.rewardType : 'STANDARD';
 
     if (rewardType === 'POOLED') {
-        const accountIds = pooledContributionMap[boost.boostId];
+        const accountIds = pooledContributionMap[boostId];
         const userCount = accountIds.length;
         return calculatePooledBoostAmount(boost, userCount);
     }
 
     if (rewardType === 'RANDOM') {
-        const boostAmount = calculateRandomBoostAmount(boost);
-        return { boostAmount, amountFromBonus: boostAmount };
+        const boostAmount = opsUtil.convertToUnit(boost.boostAmount, boostUnit, DEFAULT_UNIT);
+        const calculatedAmount = calculateRandomBoostAmount({ boostAmount, boostUnit, rewardParameters });
+        return { boostAmount: calculatedAmount, amountFromBonus: calculatedAmount };
     }
 
     return { boostAmount: boost.boostAmount, amountFromBonus: boost.boostAmount };

@@ -73,9 +73,9 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
     it('Awards consolation prize to all participating users who did not win', async () => {
         const rewardParameters = {
             consolationPrize: {
-                type: 'FIXED',
-                consolationAmount: { amount: 100, unit: 'HUNDREDTH_CENT', currency: 'USD' },
-                consolationAwards: { basis: 'ALL' }
+                amount: { amount: 100, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+                recipients: { basis: 'ALL' },
+                type: 'FIXED'
             }
         };
 
@@ -159,17 +159,18 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
     });
 
     it('Awards consolation prize to specified number of users', async () => {
-        const randomConsolationAmount = 5550;
-
         const rewardParameters = {
             consolationPrize: {
-                type: 'RANDOM',
-                distribution: 'UNIFORM',
-                realizedRewardModuloZeroTarget: 10,
-                minRewardAmountPerUser: { amount: '100', unit: 'HUNDREDTH_CENT', currency: 'USD'},
-                consolationAwards: { basis: 'ABSOLUTE', recipients: 2 }
-            }
+                amount: { amount: 100, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+                recipients: { basis: 'ABSOLUTE', value: 2 },
+                type: 'RANDOM'
+            },
+            distribution: 'UNIFORM',
+            realizedRewardModuloZeroTarget: 10,
+            minRewardAmountPerUser: { amount: '10', unit: 'HUNDREDTH_CENT', currency: 'USD' }
         };
+
+        const randomConsolationAmount = 60;
 
         const boostRecipients = [
             { recipientId: 'account-id-3', amount: testBoostAmount, recipientType: 'END_USER_ACCOUNT' }
@@ -253,9 +254,9 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
     it('Awards consolation prize to a specified proportion of participating users', async () => {
         const rewardParameters = {
             consolationPrize: {
-                type: 'FIXED',
-                consolationAmount: { amount: 100, unit: 'HUNDREDTH_CENT', currency: 'USD' },
-                consolationAwards: { basis: 'PROPORTION', recipients: 0.25 }
+                amount: { amount: 100, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+                recipients: { basis: 'PROPORTION', value: 0.25 },
+                type: 'FIXED'
             }
         };
 
