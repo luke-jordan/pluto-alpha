@@ -88,6 +88,25 @@ resource "aws_cloudwatch_log_group" "boost_machine_invoke" {
   }
 }
 
+/////////////////// CLOUD WATCH FOR SCHEDULED RUN /////////////////////////////////////////////////////////////////
+
+resource "aws_cloudwatch_event_target" "trigger_boost_schedule_regular" {
+    rule = aws_cloudwatch_event_rule.daily_boost_jobs.name
+    target_id = aws_lambda_function.boost_machine_invoke.id
+    arn = aws_lambda_function.boost_machine_invoke.arn
+
+    input = jsonencode({})
+}
+
+resource "aws_lambda_permission" "allow_cloudwatch_regular_to_call_boost_schedule" {
+    statement_id = "AllowRegularAdminExecutionFromCloudWatch"
+    action = "lambda:InvokeFunction"
+    function_name = aws_lambda_function.boost_machine_invoke.function_name
+    principal = "events.amazonaws.com"
+    source_arn = aws_cloudwatch_event_rule.daily_boost_jobs.arn
+}
+
+
 /////////////////// IAM CONFIG //////////////////////////////////////////////////////////////////////////////////////
 
 resource "aws_iam_role_policy_attachment" "boost_machine_invoke_basic_execution_policy" {
@@ -118,24 +137,6 @@ resource "aws_iam_role_policy_attachment" "boost_machine_invoke_user_event_publi
 resource "aws_iam_role_policy_attachment" "boost_machine_invoke_secret_get" {
   role = aws_iam_role.boost_machine_invoke_role.name
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_boost_worker_read"
-}
-
-/////////////////// CLOUD WATCH FOR EVENT SOURCE, DAILY ///////////////////////
-
-resource "aws_cloudwatch_event_target" "trigger_boost_ml_invoke_every_day" {
-    rule = aws_cloudwatch_event_rule.daily_boost_triggers.name
-    target_id = aws_lambda_function.boost_machine_invoke.id
-    arn = aws_lambda_function.boost_machine_invoke.arn
-
-    input = jsonencode({})
-}
-
-resource "aws_lambda_permission" "allow_cloudwatch_to_call_boost_ml_invoke" {
-    statement_id = "AllowDailyAdminExecutionFromCloudWatch"
-    action = "lambda:InvokeFunction"
-    function_name = aws_lambda_function.boost_machine_invoke.function_name
-    principal = "events.amazonaws.com"
-    source_arn = aws_cloudwatch_event_rule.daily_boost_triggers.arn
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////

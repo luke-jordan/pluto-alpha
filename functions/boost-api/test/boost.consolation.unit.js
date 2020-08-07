@@ -166,7 +166,7 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
                 type: 'RANDOM',
                 distribution: 'UNIFORM',
                 realizedRewardModuloZeroTarget: 10,
-                minBoostAmountPerUser: { amount: '100', unit: 'HUNDREDTH_CENT', currency: 'USD'},
+                minRewardAmountPerUser: { amount: '100', unit: 'HUNDREDTH_CENT', currency: 'USD'},
                 consolationAwards: { basis: 'ABSOLUTE', recipients: 2 }
             }
         };

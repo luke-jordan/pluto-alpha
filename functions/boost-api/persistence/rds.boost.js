@@ -301,7 +301,7 @@ const processBoostUpdateInstruction = async ({ boostId, accountIds, newStatus, e
     let resultOfOperations = [];
     try {
         resultOfOperations = await rdsConnection.multiTableUpdateAndInsert(updateDefinitions, logInsertDefinitions);
-        logger('Result from RDS: ', resultOfOperations);
+        // logger('Result from RDS: ', resultOfOperations);
     } catch (error) {
         logger(`Error updating boost ${boostId}: ${error.message}`);
         return { boostId, error: error.message };
@@ -333,7 +333,7 @@ module.exports.updateBoostAccountStatus = async (instructions) => {
 
 module.exports.insertBoostAccountLogs = async (boostLogs) => {
     const queryDef = constructLogDefinition(['boostId', 'accountId', 'logType', 'logContext'], boostLogs);
-    logger('Inserting boost log using: ', queryDef);
+    logger('Inserting boost log using: ', JSON.stringify(queryDef));
     const resultOfQuery = await rdsConnection.insertRecords(queryDef.query, queryDef.columnTemplate, queryDef.rows);
     // logger('And with this result: ', resultOfQuery);
     if (!resultOfQuery || !resultOfQuery.rows) {
@@ -402,12 +402,36 @@ module.exports.extractAccountIds = async (audienceId) => {
 // //////////// BOOST PERSISTENCE STARTS HERE ///////////////
 // ///////////////////////////////////////////////////////////////
 
+const assembleAccountJoinDef = (boostId, boostDetails, accountIds) => {
+    logger('Assembling account joins, from: ', JSON.stringify(boostDetails)); // something strange happening here
+    const { defaultStatus, expiryParameters } = boostDetails;
+    const boostStatus = defaultStatus || 'CREATED'; // thereafter: OFFERED (when message sent), PENDING (almost done), COMPLETE
+
+    // see notes in scheduled-handler and tests, and elsewhere, about rationale for leaving expiry time empty if inherits from boost
+    const expiryTime = expiryParameters && expiryParameters.individualizedExpiry 
+        ? moment().add(expiryParameters.timeUntilExpiry.value, expiryParameters.timeUntilExpiry.unit) : null;
+
+    const rowMap = (accountId) => (expiryTime ? ({ boostId, accountId, boostStatus, expiryTime: expiryTime.format() }) : ({ boostId, accountId, boostStatus })); 
+    const boostAccountJoins = accountIds.map(rowMap);
+
+    const columns = Object.keys(boostAccountJoins[0]);
+
+    const boostJoinQueryDef = {
+        query: `insert into ${boostAccountJoinTable} (${columns.map((col) => decamelize(col, '_')).join(', ')}) values %L returning insertion_id, creation_time`,
+        columnTemplate: columns.map((column) => `$\{${column}}`).join(', '),
+        rows: boostAccountJoins
+    };
+    
+    logger('Assembled join definition, first row: ', JSON.stringify(boostAccountJoins[0]));
+    return boostJoinQueryDef;
+};
+
 module.exports.insertBoost = async (boostDetails) => {
     logger('Instruction received to insert boost: ', boostDetails);
     
     const skipAccountInsertion = boostDetails.defaultStatus === 'UNCREATED' || boostDetails.boostAudienceType === 'EVENT_DRIVEN';
     const accountIds = await (skipAccountInsertion ? [] : exports.extractAccountIds(boostDetails.audienceId));
-    logger('Extracted account IDs for boost: ', accountIds);
+    logger('Extracted account IDs for boost: ', JSON.stringify(accountIds));
 
     const boostId = uuid();
     const boostObject = {
@@ -460,13 +484,7 @@ module.exports.insertBoost = async (boostDetails) => {
     const queryDefs = [boostQueryDef];
 
     if (accountIds.length > 0) {
-        const initialStatus = boostDetails.defaultStatus || 'CREATED'; // thereafter: OFFERED (when message sent), PENDING (almost done), COMPLETE
-        const boostAccountJoins = accountIds.map((accountId) => ({ boostId, accountId, boostStatus: initialStatus }));
-        const boostJoinQueryDef = {
-            query: `insert into ${boostAccountJoinTable} (boost_id, account_id, boost_status) values %L returning insertion_id, creation_time`,
-            columnTemplate: '${boostId}, ${accountId}, ${boostStatus}',
-            rows: boostAccountJoins
-        };
+        const boostJoinQueryDef = assembleAccountJoinDef(boostId, boostDetails, accountIds);
         queryDefs.push(boostJoinQueryDef);
     }
 
@@ -563,7 +581,7 @@ module.exports.expireBoostsPastEndTime = async () => {
         `end_time < current_timestamp returning boost_id`;
     const updateBoostResult = await rdsConnection.updateRecord(updateBoostQuery, [false]);
     
-    logger('Result of straight update boosts: ', updateBoostResult);
+    logger('Result of straight update boosts: ', JSON.stringify(updateBoostResult));
     if (updateBoostResult.rowCount === 0) {
         logger('No boosts expired, can exit');
         return [];
@@ -573,12 +591,13 @@ module.exports.expireBoostsPastEndTime = async () => {
 };
 
 module.exports.isTournamentFinished = async (boostId) => {
-    const selectQuery = `select boost_status, count(*) from ${boostAccountJoinTable} where boost_id = $1`;
+    const selectQuery = `select boost_status, count(*) from ${boostAccountJoinTable} where boost_id = $1 group by boost_status`;
     const resultOfFetch = await rdsConnection.selectQuery(selectQuery, [boostId]);
-    logger('Got tournament rows:', resultOfFetch);
-    const nonPendingRows = resultOfFetch.filter((row) => row['boost_status'] !== 'PENDING');
-    const pendingRows = resultOfFetch.filter((row) => row['boost_status'] === 'PENDING');
-    const isFinishedTournament = nonPendingRows.length > 0 && pendingRows.length === 0;
+    logger('Got tournament rows:', JSON.stringify(resultOfFetch));
+    const nonPendingCount = resultOfFetch.filter((row) => row['boost_status'] !== 'PENDING').reduce((sum, row) => sum + row['count'], 0);
+    const pendingRow = resultOfFetch.find((row) => row['boost_status'] === 'PENDING');
+    const pendingCount = pendingRow ? pendingRow['count'] : 0;
+    const isFinishedTournament = pendingCount > 0 && nonPendingCount === 0;
     return { [boostId]: isFinishedTournament };
 };
 
@@ -602,6 +621,11 @@ module.exports.endFinishedTournaments = async (boostId = null) => {
         finishedTournamentIds.push(...tournamentIds.filter((tournamentId) => tournamentStatusMap[tournamentId] === true));
     }
 
+    if (finishedTournamentIds.length === 0) {
+        logger('None of open tournaments are open, so exit');
+        return {};
+    }
+
     logger('Got finished tournament ids:', finishedTournamentIds);
     const updateQuery = `update ${boostTable} set end_time = current_timestamp where boost_id in (${extractArrayIndices(finishedTournamentIds)}) returning updated_time`;
     const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, [...finishedTournamentIds]);
@@ -614,8 +638,8 @@ module.exports.endFinishedTournaments = async (boostId = null) => {
 module.exports.flipBoostStatusPastExpiry = async () => {
     logger('Running update query to flip individual boosts to expiry');
 
-    const updateQuery = `update ${boostAccountJoinTable} set status = $1 where expiry_time is not null and ` +
-        `expiry_time < current_timestamp and status in ($2, $3, $4) returning boost_id, account_id`;
+    const updateQuery = `update ${boostAccountJoinTable} set boost_status = $1 where expiry_time is not null and ` +
+        `expiry_time < current_timestamp and boost_status in ($2, $3, $4) returning boost_id, account_id`;
 
     logger('Executing with query: ', updateQuery);
     // see note in tests re CREATED

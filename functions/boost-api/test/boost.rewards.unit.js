@@ -49,7 +49,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
     it('Handles random rewards', async () => {
         const testUserId = uuid();
         const testAccountId = uuid();
-        const testCalculatedAmount = 70000;
+        const testCalculatedAmount = 55000;
 
         const testRewardParameters = {
             rewardType: 'RANDOM',

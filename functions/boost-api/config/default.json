@@ -30,8 +30,8 @@
             "unit": "days"
         },
         "expiredCutOff": {
-            "value": 3,
-            "unit": "days"
+            "value": 48,
+            "unit": "hours"
         },
         "offerToExpiryDefault": {
             "value": 24,
@@ -56,11 +56,10 @@
         "messageInstruct": "message_instruct_create",
         "audienceHandle": "audience_selection",
         "userHistory": "user_log_reader",
-        "boostsExpire": "boost_expiry"
+        "boostExpire": "boost_expire"
     },
     "mlSelection": {
         "enabled": true,
         "endpoint": "<insert here>"
     }
-    
 }

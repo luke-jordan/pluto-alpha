@@ -11,6 +11,7 @@ const boostUtil = require('./boost.util');
 const persistence = require('./persistence/rds.boost');
 
 const AWS = require('aws-sdk');
+const { publishMultiUserEvent } = require('publish-common');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
 const invokeLambda = async (payload, functionKey, sync = false) => {
@@ -25,9 +26,8 @@ const assembleListOfMsgInstructions = ({ userIds, instructionIds, parameters }) 
     reduce((assembledInstructions, instruction) => [...assembledInstructions, ...instruction]);
 
 const triggerMsgInstructions = async (boostsAndRecipients) => {
-    logger('Assembling instructions from:', boostsAndRecipients);
     const instructions = boostsAndRecipients.map((boostDetails) => assembleListOfMsgInstructions(boostDetails))[0];
-    logger('Assembled instructions:', instructions);
+    logger(`Assembled ${instructions.length} instructions, first one: `, instructions[0]);
     return invokeLambda({ instructions }, 'messageSend');
 };
 
@@ -111,9 +111,21 @@ const selectUsersForBoostOffering = async (boost) => {
     const accountUserIdMap = await persistence.findUserIdsForAccounts(filteredAccountIds, true);
     logger('Got user ids for accounts:', accountUserIdMap);
     
-    const userIdsForOffering = await obtainUsersForOffering(boost, Object.values(accountUserIdMap));
+    const userIdsFromMl = await obtainUsersForOffering(boost, Object.values(accountUserIdMap));
+    if (userIdsFromMl.length === 0) {
+        return { message: `No users selected for boost: ${boostId}` };
+    }
     
+    let maxNumberToOffer = userIdsFromMl.length;
+    if (mlParameters.maxUsersPerOfferRun) {
+        const { basis, value } = mlParameters.maxUsersPerOfferRun;
+        maxNumberToOffer = basis === 'PROPORTION' ? Math.floor(value * audienceAccountIds.length) : value;
+        logger('Restricting offer to only', maxNumberToOffer, 'users');
+    }
+
+    const userIdsForOffering = userIdsFromMl.slice(0, maxNumberToOffer);
     const accountIdsForOffering = filteredAccountIds.filter((accountId) => userIdsForOffering.includes(accountUserIdMap[accountId]));
+    
     // not the most pleasant on the eye but just ensuring some robustness to malformed boosts getting in
     const defaultUntilExpiry = config.get('time.offerToExpiryDefault');
     const timeUntilExpiry = expiryParameters ? (expiryParameters.timeUntilExpiry || defaultUntilExpiry) : defaultUntilExpiry;
@@ -163,6 +175,10 @@ module.exports.processMlBoosts = async (event) => {
         logger('Got boosts and recipients:', resultOfSelection);
 
         const filteredSelectionResult = resultOfSelection.filter((result) => result.boostId && result.accountIds);
+        if (filteredSelectionResult.length === 0) {
+            return { result: 'NO_SELECTIONS' };
+        }
+
         const statusUpdateInstructions = filteredSelectionResult.map((selectionResult) => createUpdateInstruction(selectionResult));
         logger('Created boost status update instructions:', statusUpdateInstructions);
 
@@ -172,7 +188,19 @@ module.exports.processMlBoosts = async (event) => {
         const resultOfMsgInstructions = await triggerMsgInstructions(filteredSelectionResult);
         logger('triggering message instructions resulted in:', resultOfMsgInstructions);
 
-        return { result: 'SUCCESS' };
+        const findBoost = (soughtBoostId) => mlBoosts.find((boost) => boost.boostId === soughtBoostId);
+        
+        const publishPromises = filteredSelectionResult.map((result) => {
+            const boost = findBoost(result.boostId);
+            const context = boostUtil.constructBoostContext(boost);
+            const eventType = `BOOST_OFFERED_${boost.boostType}`;
+            return publishMultiUserEvent(result.userIds, eventType, { context, initiator: 'BOOST_TARGET_MODEL' });
+        });
+
+        await Promise.all(publishPromises);
+
+        const offersMade = resultOfSelection.reduce((sum, selection) => sum + selection.accountIds.length, 0);
+        return { result: 'SUCCESS', boostsProcessed: mlBoosts.length, offersMade };
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return { result: 'FAILURE' };

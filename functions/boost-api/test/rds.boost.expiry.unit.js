@@ -33,7 +33,7 @@ describe('*** UNIT TEST BOOST COMPLETION METHODS ***', async () => {
     it('Ends finished tournaments', async () => {
         const findQuery = `select * from boost_data.boost where active = true and end_time > current_timestamp ` +
             `and ($1 = any(flags))`;
-        const selectQuery = `select boost_status, count(*) from boost_data.boost_account_status where boost_id = $1`;
+        const selectQuery = `select boost_status, count(*) from boost_data.boost_account_status where boost_id = $1 group by boost_status`;
         const updateQuery = `update boost_data.boost set end_time = current_timestamp where boost_id in ($1) returning updated_time`;
 
         const testUpdatedTime = moment().format();
@@ -48,8 +48,10 @@ describe('*** UNIT TEST BOOST COMPLETION METHODS ***', async () => {
         const secondTournament = mockTournamentFromRds('boost-id-2');
 
         queryStub.withArgs(findQuery, ['FRIEND_TOURNAMENT']).resolves([firstTournament, secondTournament]);
-        queryStub.withArgs(selectQuery, ['boost-id-1']).resolves([{ 'boost_status': 'PENDING', 'count': 8 }, { 'boost_status': 'REDEEMED', 'count': 8 }]);
-        queryStub.withArgs(selectQuery, ['boost-id-2']).resolves([{ 'boost_status': 'REDEEMED', 'count': 55 }, { 'boost_status': 'REDEEMED', 'count': 55 }]);
+        
+        queryStub.withArgs(selectQuery, ['boost-id-1']).resolves([{ 'boost_status': 'PENDING', 'count': 8 }]);
+        queryStub.withArgs(selectQuery, ['boost-id-2']).resolves([{ 'boost_status': 'PENDING', 'count': 55 }, { 'boost_status': 'OFFERED', 'count': 15 }]);
+        
         updateStub.resolves({ rows: [{ 'updated_time': testUpdatedTime }]});
 
         const resultOfOperations = await rds.endFinishedTournaments();
@@ -58,7 +60,7 @@ describe('*** UNIT TEST BOOST COMPLETION METHODS ***', async () => {
         expect(resultOfOperations).to.deep.equal({ updatedTime: moment(testUpdatedTime) });
         expect(queryStub).to.have.been.calledWithExactly(findQuery, ['FRIEND_TOURNAMENT']);
         ['boost-id-1', 'boost-id-2'].map((boostId) => expect(queryStub).to.have.been.calledWithExactly(selectQuery, [boostId]));
-        expect(updateStub).to.have.been.calledOnceWithExactly(updateQuery, ['boost-id-2']);
+        expect(updateStub).to.have.been.calledOnceWithExactly(updateQuery, ['boost-id-1']);
     });
 
     it('Expires boosts', async () => {
@@ -94,8 +96,8 @@ describe('*** UNIT TEST BOOST COMPLETION METHODS ***', async () => {
     it('Expires accounts past boost', async () => {
         // note: we do not expire CREATED, because those might be ML still (in practice, would be excluded anyway by expiry time 
         // not null, but better to do so here anyway)
-        const updateQuery = `update boost_data.boost_account_status set status = $1 where ` +
-            `expiry_time is not null and expiry_time < current_timestamp and status in ($2, $3, $4) ` +
+        const updateQuery = `update boost_data.boost_account_status set boost_status = $1 where ` +
+            `expiry_time is not null and expiry_time < current_timestamp and boost_status in ($2, $3, $4) ` +
             `returning boost_id, account_id`;
         
         updateStub.onFirstCall().resolves({ rows: [

@@ -206,7 +206,7 @@ const checkEventFollows = (parameterValue, eventContext) => {
 // this one is always going to be complex -- in time maybe split out the switch block further
 // eslint-disable-next-line complexity
 module.exports.testCondition = (event, statusCondition) => {
-    logger('Testing status condition: ', statusCondition);
+    // logger('Testing status condition: ', statusCondition);
     if (typeof statusCondition !== 'string') {
         return false;
     }

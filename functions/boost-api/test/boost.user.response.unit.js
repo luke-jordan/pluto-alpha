@@ -57,7 +57,7 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
     const testAccountId = uuid();
 
     beforeEach(() => testHelper.resetStubs(
-        fetchBoostStub, fetchAccountStatusStub, updateBoostAccountStub, updateBoostRedeemedStub, getAccountIdForUserStub, redemptionHandlerStub, insertBoostLogStub
+        fetchBoostStub, fetchAccountStatusStub, updateBoostAccountStub, updateBoostRedeemedStub, getAccountIdForUserStub, redemptionHandlerStub, insertBoostLogStub, lamdbaInvokeStub
     ));
 
     it('Redeems when game is won', async () => {
@@ -89,7 +89,7 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
         fetchBoostStub.resolves(boostAsRelevant);
         fetchAccountStatusStub.withArgs(testBoostId, testAccountId).resolves({ boostStatus: 'UNLOCKED' });
         getAccountIdForUserStub.resolves(testAccountId);
-        redemptionHandlerStub.resolves({ [testBoostId]: { result: 'SUCCESS' }});
+        redemptionHandlerStub.resolves({ [testBoostId]: { result: 'SUCCESS', boostAmount: 50000 }});
         
         const mockUpdateProcessedTime = moment();
         updateBoostAccountStub.resolves([{ boostId: testBoostId, updatedTime: mockUpdateProcessedTime }]);
@@ -161,12 +161,13 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
                 PENDING: ['number_taps_greater_than #{0::10000}'],
                 REDEEMED: ['number_taps_in_first_N #{2::10000}']
             },
-            flags: []
+            flags: ['FRIEND_TOURNAMENT']
         };
 
         fetchBoostStub.resolves(boostAsRelevant);
         getAccountIdForUserStub.resolves(testAccountId);
         fetchAccountStatusStub.withArgs(testBoostId, testAccountId).resolves({ boostStatus: 'UNLOCKED' });
+        lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 202 }) });
 
         updateBoostAccountStub.resolves([{ boostId: testBoostId, updatedTime: moment().valueOf() }]);
 
@@ -204,6 +205,8 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
         expect(redemptionHandlerStub).to.not.have.been.called;
         expect(updateBoostRedeemedStub).to.not.have.been.called;
         
+        const expiryInvocation = testHelper.wrapLambdaInvoc(config.get('lambdas.boostExpire'), true, { });
+        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(expiryInvocation);
     });
 
     it('Fails when not enough taps', async () => {
@@ -259,7 +262,7 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
         fetchBoostStub.resolves(boostAsRelevant);
         getAccountIdForUserStub.resolves(testAccountId);
         fetchAccountStatusStub.withArgs(testBoostId, testAccountId).resolves({ boostStatus: 'UNLOCKED' });
-        lamdbaInvokeStub.returns({ promise: () => testHelper.mockLambdaResponse({ result: 'SUCCESS' })});
+        lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 202 }) });
 
         const expectedResult = { 
             result: 'TOURNAMENT_ENTERED', 
@@ -284,8 +287,7 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
         expect(redemptionHandlerStub).to.not.have.been.called;
         expect(updateBoostRedeemedStub).to.not.have.been.called;
 
-        const expiryInvocation = testHelper.wrapLambdaInvoc(config.get('lambdas.boostsExpire'), true, { });
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWith(expiryInvocation);
+        expect(lamdbaInvokeStub).to.not.have.been.called; // expiry will have no way to know
     });
 
     it('Fails on boost not unlocked', async () => {
