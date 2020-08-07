@@ -429,7 +429,7 @@ const assembleAccountJoinDef = (boostId, boostDetails, accountIds) => {
 module.exports.insertBoost = async (boostDetails) => {
     logger('Instruction received to insert boost: ', boostDetails);
     
-    const skipAccountInsertion = boostDetails.defaultStatus === 'UNCREATED' || boostDetails.boostAudienceType === 'EVENT_DRIVEN';
+    const skipAccountInsertion = !boostDetails.defaultStatus || boostDetails.boostAudienceType === 'EVENT_DRIVEN';
     const accountIds = await (skipAccountInsertion ? [] : exports.extractAccountIds(boostDetails.audienceId));
     logger('Extracted account IDs for boost: ', JSON.stringify(accountIds));
 
@@ -457,7 +457,7 @@ module.exports.insertBoost = async (boostDetails) => {
         boostAudienceType: boostDetails.boostAudienceType,
         audienceId: boostDetails.audienceId,
 
-        initialStatus: boostDetails.defaultStatus || 'CREATED',
+        initialStatus: boostDetails.defaultStatus, // can be set explicitly to null
         statusConditions: boostDetails.statusConditions,
         messageInstructionIds: { instructions: boostDetails.messageInstructionIds }
     };

@@ -64,7 +64,7 @@ EOF
 
 resource "aws_cloudwatch_log_group" "bank_account_verify" {
   name = "/aws/lambda/${var.bank_account_verify_lambda_function_name}"
-  retention_in_days = 3
+  retention_in_days = 30
 
   tags = {
     environment = "${terraform.workspace}"

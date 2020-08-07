@@ -31,7 +31,7 @@ const FINWORKS_NAMES = {
     'STANDARD': 'Standard Bank',
     'NEDBANK': 'Nedbank',
     'CAPITEC': 'Capitec',
-    'TYME': 'Tyme,'
+    'TYME': 'Tyme'
 };
 
 const fetchAccessCreds = async () => {
