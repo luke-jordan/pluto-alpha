@@ -194,6 +194,7 @@ const createMsgInstructionFromDefinition = (messageDefinition, boostParams, game
     };
 
     if (messageDefinition.presentationType === 'EVENT_DRIVEN') {
+        msgPayload.holdFire = true;
         msgPayload.triggerParameters = messageDefinition.triggerParameters;
     }
 
@@ -455,7 +456,10 @@ module.exports.createBoost = async (event) => {
     const { audienceId, boostAudienceType } = await obtainAudienceDetails(params);
     logger('Boost audience type: ', boostAudienceType, ' and audience ID: ', audienceId);
     
-    const defaultStatus = params.initialStatus || 'CREATED';
+    let defaultStatus = params.initialStatus || 'CREATED';
+    if (defaultStatus === 'UNCREATED') {
+        defaultStatus = null; // i.e., there is no such thing
+    }
 
     const instructionToRds = {
         creatingUserId,
