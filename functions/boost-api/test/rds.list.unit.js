@@ -36,7 +36,6 @@ const rds = proxyquire('../persistence/rds.boost.list', {
 const resetStubs = () => testHelper.resetStubs(queryStub, updateRecordObjectStub);
 
 const boostMainTable = config.get('tables.boostTable');
-const boostAccountTable = config.get('tables.boostAccountJoinTable');
 
 describe('*** UNIT TEST BOOST ADMIN RDS', () => {
     const testAudienceSelection = `whole_universe from #{'{"specific_users": ["${uuid()}","${uuid()}"]}'}`;
@@ -100,7 +99,7 @@ describe('*** UNIT TEST BOOST ADMIN RDS', () => {
         redemptionMessages: { instructions: testRedemptionMsgs },
         initialStatus: 'PENDING',
         flags: ['REDEEM_ALL_AT_ONCE'],
-        count: { CREATED: 10, OFFERED: 0, PENDING: 0, REDEEMED: 0, REVOKED: 0, EXPIRED: 0 }
+        count: { CREATED: 10, OFFERED: 0, UNLOCKED: 0, PENDING: 0, REDEEMED: 0, REVOKED: 0, EXPIRED: 0, FAILED: 0 }
     };
 
     beforeEach(() => {
@@ -109,10 +108,11 @@ describe('*** UNIT TEST BOOST ADMIN RDS', () => {
 
     it('Retrieves boosts (with status counts)', async () => {
         const firstQueryArgs = [`select * from ${boostMainTable}  order by creation_time desc`, []];
-        const secondQueryArgs = [
-            `select boost_id, boost_status, count(account_id) from ${boostAccountTable} group by boost_id, boost_status`,
-            []
-        ];
+        const secondQuery = `select boost_data.boost_account_status.boost_id, boost_status, count(account_id) from ` +
+            `boost_data.boost_account_status inner join boost_data.boost on boost_data.boost_account_status.boost_id = boost_data.boost.boost_id ` +
+            `where boost_data.boost.active = true group by boost_data.boost_account_status.boost_id, boost_status, boost_data.boost.creation_time ` +
+            `order by boost_data.boost.creation_time desc`;
+        
         queryStub.onFirstCall().resolves([boostFromPersistence, boostFromPersistence]);
         queryStub.onSecondCall().resolves([boostStatusCount, boostStatusCount]);
         const excludedTypeCategories = [];
@@ -122,7 +122,7 @@ describe('*** UNIT TEST BOOST ADMIN RDS', () => {
         expect(resultOfListing).to.exist;
         expect(resultOfListing).to.deep.equal([expectedBoostResult, expectedBoostResult]);
         expect(queryStub).to.have.been.calledWith(...firstQueryArgs);
-        expect(queryStub).to.have.been.calledWith(...secondQueryArgs);
+        expect(queryStub).to.have.been.calledWith(secondQuery, []);
     });
 
     it('Handles excluded type categories', async () => {
@@ -130,9 +130,14 @@ describe('*** UNIT TEST BOOST ADMIN RDS', () => {
             `select * from ${boostMainTable} where (boost_type || '::' || boost_category) not in ($1) order by creation_time desc`,
             ['REFERRAL::USER_CODE_USED']
         ];
-        const secondQueryArgs = [`select boost_id, boost_status, count(account_id) from ${boostAccountTable} group by boost_id, boost_status`, []];
+
+        const secondQuery = `select boost_data.boost_account_status.boost_id, boost_status, count(account_id) from ` +
+            `boost_data.boost_account_status inner join boost_data.boost on boost_data.boost_account_status.boost_id = boost_data.boost.boost_id ` +
+            `where boost_data.boost.active = true group by boost_data.boost_account_status.boost_id, boost_status, boost_data.boost.creation_time ` +
+            `order by boost_data.boost.creation_time desc`;
+
         queryStub.withArgs(...firstQueryArgs).resolves([boostFromPersistence, boostFromPersistence]);
-        queryStub.withArgs(...secondQueryArgs).resolves([boostStatusCount, boostStatusCount]);
+        queryStub.withArgs(secondQuery, []).resolves([boostStatusCount, boostStatusCount]);
         const excludedTypeCategories = ['REFERRAL::USER_CODE_USED'];
 
         const resultOfListing = await rds.listBoosts(excludedTypeCategories, false, false);
@@ -140,17 +145,16 @@ describe('*** UNIT TEST BOOST ADMIN RDS', () => {
         expect(resultOfListing).to.exist;
         expect(resultOfListing).to.deep.equal([expectedBoostResult, expectedBoostResult]);
         expect(queryStub).to.have.been.calledWith(...firstQueryArgs);
-        expect(queryStub).to.have.been.calledWith(...secondQueryArgs);
     });
 
     it('Excludes inactive boosts', async () => {
         const expectedQuery = `select * from ${boostMainTable} where active = true and end_time > current_timestamp ` + 
             `and (boost_type || '::' || boost_category) not in ($1) order by creation_time desc`; 
         const firstQueryArgs = [expectedQuery, ['REFERRAL::USER_CODE_USED']];
-        const secondQueryArgs = [
-            `select boost_id, boost_status, count(account_id) from ${boostAccountTable} group by boost_id, boost_status`,
-            []
-        ];
+        const secondQuery = `select boost_data.boost_account_status.boost_id, boost_status, count(account_id) from ` +
+            `boost_data.boost_account_status inner join boost_data.boost on boost_data.boost_account_status.boost_id = boost_data.boost.boost_id ` +
+            `where boost_data.boost.active = true group by boost_data.boost_account_status.boost_id, boost_status, boost_data.boost.creation_time ` +
+            `order by boost_data.boost.creation_time desc`;
         queryStub.onFirstCall().resolves([boostFromPersistence, boostFromPersistence]);
         queryStub.onSecondCall().resolves([boostStatusCount, boostStatusCount]);
         const excludedTypeCategories = ['REFERRAL::USER_CODE_USED'];
@@ -161,7 +165,7 @@ describe('*** UNIT TEST BOOST ADMIN RDS', () => {
         expect(resultOfListing).to.exist;
         expect(resultOfListing).to.deep.equal([expectedBoostResult, expectedBoostResult]);
         expect(queryStub).to.have.been.calledWith(...firstQueryArgs);
-        expect(queryStub).to.have.been.calledWith(...secondQueryArgs);
+        expect(queryStub).to.have.been.calledWith(secondQuery);
     });
 
     it('Updates boost', async () => {

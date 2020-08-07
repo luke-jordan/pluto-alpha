@@ -388,9 +388,9 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
             fromBonusPoolId: 'primary_bonus_pool',
             fromFloatId: 'primary_float',
             forClientId: 'some_client_co',
-            boostAudienceType: 'GENERAL',
+            boostAudienceType: 'EVENT_DRIVEN',
             audienceId: testAudienceId,
-            initialStatus: 'UNCREATED',
+            initialStatus: null,
             statusConditions: mockCreateConditions,
             messageInstructionIds: { instructions: [testInstructionId, testInstructionId] },
             gameParams: testGameParams
@@ -422,9 +422,9 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
             fromFloatId: 'primary_float',
             boostStartTime: testBoostStartTime,
             boostEndTime: testBoostEndTime,
-            defaultStatus: 'UNCREATED',
+            defaultStatus: null, // this has meaning here, in sense of there is no such thing (is determing by event/combination thereof)
             statusConditions: mockCreateConditions,
-            boostAudienceType: 'GENERAL',
+            boostAudienceType: 'EVENT_DRIVEN',
             audienceId: testAudienceId,
             redemptionMsgInstructions: testRedemptionMsgs,
             messageInstructionIds: [testInstructionId, testInstructionId],

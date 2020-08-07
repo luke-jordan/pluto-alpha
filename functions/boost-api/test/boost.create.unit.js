@@ -288,6 +288,117 @@ describe('** UNIT TEST CREATING AN ML DETERMINED BOOST ***', () => {
     
 });
 
+describe('** UNIT TEST CREATING AN EVENT TRIGGERED BOOST ***', () => {
+
+    beforeEach(() => resetStubs());
+
+    it('Unit test creating event boost, does not insert accounts, does not trigger messages', async () => {
+
+        const mockEndTime = moment().add(1, 'day').endOf('day');
+        const mockAccountIds = ['account-1', 'account-2'];
+        const mockUserIds = ['user-1', 'user-2'];
+
+        const msgTemplate = { display: { type: 'CARD' }, title: 'Please save', body: 'Save now thanks' };
+        const msgTrigger = { triggerEvent: 'USER_ACCOUNT_OPENED' };
+
+        const mockConditions = { 
+            OFFERED: ['event_occurs #{USER_CREATED_ACCOUNT}'], 
+            REDEEMED: ['save_event_greater_than #{100::WHOLE_CURRENCY::USD}'] 
+        };
+
+        const testBodyOfEvent = {
+            creatingUserId: 'some-admin-user',
+            label: 'Save today!',
+            boostTypeCategory: 'SIMPLE::SIMPLE_SAVE',
+            boostAmountOffered: '100000::HUNDREDTH_CENT::USD',
+            boostBudget: '10000000::HUNDREDTH_CENT::USD',
+            boostSource: mockBoostSource,
+            endTimeMillis: mockEndTime.valueOf(),
+            boostAudienceType: 'EVENT_DRIVEN',
+            audienceId: 'selection-universe-id',
+            initialStatus: 'UNCREATED',
+            statusConditions: mockConditions,
+            messagesToCreate: [{
+                boostStatus: 'OFFERED', presentationType: 'EVENT_DRIVEN', triggerParameters: msgTrigger, template: msgTemplate, isMessageSequence: false
+            }],
+            flags: ['EVENT_DRIVEN']
+        };
+        
+        momentStub.onFirstCall().returns(testStartTime);
+        momentStub.withArgs(mockEndTime.valueOf()).returns(mockEndTime);
+
+        // most of the items in here are amply tested elsewhere, so testing those that are important on this route only       
+        const mockResultFromRds = { boostId: 'test-boost-id', accountIds: mockAccountIds };
+        insertBoostStub.resolves(mockResultFromRds);
+
+        findUserIdsStub.resolves(mockUserIds);
+
+        const mockMsgInstructReturnBody = {
+            processResult: 'INSTRUCT_STORED',
+            message: { instructionId: 'created-msg-instruction-id', creationTimeMillis: moment().valueOf() }
+        };
+    
+        lamdbaInvokeStub.returns({ promise: () => testHelper.mockLambdaResponse(mockMsgInstructReturnBody) });
+        alterBoostStub.resolves({ updatedTime: moment() });
+
+        const mockMsgIdDict = [{ accountId: 'ALL', status: 'OFFERED', msgInstructionId: 'created-msg-instruction-id' }];
+        const expectedResult = { ...mockResultFromRds, messageInstructions: mockMsgIdDict };
+
+        // now we do the call
+        const resultOfCreate = await handler.createBoost(testBodyOfEvent);
+        expect(resultOfCreate).to.exist;
+        expect(resultOfCreate).to.deep.equal(expectedResult);
+
+        // then set up invocation checks
+        const expectedBoostToRds = {
+            creatingUserId: 'some-admin-user',
+            label: 'Save today!',
+            boostType: 'SIMPLE',
+            boostCategory: 'SIMPLE_SAVE',
+            boostAmount: 100000,
+            boostUnit: 'HUNDREDTH_CENT',
+            boostCurrency: 'USD',
+            boostBudget: 10000000,
+            fromBonusPoolId: 'primary_bonus_pool',
+            fromFloatId: 'primary_cash',
+            forClientId: 'some_client_co',
+            boostStartTime: testStartTime,
+            boostEndTime: mockEndTime,
+            statusConditions: mockConditions,
+            boostAudienceType: 'EVENT_DRIVEN',
+            audienceId: 'selection-universe-id',
+            defaultStatus: null, // i.e., none, because set by event in status conditions
+            messageInstructionIds: [],
+            flags: ['EVENT_DRIVEN']
+        };
+
+        expect(insertBoostStub).to.have.been.calledOnceWithExactly(expectedBoostToRds);
+
+        const expectedMsgInstruct = {
+            creatingUserId: 'some-admin-user',
+            boostStatus: 'OFFERED',
+            audienceType: 'EVENT_DRIVEN',
+            presentationType: 'EVENT_DRIVEN',
+            holdFire: true,
+            audienceId: 'selection-universe-id',
+            endTime: mockEndTime.format(),
+            messagePriority: 100,
+            templates: { template: { 'DEFAULT': msgTemplate } },
+            triggerParameters: msgTrigger
+        };
+
+        const lambdaPayload = JSON.parse(lamdbaInvokeStub.getCall(0).args[0].Payload);
+        
+        expect(lambdaPayload).to.deep.equal(expectedMsgInstruct);
+        expect(alterBoostStub).to.have.been.calledOnceWithExactly('test-boost-id', mockMsgIdDict, false);
+
+        // point here is _only_ created is called
+        expect(publishMultiStub).to.not.have.been.called;
+    });
+    
+});
+
+
 describe('** UNIT TEST SOME BOOST VALIDATION ***', () => {
 
     beforeEach(() => resetStubs());
@@ -345,9 +456,7 @@ describe('** UNIT TEST SOME BOOST VALIDATION ***', () => {
 
     it('Fail where boost reward is greater than boost budget', async () => {
         const expectedError = 'Boost reward cannot be greater than boost budget';
-
-        const eventBody = { ...testBodyOfEvent };
-        
+        const eventBody = { ...testBodyOfEvent };       
         eventBody.boostAmountOffered = '10000001::HUNDREDTH_CENT::USD';
         await expect(handler.createBoost(eventBody)).to.be.rejectedWith(expectedError);
         commonAssertions();
@@ -355,7 +464,6 @@ describe('** UNIT TEST SOME BOOST VALIDATION ***', () => {
 
     it('Fail on invalid boost category for boost type', async () => {
         const expectedError = 'The boost type is not compatible with the boost category';
-
         const testEventBody = { ...testBodyOfEvent };
         
         testEventBody.boostTypeCategory = 'GAME::TIME_LIMITED';
