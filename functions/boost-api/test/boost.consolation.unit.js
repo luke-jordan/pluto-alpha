@@ -61,7 +61,7 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
         recipients,
         referenceAmounts: {
             boostAmount: recipients[0].amount,
-            amountFromBonus: testBoostAmount
+            amountFromBonus: recipients[0].amount
         } 
     }]});
 
@@ -72,9 +72,11 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
 
     it('Awards consolation prize to all participating users who did not win', async () => {
         const rewardParameters = {
-            rewardType: 'CONSOLATION',
-            consolationAmount: { amount: 100, unit: 'HUNDREDTH_CENT', currency: 'USD' },
-            consolationAwards: { basis: 'ALL' }
+            consolationPrize: {
+                type: 'FIXED',
+                consolationAmount: { amount: 100, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+                consolationAwards: { basis: 'ALL' }
+            }
         };
 
         const boostRecipients = [
@@ -157,10 +159,16 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
     });
 
     it('Awards consolation prize to specified number of users', async () => {
+        const randomConsolationAmount = 5550;
+
         const rewardParameters = {
-            rewardType: 'CONSOLATION',
-            consolationAmount: { amount: 100, unit: 'HUNDREDTH_CENT', currency: 'USD' },
-            consolationAwards: { basis: 'ABSOLUTE', recipients: 2 }
+            consolationPrize: {
+                type: 'RANDOM',
+                distribution: 'UNIFORM',
+                realizedRewardModuloZeroTarget: 10,
+                minBoostAmountPerUser: { amount: '100', unit: 'HUNDREDTH_CENT', currency: 'USD'},
+                consolationAwards: { basis: 'ABSOLUTE', recipients: 2 }
+            }
         };
 
         const boostRecipients = [
@@ -168,8 +176,8 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
         ];
 
         const consolationRecipients = [
-            { recipientId: 'account-id-1', amount: testConsolationAmount, recipientType: 'END_USER_ACCOUNT' },
-            { recipientId: 'account-id-2', amount: testConsolationAmount, recipientType: 'END_USER_ACCOUNT' }
+            { recipientId: 'account-id-1', amount: randomConsolationAmount, recipientType: 'END_USER_ACCOUNT' },
+            { recipientId: 'account-id-2', amount: randomConsolationAmount, recipientType: 'END_USER_ACCOUNT' }
         ];
 
         const expectedBoostAllocInvocation = helper.wrapLambdaInvoc('float_transfer', false, createAllocationPayload(boostRecipients));
@@ -194,6 +202,9 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
         lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse(mockBoostAllocationResult)});
         lamdbaInvokeStub.onSecondCall().returns({ promise: () => helper.mockLambdaResponse(mockConsolationAllocResult) });
         publishStub.resolves({ result: 'SUCCESS' });
+
+        const mathRandomStub = sinon.stub(Math, 'random');
+        mathRandomStub.returns(0.55);
 
         const mockBoost = {
             boostId: testBoostId,
@@ -236,13 +247,16 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
         expect(lamdbaInvokeStub).to.have.been.calledWithExactly(expectedConsolationAllocInvocation);
         expect(lamdbaInvokeStub).to.have.been.calledTwice;
         expect(publishStub.callCount).to.equal(4);
+        mathRandomStub.restore();
     });
 
     it('Awards consolation prize to a specified proportion of participating users', async () => {
         const rewardParameters = {
-            rewardType: 'CONSOLATION',
-            consolationAmount: { amount: 100, unit: 'HUNDREDTH_CENT', currency: 'USD' },
-            consolationAwards: { basis: 'PROPORTION', recipients: 0.25 }
+            consolationPrize: {
+                type: 'FIXED',
+                consolationAmount: { amount: 100, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+                consolationAwards: { basis: 'PROPORTION', recipients: 0.25 }
+            }
         };
 
         const boostRecipients = [

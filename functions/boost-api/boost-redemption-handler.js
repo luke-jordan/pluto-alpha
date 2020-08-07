@@ -48,9 +48,10 @@ const generateMultiplier = (distribution) => {
     }
 };
 
-const calculateRandomBoostAmount = (boost) => {
-    const { distribution, realizedRewardModuloZeroTarget, minBoostAmountPerUser } = boost.rewardParameters;
-    
+const calculateRandomBoostAmount = (boost, isConsolation = false) => {
+    const { distribution, realizedRewardModuloZeroTarget, minBoostAmountPerUser } = isConsolation
+        ? boost.rewardParameters.consolationPrize : boost.rewardParameters;
+
     const boostAmount = opsUtil.convertToUnit(boost.boostAmount, boost.boostUnit, DEFAULT_UNIT);
     const minBoostAmount = minBoostAmountPerUser ? opsUtil.convertToUnit(minBoostAmountPerUser.amount, minBoostAmountPerUser.unit, DEFAULT_UNIT) : 0;
 
@@ -59,7 +60,7 @@ const calculateRandomBoostAmount = (boost) => {
     let calculatedBoostAmount = multiplier * (boostAmount - minBoostAmount) + minBoostAmount;
     if (realizedRewardModuloZeroTarget) {
         while (calculatedBoostAmount % realizedRewardModuloZeroTarget > 0) {
-            calculatedBoostAmount += 10;
+            calculatedBoostAmount += 1;
         }
     }
 
@@ -338,18 +339,29 @@ const createPublishEventPromises = (parameters) => {
     return publishPromises;
 };
 
+const calculateConsolationAmount = (boost) => {
+    const { type, consolationAmount } = boost.rewardParameters.consolationPrize;
+
+    if (type === 'RANDOM') {
+        const boostAmount = calculateRandomBoostAmount(boost, true);
+        return { boostAmount, amountFromBonus: boostAmount };
+    }
+
+    const boostAmount = opsUtil.convertToUnit(consolationAmount.amount, consolationAmount.unit, boost.boostUnit);
+    return { boostAmount, amountFromBonus: boostAmount };
+};
+
 const fetchConsolationDetails = (boost, affectedAccountDict) => {
     logger('Calculating consolation amount and recipeints');
-    const { consolationAmount, consolationAwards } = boost.rewardParameters;
+    const { consolationAwards } = boost.rewardParameters.consolationPrize;
 
     const accountUserMap = affectedAccountDict[boost.boostId];
     const accountIds = Object.keys(accountUserMap);
     const recipientAccounts = accountIds.filter((accountId) => accountUserMap[accountId].status !== 'REDEEMED');
-    const boostAmount = opsUtil.convertToUnit(consolationAmount.amount, consolationAmount.unit, boost.boostUnit);
-    logger('Got consolation amount: ', boostAmount, 'and possible recipients: ', recipientAccounts);
+    logger('Got possible recipients: ', recipientAccounts);
 
     const consolationDetails = {
-        referenceAmounts: { boostAmount, amountFromBonus: boost.boostAmount }
+        referenceAmounts: calculateConsolationAmount(boost)
     };
     
     if (consolationAwards.basis === 'ALL') {
@@ -443,7 +455,7 @@ module.exports.redeemOrRevokeBoosts = async ({ redemptionBoosts, revocationBoost
     const resultOfTransfers = await (transferInstructions.length === 0 ? {} : triggerFloatTransfers(transferInstructions));
     logger('Result of transfers: ', resultOfTransfers);
 
-    const boostConsolations = boostsToRedeem.filter((boost) => boost.rewardParameters && boost.rewardParameters.rewardType === 'CONSOLATION');
+    const boostConsolations = boostsToRedeem.filter((boost) => boost.rewardParameters && boost.rewardParameters.consolationPrize);
 
     if (boostConsolations.length > 0) {
         const consolationInstructions = await Promise.all(boostConsolations.map((boost) => generateConsolationInstructions(boost, affectedAccountsDict)));

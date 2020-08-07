@@ -82,7 +82,8 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
                 OFFERED: ['message_instruction_created'],
                 UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
                 REDEEMED: ['number_taps_greater_than #{10::10000}']
-            }
+            },
+            flags: []
         };
 
         fetchBoostStub.resolves(boostAsRelevant);
@@ -159,7 +160,8 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
                 UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
                 PENDING: ['number_taps_greater_than #{0::10000}'],
                 REDEEMED: ['number_taps_in_first_N #{2::10000}']
-            }
+            },
+            flags: []
         };
 
         fetchBoostStub.resolves(boostAsRelevant);
@@ -215,7 +217,8 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
             boostId: testBoostId,
             statusConditions: {
                 REDEEMED: ['number_taps_greater_than #{10::10000}']
-            }
+            },
+            flags: []
         };
 
         fetchBoostStub.resolves(boostAsRelevant);
@@ -249,7 +252,8 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
             boostEndTime: moment().endOf('day'),
             statusConditions: {
                 REDEEMED: ['number_taps_in_first_N #{2::10000}']
-            }
+            },
+            flags: []
         };
 
         fetchBoostStub.resolves(boostAsRelevant);
@@ -295,7 +299,8 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
             boostId: testBoostId,
             statusConditions: {
                 REDEEMED: ['number_taps_greater_than #{10::10000}']
-            }
+            },
+            flags: []
         };
 
         fetchBoostStub.resolves(boostAsRelevant);
