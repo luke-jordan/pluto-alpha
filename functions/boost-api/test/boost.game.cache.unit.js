@@ -259,7 +259,7 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
         getAccountIdForUserStub.resolves(testAccountId);
 
         fetchAccountStatusStub.resolves({ boostStatus: 'UNLOCKED' });
-        redeemOrRevokeStub.resolves({ [testBoostId]: { result: 'SUCCESS' }});
+        redeemOrRevokeStub.resolves({ [testBoostId]: { result: 'SUCCESS', boostAmount: 10000 }});
 
         const expectedResult = { 
             result: 'TRIGGERED', 
