@@ -55,11 +55,11 @@ const recordGameResult = async (params, boost, accountId) => {
         timeTakenMillis: params.timeTakenMillis 
     };
     
-    if (params.numberTaps) {
+    if (typeof params.numberTaps === 'number') {
         gameLogContext.numberTaps = params.numberTaps;
     }
 
-    if (params.percentDestroyed) {
+    if (typeof params.percentDestroyed === 'number') {
         gameLogContext.percentDestroyed = params.percentDestroyed;
     }
 
@@ -67,12 +67,11 @@ const recordGameResult = async (params, boost, accountId) => {
     await persistence.insertBoostAccountLogs([boostLog]);
 };
 
-const generateUpdateInstruction = (boost, statusResult, accountId) => {
+const generateUpdateInstruction = ({ boostId, statusResult, accountId, boostAmount }) => {
     logger('Generating update instructions, with status results: ', statusResult);
-    const boostId = boost.boostId;
     const highestStatus = statusResult.sort(util.statusSorter)[0];
     
-    const logContext = { newStatus: highestStatus, boostAmount: boost.boostAmount };
+    const logContext = { newStatus: highestStatus, boostAmount };
 
     return {
         boostId,
@@ -185,18 +184,21 @@ module.exports.processUserBoostResponse = async (event) => {
         const resultBody = { result: 'TRIGGERED', statusMet: statusResult, endTime: boost.boostEndTime.valueOf() };
 
         let resultOfTransfer = {};
+        let boostAmount = boost.boostAmount;
+
         if (statusResult.includes('REDEEMED')) {
             // do this first, as if it fails, we do not want to proceed
             const redemptionCall = { redemptionBoosts: [boost], affectedAccountsDict: accountDict, event: { accountId, eventType }};
             resultOfTransfer = await boostRedemptionHandler.redeemOrRevokeBoosts(redemptionCall);
             logger('Boost process-redemption, result of transfer: ', resultOfTransfer);
+            boostAmount = resultOfTransfer[boostId].boostAmount;
         }
 
         if (resultOfTransfer[boostId] && resultOfTransfer[boostId].result !== 'SUCCESS') {
             throw Error('Error transferring redemption');
         }
 
-        const updateInstruction = generateUpdateInstruction(boost, statusResult, accountId);
+        const updateInstruction = generateUpdateInstruction({ boostId, statusResult, accountId, boostAmount });
         logger('Sending this update instruction to persistence: ', updateInstruction);
         
         const adjustedLogContext = { ...updateInstruction.logContext, processType: 'USER', submittedParams: params };
@@ -206,7 +208,7 @@ module.exports.processUserBoostResponse = async (event) => {
         logger('Result of update operation: ', resultOfUpdates);
    
         if (statusResult.includes('REDEEMED')) {
-            resultBody.amountAllocated = { amount: boost.boostAmount, unit: boost.boostUnit, currency: boost.boostCurrency };
+            resultBody.amountAllocated = { amount: boostAmount, unit: boost.boostUnit, currency: boost.boostCurrency };
             await persistence.updateBoostAmountRedeemed([boostId]);
         }
 

@@ -49,26 +49,32 @@ const generateMultiplier = (distribution) => {
 };
 
 const calculateRandomBoostAmount = (boost) => {
-    const { distribution, realizedRewardModuloZeroTarget, minBoostAmountPerUser } = boost.rewardParameters;
+    const { distribution, realizedRewardModuloZeroTarget, minRewardAmountPerUser } = boost.rewardParameters;
     
     const boostAmount = opsUtil.convertToUnit(boost.boostAmount, boost.boostUnit, DEFAULT_UNIT);
-    const minBoostAmount = minBoostAmountPerUser ? opsUtil.convertToUnit(minBoostAmountPerUser.amount, minBoostAmountPerUser.unit, DEFAULT_UNIT) : 0;
-
+    const minBoostAmount = minRewardAmountPerUser 
+        ? opsUtil.convertToUnit(minRewardAmountPerUser.amount, minRewardAmountPerUser.unit, DEFAULT_UNIT) : 0;
+    
     const multiplier = generateMultiplier(distribution);
+    logger('Random award, generated multiplier: ', multiplier);
+
     // eslint-disable-next-line no-mixed-operators
-    let calculatedBoostAmount = multiplier * (boostAmount - minBoostAmount) + minBoostAmount;
-    if (realizedRewardModuloZeroTarget) {
-        while (calculatedBoostAmount % realizedRewardModuloZeroTarget > 0) {
-            calculatedBoostAmount += 10;
-        }
+    let calculatedBoostAmount = Math.round(multiplier * (boostAmount - minBoostAmount) + minBoostAmount); // todo : use decimal light
+    logger('Initial calculated boost amount: ', calculatedBoostAmount);
+    
+    const amountToSnapTo = opsUtil.convertToUnit(realizedRewardModuloZeroTarget || 1, boost.boostUnit, DEFAULT_UNIT);
+    logger('Will need to snap to modulo 0 of : ', amountToSnapTo, ' current gap: ', calculatedBoostAmount % amountToSnapTo);
+    if (calculatedBoostAmount % amountToSnapTo > 0) {
+        const amountAboveSnap = calculatedBoostAmount % amountToSnapTo;
+        calculatedBoostAmount += (amountToSnapTo - amountAboveSnap);
     }
 
     // Try again if the calculatedBoostAmount is rounded to a value greater than the boost amount or less than min amount
-    if (calculatedBoostAmount > boost.boostAmount) {
+    if (calculatedBoostAmount > boostAmount) {
         return calculateRandomBoostAmount(boost);
     }
 
-    logger('Calculated boost amount:', calculatedBoostAmount);
+    logger('Random boost award, calculated amount:', calculatedBoostAmount);
     return opsUtil.convertToUnit(calculatedBoostAmount, DEFAULT_UNIT, boost.boostUnit);
 };
 

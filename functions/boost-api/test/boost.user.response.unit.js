@@ -107,7 +107,7 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
         fetchBoostStub.resolves(boostAsRelevant);
         fetchAccountStatusStub.withArgs(testBoostId, testAccountId).resolves({ boostStatus: 'UNLOCKED' });
         getAccountIdForUserStub.resolves(testAccountId);
-        redemptionHandlerStub.resolves({ [testBoostId]: { result: 'SUCCESS' }});
+        redemptionHandlerStub.resolves({ [testBoostId]: { result: 'SUCCESS', boostAmount: 50000 }});
         
         const mockUpdateProcessedTime = moment();
         updateBoostAccountStub.resolves([{ boostId: testBoostId, updatedTime: mockUpdateProcessedTime }]);

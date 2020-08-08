@@ -9,18 +9,17 @@ const camelizeKeys = require('camelize-keys');
 const RdsConnection = require('rds-common');
 const rdsConnection = new RdsConnection(config.get('db'));
 
-const STATUSSES = ['CREATED', 'OFFERED', 'PENDING', 'REDEEMED', 'REVOKED', 'EXPIRED'];
+const STATUSSES = ['CREATED', 'OFFERED', 'UNLOCKED', 'PENDING', 'REDEEMED', 'REVOKED', 'EXPIRED', 'FAILED'];
 
 const extractArrayIndices = (array, startingIndex = 1) => array.map((_, index) => `$${index + startingIndex}`).join(', ');
 
 const knitBoostsAndCounts = (boostList, statusCounts) => {
     // might want to use a map for this eventually
 
-    const statusCountDict = statusCounts.reduce((obj, row) => { 
-        const rowKey = `${row['boost_id']}::${row['boost_status']}`;
-        return {...obj, [rowKey]: row['count'] };
-    }, {});
+    const statusCountDict = statusCounts.
+        reduce((obj, row) => ({ ...obj, [`${row['boost_id']}::${row['boost_status']}`]: row['count']}), {});
     
+    logger('Status count dict: ', JSON.stringify(statusCountDict));
     return boostList.map((boost) => {
         const count = {};
         STATUSSES.forEach((status) => {
@@ -32,10 +31,24 @@ const knitBoostsAndCounts = (boostList, statusCounts) => {
     });
 };
 
+// get the status counts only for the active boosts (old ones can do a detail call)
+const obtainStatusCounts = async (boostList, onlyActive = true) => {
+    const boostTable = config.get('tables.boostTable');
+    const joinTable = config.get('tables.boostAccountJoinTable');
+
+    const whereClause = onlyActive ? `where ${boostTable}.active = true ` : '';
+    const selectStatusCounts = `select ${joinTable}.boost_id, boost_status, count(account_id) ` +
+        `from ${joinTable} inner join ${boostTable} on ${joinTable}.boost_id = ${boostTable}.boost_id ` +
+        `${whereClause}` +
+        `group by ${joinTable}.boost_id, boost_status, ${boostTable}.creation_time order by ${boostTable}.creation_time desc`;
+    const selectStatusCountResults = await rdsConnection.selectQuery(selectStatusCounts, []);
+    logger('And knitting together status counts, aswith first 5: ', JSON.stringify(selectStatusCountResults.slice(0, 5)));
+    return knitBoostsAndCounts(boostList, selectStatusCountResults);
+};
+
 module.exports.listBoosts = async (excludedTypeCategories, excludeUserCounts = false, excludeExpired = false) => {
     const boostMainTable = config.get('tables.boostTable');
-    const boostAccountTable = config.get('tables.boostAccountJoinTable');
-
+    
     const hasTypeExclusions = Array.isArray(excludedTypeCategories) && excludedTypeCategories.length > 0;
     const typeExclusionClause = hasTypeExclusions 
         ? `(boost_type || '::' || boost_category) not in (${extractArrayIndices(excludedTypeCategories)})` : '';
@@ -60,9 +73,7 @@ module.exports.listBoosts = async (excludedTypeCategories, excludeUserCounts = f
     let boostList = boostsResult.map((boost) => camelizeKeys(boost));
 
     if (!excludeUserCounts) {
-        const selectStatusCounts = `select boost_id, boost_status, count(account_id) from ${boostAccountTable} group by boost_id, boost_status`;
-        const selectStatusCountResults = await rdsConnection.selectQuery(selectStatusCounts, []);
-        boostList = knitBoostsAndCounts(boostList, selectStatusCountResults);
+        boostList = await obtainStatusCounts(boostList);
     }
 
     return boostList;
@@ -105,10 +116,12 @@ module.exports.fetchUserBoosts = async (accountId, { excludedStatus, changedSinc
     const flagRestriction = flags ? `and ${boostMainTable}.flags && $${typeIndex + excludedType.length + (changedSinceTime ? 1 : 0)} ` : '';
     const finalClause = `${updatedTimeRestriction}${flagRestriction}`;
 
-    const selectBoostQuery = `select ${columns}, ${endTimeColumn} from ${boostMainTable} inner join ${boostAccountJoinTable} ` + 
-       `on ${boostMainTable}.boost_id = ${boostAccountJoinTable}.boost_id where account_id = $1 and ` + 
-       `boost_status not in (${extractArrayIndices(excludedStatus, statusIndex)}) and ` +
-       `boost_type not in (${extractArrayIndices(excludedType, typeIndex)}) ${finalClause}` +
+    const selectBoostQuery = `select ${columns}, ${endTimeColumn} ` +
+        `from ${boostMainTable} inner join ${boostAccountJoinTable} ` + 
+            `on ${boostMainTable}.boost_id = ${boostAccountJoinTable}.boost_id ` +
+        `where account_id = $1 and ` + 
+        `boost_status not in (${extractArrayIndices(excludedStatus, statusIndex)}) and ` +
+        `boost_type not in (${extractArrayIndices(excludedType, typeIndex)}) ${finalClause}` +
        `order by ${boostAccountJoinTable}.creation_time desc`;
 
     const values = [accountId, ...excludedStatus, ...excludedType];
@@ -135,6 +148,11 @@ module.exports.findAccountsForUser = async (userId = 'some-user-uid') => {
 };
 
 module.exports.fetchUserBoostLogs = async (accountId, boostIds, logType) => {
+    // to allow for empty calls (makes some parallism upstream simpler)
+    if (boostIds.length === 0) {
+        return [];
+    }
+
     const fixedParams = 2;
     const findQuery = `select * from ${config.get('tables.boostLogTable')} where account_id = $1 and log_type = $2 and ` +
         `boost_id in (${extractArrayIndices(boostIds, fixedParams + 1)})`;

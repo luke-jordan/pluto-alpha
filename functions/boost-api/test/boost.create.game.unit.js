@@ -280,7 +280,7 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
 
         const lambdaPayload = JSON.parse(lambdaInvokeStub.getCall(0).args[0].Payload);
         expect(lambdaPayload).to.deep.equal(expectedMsgInstruct);
-        expect(alterBoostStub).to.have.been.calledOnceWithExactly(testBoostId, mockMsgIdDict, true);
+        expect(alterBoostStub).to.have.been.calledOnceWithExactly(testBoostId, mockMsgIdDict, false); // the false is NB!
 
         expect(publishMultiStub).to.have.been.calledThrice; // we emit OFFERED as well, because we need it included
     });
@@ -417,7 +417,7 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         expect(resultOfCreate).to.deep.equal(expectedResult);
 
         // then set up invocation checks
-        const expectedBoost = { ...mockBoostToFromPersistence, defaultStatus: 'UNCREATED', gameParams: eventGameParams };
+        const expectedBoost = { ...mockBoostToFromPersistence, defaultStatus: null, gameParams: eventGameParams };
         expectedBoost.statusConditions = { 
             UNLOCKED: ['event_occurs #{USER_CREATED_ACCOUNT}'],
             REDEEMED: ['number_taps_greater_than #{50::10000}']
@@ -426,7 +426,14 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         expect(insertBoostStub).to.have.been.calledOnceWithExactly(expectedBoost);
 
         const expectedTemplate = { template: { DEFAULT: messageTemplates.UNLOCKED }};
-        const mockMsgInstruct = { ...expectedMsgInstruct, actionToTake: 'PLAY_GAME', presentationType: 'EVENT_DRIVEN', triggerParameters: mockMsgTrigger, templates: expectedTemplate };
+        const mockMsgInstruct = { 
+            ...expectedMsgInstruct, 
+            actionToTake: 'PLAY_GAME', 
+            presentationType: 'EVENT_DRIVEN', 
+            holdFire: true,
+            triggerParameters: mockMsgTrigger,
+            templates: expectedTemplate 
+        };
         
         const lambdaPayload = JSON.parse(lambdaInvokeStub.getCall(0).args[0].Payload);
         expect(lambdaPayload).to.deep.equal(mockMsgInstruct);

@@ -403,6 +403,7 @@ module.exports.extractAccountIds = async (audienceId) => {
 // ///////////////////////////////////////////////////////////////
 
 const assembleAccountJoinDef = (boostId, boostDetails, accountIds) => {
+    logger('Assembling account joins, from: ', JSON.stringify(boostDetails)); // something strange happening here
     const { defaultStatus, expiryParameters } = boostDetails;
     const boostStatus = defaultStatus || 'CREATED'; // thereafter: OFFERED (when message sent), PENDING (almost done), COMPLETE
 
@@ -421,15 +422,16 @@ const assembleAccountJoinDef = (boostId, boostDetails, accountIds) => {
         rows: boostAccountJoins
     };
     
+    logger('Assembled join definition, first row: ', JSON.stringify(boostAccountJoins[0]));
     return boostJoinQueryDef;
 };
 
 module.exports.insertBoost = async (boostDetails) => {
     logger('Instruction received to insert boost: ', boostDetails);
     
-    const skipAccountInsertion = boostDetails.defaultStatus === 'UNCREATED' || boostDetails.boostAudienceType === 'EVENT_DRIVEN';
+    const skipAccountInsertion = !boostDetails.defaultStatus || boostDetails.boostAudienceType === 'EVENT_DRIVEN';
     const accountIds = await (skipAccountInsertion ? [] : exports.extractAccountIds(boostDetails.audienceId));
-    logger('Extracted account IDs for boost: ', accountIds);
+    logger('Extracted account IDs for boost: ', JSON.stringify(accountIds));
 
     const boostId = uuid();
     const boostObject = {
@@ -455,7 +457,7 @@ module.exports.insertBoost = async (boostDetails) => {
         boostAudienceType: boostDetails.boostAudienceType,
         audienceId: boostDetails.audienceId,
 
-        initialStatus: boostDetails.defaultStatus || 'CREATED',
+        initialStatus: boostDetails.defaultStatus, // can be set explicitly to null
         statusConditions: boostDetails.statusConditions,
         messageInstructionIds: { instructions: boostDetails.messageInstructionIds }
     };
