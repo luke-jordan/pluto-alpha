@@ -20,6 +20,11 @@ const insertBoostLogStub = sinon.stub();
 
 const redemptionHandlerStub = sinon.stub();
 
+const promisifyStub = sinon.stub();
+const redisGetStub = sinon.stub();
+const redisSetStub = sinon.stub();
+const redisDelStub = sinon.stub();
+
 const lamdbaInvokeStub = sinon.stub();
 
 class MockLambdaClient {
@@ -27,6 +32,10 @@ class MockLambdaClient {
         this.invoke = lamdbaInvokeStub;
     }
 }
+
+promisifyStub.onFirstCall().returns({ bind: () => redisDelStub });
+promisifyStub.onSecondCall().returns({ bind: () => redisSetStub });
+promisifyStub.onThirdCall().returns({ bind: () => redisGetStub });
 
 const proxyquire = require('proxyquire').noCallThru();
 
@@ -46,6 +55,16 @@ const handler = proxyquire('../boost-user-handler', {
         'Lambda': MockLambdaClient,
          // eslint-disable-next-line no-empty-function
          'config': { update: () => ({}) }
+    },
+    'redis': {
+        'createClient': () => ({
+            'get': redisGetStub,
+            'set': redisSetStub
+        }),
+        '@noCallThru': true
+    },
+    'util': {
+        'promisify': promisifyStub
     },
     '@noCallThru': true
 });
@@ -137,7 +156,7 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
         expect(updateBoostRedeemedStub).to.have.been.calledOnceWithExactly([testBoostId]);
     });
 
-    it.skip('Records response properly if it is a tournament for later, and involves status change', async () => {
+    it('Records response properly if it is a tournament for later, and involves status change', async () => {
         const testEvent = {
             eventType: 'USER_GAME_COMPLETION',
             boostId: testBoostId,
@@ -232,7 +251,7 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
         expect(result.body).to.deep.equal(JSON.stringify({ result: 'NO_CHANGE' }));
     });
 
-    it.skip('Records response properly if it is a tournament for later, but no status change', async () => {
+    it('Records response properly if it is a tournament for later, but no status change', async () => {
         const testEvent = {
             eventType: 'USER_GAME_COMPLETION',
             boostId: testBoostId,

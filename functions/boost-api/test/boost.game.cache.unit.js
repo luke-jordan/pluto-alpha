@@ -50,8 +50,8 @@ const handler = proxyquire('../boost-user-handler', {
     },
     'redis': {
         'createClient': () => ({
-            // 'get': redisGetStub,
-            // 'set': redisSetStub
+            'get': redisGetStub,
+            'set': redisSetStub
         }),
         '@noCallThru': true
     },
