@@ -22,6 +22,7 @@ const Redis = require('redis');
 const redis = Redis.createClient();
 
 const promisify = require('util').promisify;
+const redisDel = promisify(redis.del).bind(redis);
 const redisSet = promisify(redis.set).bind(redis);
 const redisGet = promisify(redis.get).bind(redis);
 
@@ -82,17 +83,40 @@ const generateUpdateInstruction = (boost, statusResult, accountId) => {
     };
 };
 
+const expireGame = async (sessionId) => {
+    logger('Ending game:', sessionId);
+    return redisDel(`${config.get('cache.prefix.gameSession')}::${sessionId}`);
+};
+
+const fetchFinalScore = async (sessionId, finalScore = null) => {
+    const cachedGameSession = await redisGetParsed(`${config.get('cache.prefix.gameSession')}::${sessionId}`);
+    logger('Fetching final score from: ', cachedGameSession);
+
+    const sessionGameResults = cachedGameSession.gameEvents;
+    const { numberTaps } = sessionGameResults[sessionGameResults.length - 1];
+    logger('Last cached score: ', numberTaps);
+    
+    const maxTapsPerInterval = config.get('gameSession.maxTapsPerInterval');
+    if (finalScore && (finalScore - numberTaps) > maxTapsPerInterval) {
+        throw new Error('Inconsistent final score');
+    }
+
+    return finalScore ? finalScore : numberTaps;
+};
+
 const fetchBoostFromCacheOrDB = async (boostId) => {
     const cacheKey = `${config.get('cache.prefix.gameBoost')}::${boostId}`;
-    const cacheResult = await redisGetParsed(cacheKey);
-    logger('Got cached game boost: ', cacheResult);
-
-    if (cacheResult) {
-        return cacheResult;
+    const cachedBoost = await redisGetParsed(cacheKey);
+    logger('Got cached game boost: ', cachedBoost);
+    if (cachedBoost) {
+        cachedBoost.boostEndTime = moment(cachedBoost.boostEndTime);
+        return cachedBoost;
     }
 
     const boost = await persistence.fetchBoost(boostId);
     logger('Got boost from persistence: ', boost);
+
+    boost.boostEndTime = moment(boost.boostEndTime);
     await redisSet(cacheKey, JSON.stringify(boost), 'EX', config.get('cache.ttl.gameBoost'));
 
     return boost;
@@ -115,7 +139,12 @@ module.exports.processUserBoostResponse = async (event) => {
         logger('Event params: ', params);
 
         const { systemWideUserId } = userDetails;
-        const { boostId, eventType } = params;
+        const { boostId, sessionId, eventType, numberTaps } = params;
+
+        if (sessionId) {
+            params.numberTaps = await fetchFinalScore(sessionId, numberTaps);
+            await expireGame(sessionId);
+        }
 
         // todo : make sure boost is available for this account ID
         const [boost, accountId] = await Promise.all([
@@ -208,25 +237,27 @@ const handleGameInitialisation = async (boostId, systemWideUserId) => {
     const currentTime = moment().valueOf();
     const gameEndTime = currentTime + (timeLimitSeconds * 1000);
 
-    const gameState = JSON.stringify({
+    const gameSession = JSON.stringify({
         boostId,
         systemWideUserId,
-        gameEndTime: moment(gameEndTime),
+        gameEndTime: gameEndTime,
         gameEvents: [{
-            timestamp: moment(currentTime),
-            numberMatches: 0
+            timestamp: currentTime,
+            numberTaps: 0
         }]
     });
 
-    logger('Initialised game. Sending details to cache: ', gameState);
+    logger('Initialised game. Sending details to cache: ', gameSession);
     const cacheKey = `${config.get('cache.prefix.gameSession')}::${sessionId}`;
-    await redisSet(cacheKey, gameState, 'EX', config.get('cache.ttl.gameSession'));
+    await redisSet(cacheKey, gameSession, 'EX', config.get('cache.ttl.gameSession'));
 
     return { statusCode: 200, body: JSON.stringify({ sessionId })};
 };
 
-const isValidGameResult = (gameState, currentTime) => {
-    const sessionGameResults = gameState.gameEvents;
+const isGameFinished = (gameSession) => moment().valueOf() > gameSession.gameEndTime;
+
+const isValidGameResult = (gameSession, currentTime) => {
+    const sessionGameResults = gameSession.gameEvents;
     const mostRecentGameResult = sessionGameResults[sessionGameResults.length - 1];
     logger('Got most recent game result: ', mostRecentGameResult);
 
@@ -238,41 +269,45 @@ const isValidGameResult = (gameState, currentTime) => {
         return false;
     }
 
-    const gameEndTime = moment(gameState.gameEndTime).valueOf();
-    if (currentTime.valueOf() > gameEndTime) {
+    if (isGameFinished(gameSession)) {
         return false;
     }
 
     return true;
 };
 
-const handleInterimGameResult = async (params) => {
+const handleInterimGameResult = async ({ sessionId, numberTaps }) => {
     logger('Storing interim game results in cache');
-    const { sessionId, numberMatches, timestamp } = params;
+    const currentTime = moment();
 
     const cacheKey = `${config.get('cache.prefix.gameSession')}::${sessionId}`;
-    const cachedGameState = await redisGetParsed(cacheKey);
-    logger('Got cached game state: ', cachedGameState);
+    const cachedGameSession = await redisGetParsed(cacheKey);
+    logger('Got cached game session: ', cachedGameSession);
 
-    if (!isValidGameResult(cachedGameState, timestamp)) {
+    if (!isValidGameResult(cachedGameSession, currentTime)) {
         return { statusCode: statusCodes('Bad Request') };
     }
 
-    cachedGameState.gameEvents.push({ timestamp, numberMatches });
-    logger('New game state: ', cachedGameState);
-    await redisSet(cacheKey, JSON.stringify(cachedGameState), 'EX', config.get('cache.ttl.gameSession'));
+    cachedGameSession.gameEvents.push({ timestamp: currentTime.valueOf(), numberTaps });
+    logger('New game session: ', cachedGameSession);
+    await redisSet(cacheKey, JSON.stringify(cachedGameSession), 'EX', config.get('cache.ttl.gameSession'));
 
     return { statusCode: 200, body: JSON.stringify({ result: 'SUCCESS' })};
 };
 
-const handleGameCompletion = async (event, parameters) => {
-    logger('Ending session with parameters: ', parameters);
-    // end session, delete from cache
-    return exports.processUserBoostResponse(event);
-};
-
 module.exports.checkForHangingGame = async () => {
-    logger('Checking for hanging matches and sessions');
+    const activeGames = redis.keys(`${config.get('cache.prefix.gameSession')}::*`);
+    logger('Got active games:', activeGames);
+    const hangingGames = activeGames.map((game) => isGameFinished(game));
+    logger('Got hanging games:', hangingGames);
+
+    if (hangingGames.length > 0) {
+        const expiryPromises = hangingGames.map((game) => expireGame(game.sessionId));
+        const resultOfExpiry = await Promise.all(expiryPromises);
+        logger('Result of game expiry:', resultOfExpiry);
+    }
+
+    return { result: 'SUCCESS' };
 };
 
 /**
@@ -287,6 +322,7 @@ module.exports.cacheGameResponse = async (event) => {
         }
 
         const { systemWideUserId } = userDetails;
+
         const params = util.extractEventBody(event);
         const { boostId, eventType } = params;
 
@@ -296,10 +332,6 @@ module.exports.cacheGameResponse = async (event) => {
         
         if (eventType === 'GAME_IN_PROGRESS') {
             return handleInterimGameResult(params);
-        }
-
-        if (eventType === 'USER_GAME_COMPLETION') {
-            return handleGameCompletion(event, params);
         }
 
         throw new Error('Unrecognized event');

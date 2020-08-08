@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('jupiter:game:cache-test');
+// const logger = require('debug')('jupiter:game:cache-test');
 
 const config = require('config');
 const moment = require('moment');
@@ -28,9 +28,11 @@ const uuidStub = sinon.stub();
 const promisifyStub = sinon.stub();
 const redisGetStub = sinon.stub();
 const redisSetStub = sinon.stub();
+const redisDelStub = sinon.stub();
 
-promisifyStub.onFirstCall().returns({ bind: () => redisSetStub });
-promisifyStub.onSecondCall().returns({ bind: () => redisGetStub });
+promisifyStub.onFirstCall().returns({ bind: () => redisDelStub });
+promisifyStub.onSecondCall().returns({ bind: () => redisSetStub });
+promisifyStub.onThirdCall().returns({ bind: () => redisGetStub });
 
 const proxyquire = require('proxyquire').noCallThru();
 
@@ -67,14 +69,19 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
     const testAccountId = uuid();
     const testSessionId = uuid();
 
-    beforeEach(() => testHelper.resetStubs(redisGetStub, redisSetStub, fetchBoostStub, redeemOrRevokeStub, momentStub, uuidStub));
+    beforeEach(() => testHelper.resetStubs(redisGetStub, redisSetStub, fetchBoostStub, redeemOrRevokeStub, momentStub, uuidStub,
+        fetchAccountStatusStub, updateBoostAccountStub, updateBoostRedeemedStub, getAccountIdForUserStub, insertBoostLogStub));
 
     it('Initialises game session, sets up cache', async () => {
+        const boostEndTime = moment().add(1, 'day').format();
+        const testCurrentTime = moment().valueOf();
+        const expectedEndTime = testCurrentTime + (60 * 1000); // time limit seconds to milliseconds
 
         const mockGameBoost = {
             boostId: testBoostId,
             label: 'Match Objects',
             boostType: 'GAME',
+            boostEndTime,
             gameParams: {
                 gameType: 'MATCH_OBJECTS',
                 timeLimitSeconds: 60,
@@ -84,15 +91,9 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
             }
         };
 
-        const testCurrentTime = moment().valueOf();
-        const expectedEndTime = testCurrentTime + (mockGameBoost.gameParams.timeLimitSeconds * 1000);
-
         redisGetStub.resolves(JSON.stringify(mockGameBoost));
 
         momentStub.returns({ valueOf: () => testCurrentTime });
-        momentStub.onSecondCall().returns(moment(expectedEndTime));
-        momentStub.onThirdCall().returns(moment(testCurrentTime));
-
         uuidStub.returns(testSessionId);
 
         const testEventBody = { boostId: testBoostId, eventType: 'INITIALISE' };
@@ -108,48 +109,45 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
 
         const sessionCacheKey = `${config.get('cache.prefix.gameSession')}::${testSessionId}`;
 
-        const expectedGameState = JSON.stringify({
+        const expectedGameSession = JSON.stringify({
             boostId: testBoostId,
             systemWideUserId: testSystemId,
-            gameEndTime: moment(expectedEndTime),
+            gameEndTime: expectedEndTime,
             gameEvents: [{
-                timestamp: moment(testCurrentTime),
-                numberMatches: 0
+                timestamp: testCurrentTime,
+                numberTaps: 0
             }]
         });
 
-        const redisSetArgs = [sessionCacheKey, expectedGameState, 'EX', config.get('cache.ttl.gameSession')];
+        const redisSetArgs = [sessionCacheKey, expectedGameSession, 'EX', config.get('cache.ttl.gameSession')];
         expect(redisSetStub).to.have.been.calledOnceWithExactly(...redisSetArgs);
     });
 
-    it.only('Stores interim game results in cache', async () => {
+    it('Stores interim game results in cache', async () => {
         const testStartTime = moment();
-        const testEndTime = testStartTime.add(2, 'minutes').valueOf();
-        const testCurrentTime = testStartTime.add(15, 'seconds').valueOf();
+        const gameEndTime = testStartTime.add(2, 'minutes');
+        const testCurrentTime = testStartTime.add(15, 'seconds');
 
-        const cachedGameState = {
+        const cachedGameSession = {
             boostId: testBoostId,
             systemWideUserId: testSystemId,
-            gameEndTime: moment(testEndTime),
+            gameEndTime: gameEndTime.valueOf(),
             gameEvents: [{
-                timestamp: testStartTime,
-                numberMatches: 0
+                timestamp: testStartTime.valueOf(),
+                numberTaps: 0
             }]
         };
 
-        redisGetStub.resolves(JSON.stringify(cachedGameState));
+        redisGetStub.resolves(JSON.stringify(cachedGameSession));
 
-        momentStub.onFirstCall().returns(moment(testCurrentTime));
-        momentStub.returns({
-            valueOf: () => testCurrentTime,
-            diff: () => 21
-        });
+        momentStub.onFirstCall().returns(testCurrentTime);
+        momentStub.returns({ diff: () => 21 });
 
         const testEventBody = {
             eventType: 'GAME_IN_PROGRESS',
+            boostId: testBoostId,
             sessionId: testSessionId,
-            numberMatches: 8,
-            timestamp: testCurrentTime
+            numberTaps: 8
         };
 
         const testEvent = testHelper.wrapEvent(testEventBody, testSystemId, 'ORDINARY_USER');
@@ -161,17 +159,17 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
         const sessionCacheKey = `${config.get('cache.prefix.gameSession')}::${testSessionId}`;
         expect(redisGetStub).to.have.been.calledOnceWithExactly(sessionCacheKey);
 
-        const expectedGameState = JSON.stringify({
+        const expectedGameSession = JSON.stringify({
             boostId: testBoostId,
             systemWideUserId: testSystemId,
-            gameEndTime: moment(testEndTime),
+            gameEndTime: gameEndTime.valueOf(),
             gameEvents: [
-                { timestamp: testStartTime, numberMatches: 0 },
-                { timestamp: moment(testCurrentTime), numberMatches: 8 }
+                { timestamp: testStartTime.valueOf(), numberTaps: 0 },
+                { timestamp: testCurrentTime.valueOf(), numberTaps: 8 }
             ]
         });
 
-        const redisSetArgs = [sessionCacheKey, expectedGameState, 'EX', config.get('cache.ttl.gameSession')];
+        const redisSetArgs = [sessionCacheKey, expectedGameSession, 'EX', config.get('cache.ttl.gameSession')];
         expect(redisSetStub).to.have.been.calledOnceWithExactly(...redisSetArgs);
     });
 
@@ -180,17 +178,17 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
         const testEndTime = testStartTime.add(2, 'minutes').valueOf();
         const testCurrentTime = testStartTime.add(5, 'milliseconds').valueOf();
 
-        const cachedGameState = {
+        const cachedGameSession = {
             boostId: testBoostId,
             systemWideUserId: testSystemId,
-            gameEndTime: moment(testEndTime),
+            gameEndTime: testEndTime,
             gameEvents: [{
                 timestamp: testStartTime,
-                numberMatches: 0
+                numberTaps: 0
             }]
         };
 
-        redisGetStub.resolves(JSON.stringify(cachedGameState));
+        redisGetStub.resolves(JSON.stringify(cachedGameSession));
 
         momentStub.returns({
             valueOf: () => testCurrentTime,
@@ -201,7 +199,7 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
             boostId: testBoostId,
             eventType: 'GAME_IN_PROGRESS',
             sessionId: testSessionId,
-            numberMatches: 13
+            numberTaps: 13
         };
 
         const testEvent = testHelper.wrapEvent(testEventBody, testSystemId, 'ORDINARY_USER');
@@ -215,6 +213,9 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
     });
 
     it('Consolidates final game results properly, redeems when game is won', async () => {
+        const gameEndTime = moment().add(2, 'minutes');
+        const boostEndTime = moment().add(1, 'day');
+
         const gameParams = {
             gameType: 'MATCH_OBJECTS',
             timeLimitSeconds: 60,
@@ -230,31 +231,104 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
             boostAmount: 10000,
             boostUnit: 'HUNDREDTH_CENT',
             boostCurrency: 'ZAR',
-            boostEndTime: moment().add(10, 'days'),
+            boostEndTime,
             gameParams,
             statusConditions: {
                 OFFERED: ['message_instruction_created'],
                 UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
-                REDEEMED: ['number_matches_greater_than #{50::40000}']
+                REDEEMED: ['number_taps_greater_than #{10::40000}']
             }
         };
 
-        redisGetStub.onFirstCall().resolves(JSON.stringify(mockGameBoost));
+        const cachedGameSession = JSON.stringify({
+            boostId: testBoostId,
+            systemWideUserId: testSystemId,
+            gameEndTime: moment(gameEndTime.valueOf()),
+            gameEvents: [
+                { timestamp: moment(), numberTaps: 0 },
+                { timestamp: moment(), numberTaps: 8 },
+                { timestamp: moment(), numberTaps: 10 }
+            ]
+        });
+
+        momentStub.returns(boostEndTime);
+
+        redisGetStub.onFirstCall().resolves(cachedGameSession);
+        redisGetStub.onSecondCall().resolves(JSON.stringify(mockGameBoost));
+
         getAccountIdForUserStub.resolves(testAccountId);
 
         fetchAccountStatusStub.resolves({ boostStatus: 'UNLOCKED' });
         redeemOrRevokeStub.resolves({ [testBoostId]: { result: 'SUCCESS' }});
 
+        const expectedResult = { 
+            result: 'TRIGGERED', 
+            statusMet: ['REDEEMED'], 
+            endTime: mockGameBoost.boostEndTime.valueOf(),
+            amountAllocated: { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'ZAR' }
+        };
+
         const testEventBody = {
             eventType: 'USER_GAME_COMPLETION',
+            boostId: testBoostId,
             sessionId: testSessionId,
-            numberMatches: 55,
             timeTakenMillis: 30000
         };
 
         const testEvent = testHelper.wrapEvent(testEventBody, testSystemId, 'ORDINARY_USER');
-        const resultOfCompletion = await handler.cacheGameResponse(testEvent);
-        logger('Res:', resultOfCompletion);
+
+        const resultOfCompletion = await handler.processUserBoostResponse(testEvent);
+        const resultBody = testHelper.standardOkayChecks(resultOfCompletion);
+        expect(resultBody).to.deep.equal(expectedResult);
+
+        const sessionCacheKey = `${config.get('cache.prefix.gameSession')}::${testSessionId}`;
+        const boostCacheKey = `${config.get('cache.prefix.gameBoost')}::${testBoostId}`;
+
+        expect(redisGetStub).to.have.been.calledWithExactly(sessionCacheKey);
+        expect(redisGetStub).to.have.been.calledWithExactly(boostCacheKey);
+
+        const affectedAccountsDict = {
+            [testBoostId]: {
+                [testAccountId]: { userId: testSystemId }
+            }
+        };
+
+        const redemptionArgs = {
+            redemptionBoosts: [mockGameBoost],
+            affectedAccountsDict,
+            event: {
+                accountId: testAccountId,
+                eventType: 'USER_GAME_COMPLETION'
+            }
+        };
+
+        expect(redeemOrRevokeStub).to.have.been.calledOnceWithExactly(redemptionArgs);
+        
+        const expectedLogContext = { 
+            newStatus: 'REDEEMED',
+            boostAmount: 10000,
+            processType: 'USER',
+            submittedParams: { ...testEventBody, numberTaps: 10 }
+        };
+        
+        const expectedUpdateInstruction = {
+            boostId: testBoostId,
+            accountIds: [testAccountId],
+            newStatus: 'REDEEMED',
+            logType: 'STATUS_CHANGE',
+            logContext: expectedLogContext
+        };
+
+        const expectedGameLog = {
+            boostId: testBoostId,
+            accountId: testAccountId,
+            logType: 'GAME_RESPONSE',
+            logContext: { numberTaps: 10, timeTakenMillis: 30000 }
+        };
+
+        expect(updateBoostAccountStub).to.have.been.calledOnceWithExactly([expectedUpdateInstruction]);
+        expect(insertBoostLogStub).to.have.been.calledOnceWithExactly([expectedGameLog]);
+        expect(updateBoostRedeemedStub).to.have.been.calledOnceWithExactly([testBoostId]);
         
     });
 });

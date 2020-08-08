@@ -25,7 +25,7 @@ const EVENT_BASED_CONDITIONS = [
 const EVENT_TYPE_CONDITION_MAP = {
     'SAVING_PAYMENT_SUCCESSFUL': SAVE_CONDITIONS,
     'WITHDRAWAL_EVENT_CONFIRMED': ['balance_below', 'withdrawal_before'],
-    'USER_GAME_COMPLETION': ['number_taps_greater_than', 'percent_destroyed_above', 'number_matches_greater_than'],
+    'USER_GAME_COMPLETION': ['number_taps_greater_than', 'percent_destroyed_above'],
     'BOOST_EXPIRED': ['number_taps_in_first_N', 'percent_destroyed_in_first_N', 'randomly_chosen_first_N'],
     'FRIEND_REQUEST_INITIATED_ACCEPTED': ['friends_added_since', 'total_number_friends'],
     'FRIEND_REQUEST_TARGET_ACCEPTED': ['friends_added_since', 'total_number_friends']
@@ -269,8 +269,6 @@ module.exports.testCondition = (event, statusCondition) => {
             return evaluateGameTournament(event, parameterValue, 'percentDestroyed');
         case 'randomly_chosen_first_N':
             return evaluateRandomAward(event, parameterValue, eventContext);
-        case 'number_matches_greater_than':
-            return evaluateGameResponse(eventContext, parameterValue, 'numberMatches');
         
         // social conditions
         case 'friends_added_since':

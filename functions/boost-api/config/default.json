@@ -69,5 +69,8 @@
     "mlSelection": {
         "enabled": true,
         "endpoint": "<insert here>"
+    },
+    "gameSession": {
+        "maxTapsPerInterval": 1
     }
 }
