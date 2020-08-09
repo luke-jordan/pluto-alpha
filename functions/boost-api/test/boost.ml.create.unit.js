@@ -80,7 +80,8 @@ describe('*** UNIT TEST BOOST CREATION *** Persists ML params', () => {
     const testStatusConditions = {
         OFFERED: ['message_instruction_created'],
         UNLOCKED: ['save_event_greater_than #{100000:HUNDREDTH_CENT:USD}'],
-        REDEEMED: ['number_taps_greater_than #{20::20000}']
+        REDEEMED: ['number_taps_greater_than #{20::20000}'],
+        FAILED: ['number_taps_less_than #{20::20000}']
     };
 
     const gameParams = {
@@ -88,7 +89,8 @@ describe('*** UNIT TEST BOOST CREATION *** Persists ML params', () => {
         timeLimitSeconds: 20,
         winningThreshold: 20,
         instructionBand: 'Tap the screen as many times as you can in 20 seconds',
-        entryCondition: 'save_event_greater_than #{100000:HUNDREDTH_CENT:USD}'
+        entryCondition: 'save_event_greater_than #{100000:HUNDREDTH_CENT:USD}',
+        allowRepeatPlay: false,
     };
 
     const mockBoostToFromPersistence = {
@@ -160,7 +162,8 @@ describe('*** UNIT TEST BOOST CREATION *** Persists ML params', () => {
             messagesToCreate: [{
                 boostStatus: 'ALL',
                 presentationType: 'MACHINE_DETERMINED',
-                template: messageTemplates.UNLOCKED
+                template: messageTemplates.UNLOCKED,
+                allowRepeatPlay: false,
             }],
             mlParameters: {
                 maxPortionOfAudience: 0.20,

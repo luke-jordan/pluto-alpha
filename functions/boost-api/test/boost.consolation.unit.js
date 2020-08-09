@@ -73,45 +73,13 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
     it('Awards consolation prize to all participating users who did not win', async () => {
         const rewardParameters = {
             consolationPrize: {
-                amount: { amount: 100, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+                type: 'FIXED',
                 recipients: { basis: 'ALL' },
-                type: 'FIXED'
+                amount: { amount: 100, unit: 'WHOLE_CENT', currency: 'USD' }
             }
         };
 
-        const boostRecipients = [
-            { recipientId: 'account-id-1', amount: testBoostAmount, recipientType: 'END_USER_ACCOUNT' }
-        ];
-
-        const consolationRecipients = [
-            { recipientId: 'account-id-2', amount: testConsolationAmount, recipientType: 'END_USER_ACCOUNT' },
-            { recipientId: 'account-id-3', amount: testConsolationAmount, recipientType: 'END_USER_ACCOUNT' },
-            { recipientId: 'account-id-4', amount: testConsolationAmount, recipientType: 'END_USER_ACCOUNT' }
-        ];
-
-        const expectedBoostAllocInvocation = helper.wrapLambdaInvoc('float_transfer', false, createAllocationPayload(boostRecipients));
-        const expectedConsolationAllocInvocation = helper.wrapLambdaInvoc('float_transfer', false, createAllocationPayload(consolationRecipients));
-
-        const mockBoostAllocationResult = {
-            [testBoostId]: {
-                result: 'SUCCESS',
-                floatTxIds: [uuid()],
-                accountTxIds: [uuid()]
-            }
-        };
-
-        const mockConsolationAllocResult = {
-            [testBoostId]: {
-                result: 'SUCCESS',
-                floatTxIds: [uuid(), uuid(), uuid()],
-                accountTxIds: [uuid(), uuid(), uuid()]
-            }
-        };
-
-        lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse(mockBoostAllocationResult)});
-        lamdbaInvokeStub.onSecondCall().returns({ promise: () => helper.mockLambdaResponse(mockConsolationAllocResult) });
-
-        publishStub.resolves({ result: 'SUCCESS' });
+        const expectedAmountInUnit = 100 * 100;
 
         const mockBoost = {
             boostId: testBoostId,
@@ -126,11 +94,34 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
         const mockAccountMap = {
             [testBoostId]: {
                 'account-id-1': { userId: 'user-id-1', status: 'REDEEMED' },
-                'account-id-2': { userId: 'user-id-2', status: 'OFFERED' },
-                'account-id-3': { userId: 'user-id-3', status: 'OFFERED' },
-                'account-id-4': { userId: 'user-id-4', status: 'OFFERED' }
+                'account-id-2': { userId: 'user-id-2', status: 'CONSOLED' },
+                'account-id-3': { userId: 'user-id-3', status: 'CONSOLED' },
+                'account-id-4': { userId: 'user-id-4', status: 'CONSOLED' }
             }
         };
+
+        const boostRecipients = [
+            { recipientId: 'account-id-1', amount: testBoostAmount, recipientType: 'END_USER_ACCOUNT' }
+        ];
+
+        const recipient = (accountId) => ({ recipientId: accountId, amount: expectedAmountInUnit, recipientType: 'END_USER_ACCOUNT' });
+        const consolationRecipients = [recipient('account-id-2'), recipient('account-id-3'), recipient('account-id-4')];
+
+        const expectedBoostAllocInvocation = helper.wrapLambdaInvoc('float_transfer', false, createAllocationPayload(boostRecipients));
+        const expectedConsolationAllocInvocation = helper.wrapLambdaInvoc('float_transfer', false, createAllocationPayload(consolationRecipients));
+
+        const mockWinnerAllocationResult = {
+            [testBoostId]: { result: 'SUCCESS', floatTxIds: [uuid()], accountTxIds: [uuid()] }
+        };
+
+        const mockConsolationAllocResult = {
+            [testBoostId]: { result: 'SUCCESS', floatTxIds: [uuid(), uuid(), uuid()], accountTxIds: [uuid(), uuid(), uuid()] }
+        };
+
+        lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse(mockWinnerAllocationResult)});
+        lamdbaInvokeStub.onSecondCall().returns({ promise: () => helper.mockLambdaResponse(mockConsolationAllocResult) });
+
+        publishStub.resolves({ result: 'SUCCESS' });
 
         const mockEvent = { 
             redemptionBoosts: [mockBoost], 
@@ -143,7 +134,7 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
 
         const expectedResult = {
             [testBoostId]: {
-                ...mockBoostAllocationResult[testBoostId], 
+                ...mockWinnerAllocationResult[testBoostId], 
                 boostAmount: testBoostAmount, 
                 amountFromBonus: testBoostAmount
             }

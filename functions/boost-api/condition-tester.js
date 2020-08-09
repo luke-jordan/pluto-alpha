@@ -25,7 +25,7 @@ const EVENT_BASED_CONDITIONS = [
 const EVENT_TYPE_CONDITION_MAP = {
     'SAVING_PAYMENT_SUCCESSFUL': SAVE_CONDITIONS,
     'WITHDRAWAL_EVENT_CONFIRMED': ['balance_below', 'withdrawal_before'],
-    'USER_GAME_COMPLETION': ['number_taps_greater_than', 'percent_destroyed_above'],
+    'USER_GAME_COMPLETION': ['number_taps_greater_than', 'percent_destroyed_above', 'number_taps_less_than', 'percent_destroyed_below'],
     'BOOST_EXPIRED': ['number_taps_in_first_N', 'percent_destroyed_in_first_N', 'randomly_chosen_first_N'],
     'FRIEND_REQUEST_INITIATED_ACCEPTED': ['friends_added_since', 'total_number_friends'],
     'FRIEND_REQUEST_TARGET_ACCEPTED': ['friends_added_since', 'total_number_friends']
@@ -81,12 +81,13 @@ const evaluateWithdrawal = (parameterValue, eventContext) => {
     return timeSettled.isBefore(timeThreshold);
 };
 
-const evaluateGameResponse = (eventContext, parameterValue, responseValueKey) => {
+const evaluateGameResponse = (eventContext, parameterValue, responseValueKey, greaterThan = true) => {
     const { timeTakenMillis } = eventContext;
     const valueToCheck = eventContext[responseValueKey];
     const [requiredThreshold, maxTimeMillis] = parameterValue.split('::');
-    logger('Checking if ', valueToCheck, ' is above ', requiredThreshold);
-    return valueToCheck >= requiredThreshold && timeTakenMillis <= maxTimeMillis;
+    logger('Checking if ', valueToCheck, ' relative to: ', requiredThreshold, ' and greater than? : ', greaterThan);
+    const doesMeet = greaterThan ? valueToCheck >= requiredThreshold : valueToCheck < requiredThreshold;
+    return doesMeet && timeTakenMillis <= maxTimeMillis;
 };
 
 const gameResponseFilter = (logContext, maxTimeMillis, responseValueKey) => ( 
@@ -206,7 +207,7 @@ const checkEventFollows = (parameterValue, eventContext) => {
 // this one is always going to be complex -- in time maybe split out the switch block further
 // eslint-disable-next-line complexity
 module.exports.testCondition = (event, statusCondition) => {
-    // logger('Testing status condition: ', statusCondition);
+    logger('Testing status condition: ', statusCondition);
     if (typeof statusCondition !== 'string') {
         return false;
     }
@@ -218,7 +219,7 @@ module.exports.testCondition = (event, statusCondition) => {
     
     const { eventType, eventContext, boostId } = event;
 
-    // these two lines ensure we do not get caught in infinite loops because of boost/messages publishing, and that we only check the right events for the right conditions
+    // these lines ensure we do not get caught in infinite loops because of boost/messages publishing, and that we only check the right events for the right conditions
     const isEventCondition = EVENT_BASED_CONDITIONS.includes(conditionType);
     const isEventTriggeredButForbidden = (isEventCondition && (eventType.startsWith('BOOST') || eventType.startsWith('MESSAGE')));   
     
@@ -261,10 +262,15 @@ module.exports.testCondition = (event, statusCondition) => {
         // game conditions
         case 'number_taps_greater_than':
             return evaluateGameResponse(eventContext, parameterValue, 'numberTaps');
+        case 'number_taps_less_than':
+            return evaluateGameResponse(eventContext, parameterValue, 'numberTaps', false);
         case 'number_taps_in_first_N':
             return evaluateGameTournament(event, parameterValue, 'numberTaps');
+
         case 'percent_destroyed_above':
             return evaluateGameResponse(eventContext, parameterValue, 'percentDestroyed');
+        case 'percent_destroyed_below':
+            return evaluateGameResponse(eventContext, parameterValue, 'percentDestroyed', false);
         case 'percent_destroyed_in_first_N':
             return evaluateGameTournament(event, parameterValue, 'percentDestroyed');
         case 'randomly_chosen_first_N':

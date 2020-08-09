@@ -98,13 +98,12 @@ module.exports.processUserBoostResponse = async (event) => {
 
         const { boostStatus: currentStatus } = boostAccountJoin;
         const allowableStatus = ['CREATED', 'OFFERED', 'UNLOCKED']; // as long as not redeemed or pending, status check will do the rest
-        
-        if (boost.flags.includes('ALLOW_REPEAT_PLAY')) {
+        if (boost.flags && boost.flags.includes('ALLOW_REPEAT_PLAY')) {
             allowableStatus.push('PENDING');
         }
 
         if (!allowableStatus.includes(currentStatus)) {
-            return { statusCode: statusCodes('Bad Request'), body: JSON.stringify({ message: 'Boost is not unlocked', status: currentStatus }) };
+            return { statusCode: statusCodes('Bad Request'), body: JSON.stringify({ message: 'Boost is not open and repeat play not allowed', status: currentStatus }) };
         }
 
         const statusEvent = { eventType, eventContext: params };
