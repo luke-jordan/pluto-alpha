@@ -26,6 +26,7 @@ const redisKeysStub = sinon.stub();
 const redisDelStub = sinon.stub();
 const redisSetStub = sinon.stub();
 const redisGetStub = sinon.stub();
+const redisMGetStub = sinon.stub();
 
 const lamdbaInvokeStub = sinon.stub();
 
@@ -39,6 +40,7 @@ promisifyStub.onCall(0).returns({ bind: () => redisKeysStub });
 promisifyStub.onCall(1).returns({ bind: () => redisDelStub });
 promisifyStub.onCall(2).returns({ bind: () => redisSetStub });
 promisifyStub.onCall(3).returns({ bind: () => redisGetStub });
+promisifyStub.onCall(4).returns({ bind: () => redisMGetStub });
 
 const proxyquire = require('proxyquire').noCallThru();
 

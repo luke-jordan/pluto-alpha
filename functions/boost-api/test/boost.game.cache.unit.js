@@ -28,14 +28,16 @@ const uuidStub = sinon.stub();
 const promisifyStub = sinon.stub();
 
 const redisKeysStub = sinon.stub();
-const redisDelStub = sinon.stub();
-const redisSetStub = sinon.stub();
+const redisMGetStub = sinon.stub();
 const redisGetStub = sinon.stub();
+const redisSetStub = sinon.stub();
+const redisDelStub = sinon.stub();
 
 promisifyStub.onCall(0).returns({ bind: () => redisKeysStub });
 promisifyStub.onCall(1).returns({ bind: () => redisDelStub });
 promisifyStub.onCall(2).returns({ bind: () => redisSetStub });
 promisifyStub.onCall(3).returns({ bind: () => redisGetStub });
+promisifyStub.onCall(4).returns({ bind: () => redisMGetStub });
 
 const proxyquire = require('proxyquire').noCallThru();
 
@@ -358,7 +360,7 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
         momentStub.returns(moment());
 
         redisKeysStub.resolves(['some-key', `GAME_SESSION::${testSessionId}`]);
-        redisGetStub.resolves(mockCachedGameSession);
+        redisMGetStub.resolves([mockCachedGameSession]);
         redisDelStub.resolves('OK');
 
         const resultOfExpiry = await handler.checkForHangingGame();
@@ -366,7 +368,7 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
 
         expect(resultOfExpiry).to.deep.equal({ result: 'SUCCESS' });
         expect(redisKeysStub).to.have.been.calledOnceWithExactly('*');
-        expect(redisGetStub).to.have.been.calledOnceWithExactly(`GAME_SESSION::${testSessionId}`);
+        expect(redisMGetStub).to.have.been.calledOnceWithExactly([`GAME_SESSION::${testSessionId}`]);
         expect(redisDelStub).to.have.been.calledOnceWithExactly(`GAME_SESSION::${testSessionId}`);
     });
 });

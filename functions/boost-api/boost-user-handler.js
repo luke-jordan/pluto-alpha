@@ -26,6 +26,7 @@ const redisKeys = promisify(redis.keys).bind(redis);
 const redisDel = promisify(redis.del).bind(redis);
 const redisSet = promisify(redis.set).bind(redis);
 const redisGet = promisify(redis.get).bind(redis);
+const redisMGet = promisify(redis.mget).bind(redis);
 
 const redisGetParsed = async (cacheKey) => {
     const cacheResult = await redisGet(cacheKey);
@@ -344,7 +345,7 @@ module.exports.checkForHangingGame = async () => {
     const sessionKeys = cacheKeys.filter((key) => key.startsWith(`${config.get('cache.prefix.gameSession')}::`));
     logger('Got session keys: ', sessionKeys);
 
-    const cachedGameSessions = await Promise.all(sessionKeys.map((key) => redisGet(key)));
+    const cachedGameSessions = await redisMGet(sessionKeys);
     logger('Got cached game sessions: ', cachedGameSessions);
     const parsedGameSessions = cachedGameSessions.map((gameSession) => JSON.parse(gameSession));
     
