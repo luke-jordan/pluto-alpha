@@ -26,13 +26,15 @@ const momentStub = sinon.stub();
 const uuidStub = sinon.stub();
 
 const promisifyStub = sinon.stub();
-const redisGetStub = sinon.stub();
-const redisSetStub = sinon.stub();
+const redisKeysStub = sinon.stub();
 const redisDelStub = sinon.stub();
+const redisSetStub = sinon.stub();
+const redisGetStub = sinon.stub();
 
-promisifyStub.onFirstCall().returns({ bind: () => redisDelStub });
-promisifyStub.onSecondCall().returns({ bind: () => redisSetStub });
-promisifyStub.onThirdCall().returns({ bind: () => redisGetStub });
+promisifyStub.onCall(0).returns({ bind: () => redisKeysStub });
+promisifyStub.onCall(1).returns({ bind: () => redisDelStub });
+promisifyStub.onCall(2).returns({ bind: () => redisSetStub });
+promisifyStub.onCall(3).returns({ bind: () => redisGetStub });
 
 const proxyquire = require('proxyquire').noCallThru();
 
@@ -70,7 +72,8 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
     const testSessionId = uuid();
 
     beforeEach(() => testHelper.resetStubs(redisGetStub, redisSetStub, fetchBoostStub, redeemOrRevokeStub, momentStub, uuidStub,
-        fetchAccountStatusStub, updateBoostAccountStub, updateBoostRedeemedStub, getAccountIdForUserStub, insertBoostLogStub));
+        fetchAccountStatusStub, updateBoostAccountStub, updateBoostRedeemedStub, getAccountIdForUserStub, insertBoostLogStub,
+        redisDelStub, redisKeysStub));
 
     it('Initialises game session, sets up cache', async () => {
         const boostEndTime = moment().add(1, 'day').format();
@@ -112,6 +115,7 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
         const expectedGameSession = JSON.stringify({
             boostId: testBoostId,
             systemWideUserId: testSystemId,
+            sessionId: testSessionId,
             gameEndTime: expectedEndTime,
             gameEvents: [{
                 timestamp: testCurrentTime,
@@ -131,6 +135,7 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
         const cachedGameSession = {
             boostId: testBoostId,
             systemWideUserId: testSystemId,
+            sessionId: testSessionId,
             gameEndTime: gameEndTime.valueOf(),
             gameEvents: [{
                 timestamp: testStartTime.valueOf(),
@@ -162,6 +167,7 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
         const expectedGameSession = JSON.stringify({
             boostId: testBoostId,
             systemWideUserId: testSystemId,
+            sessionId: testSessionId,
             gameEndTime: gameEndTime.valueOf(),
             gameEvents: [
                 { timestamp: testStartTime.valueOf(), numberTaps: 0 },
@@ -181,6 +187,7 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
         const cachedGameSession = {
             boostId: testBoostId,
             systemWideUserId: testSystemId,
+            sessionId: testSessionId,
             gameEndTime: testEndTime,
             gameEvents: [{
                 timestamp: testStartTime,
@@ -243,6 +250,7 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
         const cachedGameSession = JSON.stringify({
             boostId: testBoostId,
             systemWideUserId: testSystemId,
+            sessionId: testSessionId,
             gameEndTime: moment(gameEndTime.valueOf()),
             gameEvents: [
                 { timestamp: moment(), numberTaps: 0 },
@@ -330,5 +338,35 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
         expect(insertBoostLogStub).to.have.been.calledOnceWithExactly([expectedGameLog]);
         expect(updateBoostRedeemedStub).to.have.been.calledOnceWithExactly([testBoostId]);
         
+    });
+
+    it('Removes hanging expired games from cache', async () => {
+        const gameEndTime = moment().subtract(1, 'minute');
+
+        const mockCachedGameSession = JSON.stringify({
+            boostId: testBoostId,
+            systemWideUserId: testSystemId,
+            sessionId: testSessionId,
+            gameEndTime: gameEndTime.valueOf(),
+            gameEvents: [
+                { timestamp: moment().valueOf(), numberTaps: 0 },
+                { timestamp: moment().valueOf(), numberTaps: 8 },
+                { timestamp: moment().valueOf(), numberTaps: 16 }
+            ]
+        });
+
+        momentStub.returns(moment());
+
+        redisKeysStub.resolves(['some-key', `GAME_SESSION::${testSessionId}`]);
+        redisGetStub.resolves(mockCachedGameSession);
+        redisDelStub.resolves('OK');
+
+        const resultOfExpiry = await handler.checkForHangingGame();
+        expect(resultOfExpiry).to.exist;
+
+        expect(resultOfExpiry).to.deep.equal({ result: 'SUCCESS' });
+        expect(redisKeysStub).to.have.been.calledOnceWithExactly('*');
+        expect(redisGetStub).to.have.been.calledOnceWithExactly(`GAME_SESSION::${testSessionId}`);
+        expect(redisDelStub).to.have.been.calledOnceWithExactly(`GAME_SESSION::${testSessionId}`);
     });
 });

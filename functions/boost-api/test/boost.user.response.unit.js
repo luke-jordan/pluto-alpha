@@ -21,9 +21,11 @@ const insertBoostLogStub = sinon.stub();
 const redemptionHandlerStub = sinon.stub();
 
 const promisifyStub = sinon.stub();
-const redisGetStub = sinon.stub();
-const redisSetStub = sinon.stub();
+
+const redisKeysStub = sinon.stub();
 const redisDelStub = sinon.stub();
+const redisSetStub = sinon.stub();
+const redisGetStub = sinon.stub();
 
 const lamdbaInvokeStub = sinon.stub();
 
@@ -33,9 +35,10 @@ class MockLambdaClient {
     }
 }
 
-promisifyStub.onFirstCall().returns({ bind: () => redisDelStub });
-promisifyStub.onSecondCall().returns({ bind: () => redisSetStub });
-promisifyStub.onThirdCall().returns({ bind: () => redisGetStub });
+promisifyStub.onCall(0).returns({ bind: () => redisKeysStub });
+promisifyStub.onCall(1).returns({ bind: () => redisDelStub });
+promisifyStub.onCall(2).returns({ bind: () => redisSetStub });
+promisifyStub.onCall(3).returns({ bind: () => redisGetStub });
 
 const proxyquire = require('proxyquire').noCallThru();
 

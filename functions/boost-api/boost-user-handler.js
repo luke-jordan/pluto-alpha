@@ -22,6 +22,7 @@ const Redis = require('redis');
 const redis = Redis.createClient();
 
 const promisify = require('util').promisify;
+const redisKeys = promisify(redis.keys).bind(redis);
 const redisDel = promisify(redis.del).bind(redis);
 const redisSet = promisify(redis.set).bind(redis);
 const redisGet = promisify(redis.get).bind(redis);
@@ -232,7 +233,7 @@ const handleGameInitialisation = async (boostId, systemWideUserId) => {
     const sessionId = uuid();
 
     const boost = await fetchBoostFromCacheOrDB(boostId);
-    logger('Got boost:', boost);
+    logger('Got boost: ', boost);
 
     const { timeLimitSeconds } = boost.gameParams;
 
@@ -242,21 +243,22 @@ const handleGameInitialisation = async (boostId, systemWideUserId) => {
     const gameSession = JSON.stringify({
         boostId,
         systemWideUserId,
-        gameEndTime: gameEndTime,
+        sessionId,
+        gameEndTime,
         gameEvents: [{
             timestamp: currentTime,
             numberTaps: 0
         }]
     });
 
-    logger('Initialised game. Sending details to cache: ', gameSession);
+    logger('Initialised game session: ', gameSession);
     const cacheKey = `${config.get('cache.prefix.gameSession')}::${sessionId}`;
     await redisSet(cacheKey, gameSession, 'EX', config.get('cache.ttl.gameSession'));
 
     return { statusCode: 200, body: JSON.stringify({ sessionId })};
 };
 
-const isGameFinished = (gameSession) => moment().valueOf() > gameSession.gameEndTime;
+const isGameFinished = (gameSession, currentTime) => currentTime.valueOf() > gameSession.gameEndTime;
 
 const isValidGameResult = (gameSession, currentTime) => {
     const sessionGameResults = gameSession.gameEvents;
@@ -271,7 +273,7 @@ const isValidGameResult = (gameSession, currentTime) => {
         return false;
     }
 
-    if (isGameFinished(gameSession)) {
+    if (isGameFinished(gameSession, currentTime)) {
         return false;
     }
 
@@ -297,24 +299,13 @@ const handleInterimGameResult = async ({ sessionId, numberTaps }) => {
     return { statusCode: 200, body: JSON.stringify({ result: 'SUCCESS' })};
 };
 
-module.exports.checkForHangingGame = async () => {
-    const activeGames = redis.keys(`${config.get('cache.prefix.gameSession')}::*`);
-    logger('Got active games:', activeGames);
-    const hangingGames = activeGames.map((game) => isGameFinished(game));
-    logger('Got hanging games:', hangingGames);
-
-    if (hangingGames.length > 0) {
-        const expiryPromises = hangingGames.map((game) => expireGame(game.sessionId));
-        const resultOfExpiry = await Promise.all(expiryPromises);
-        logger('Result of game expiry:', resultOfExpiry);
-    }
-
-    return { result: 'SUCCESS' };
-};
-
 /**
- * 
+ * This function handles game session cache creation and user score updates to the cache.
  * @param {object} event 
+ * @property {string} boostId The boost from which the game prize is to be awarded from.
+ * @property {string} eventType Identifies the event. Valid values are INITIALISE and GAME_IN_PROGRESSS.
+ * @property {string} sessionId Sent with GAME_IN_PROGRESS events. The session id returned during game initialisation.
+ * @property {number} numberTaps Also sent with GAME_IN_PROGRESS. The users score.
  */
 module.exports.cacheGameResponse = async (event) => {
     try {
@@ -340,4 +331,31 @@ module.exports.cacheGameResponse = async (event) => {
     } catch (err) {
         return { statusCode: 500, body: JSON.stringify(err.message) };
     }
+};
+
+/**
+ * This function checks for hanging expired games, i.e., games that remain in cache after their gameEndTime
+ * has been exceeded. If any are found they are removed from cache.
+ */
+module.exports.checkForHangingGame = async () => {
+    const currentTime = moment();
+
+    const cacheKeys = await redisKeys('*');
+    const sessionKeys = cacheKeys.filter((key) => key.startsWith(config.get('cache.prefix.gameSession')));
+    logger('Got session keys: ', sessionKeys);
+
+    const cachedGameSessions = await Promise.all(sessionKeys.map((key) => redisGet(key)));
+    logger('Got cached game sessions: ', cachedGameSessions);
+    const parsedGameSessions = cachedGameSessions.map((gameSession) => JSON.parse(gameSession));
+    
+    const hangingGameSessions = parsedGameSessions.filter((game) => isGameFinished(game, currentTime));
+    logger('Got hanging game sessions: ', hangingGameSessions);
+
+    if (hangingGameSessions.length > 0) {
+        const expiryPromises = hangingGameSessions.map((game) => expireGame(game.sessionId));
+        const resultOfExpiry = await Promise.all(expiryPromises);
+        logger('Result of game expiry: ', resultOfExpiry);
+    }
+
+    return { result: 'SUCCESS' };
 };
