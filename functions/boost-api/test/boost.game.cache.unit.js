@@ -26,6 +26,7 @@ const momentStub = sinon.stub();
 const uuidStub = sinon.stub();
 
 const promisifyStub = sinon.stub();
+
 const redisKeysStub = sinon.stub();
 const redisDelStub = sinon.stub();
 const redisSetStub = sinon.stub();
@@ -337,7 +338,6 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
         expect(updateBoostAccountStub).to.have.been.calledOnceWithExactly([expectedUpdateInstruction]);
         expect(insertBoostLogStub).to.have.been.calledOnceWithExactly([expectedGameLog]);
         expect(updateBoostRedeemedStub).to.have.been.calledOnceWithExactly([testBoostId]);
-        
     });
 
     it('Removes hanging expired games from cache', async () => {

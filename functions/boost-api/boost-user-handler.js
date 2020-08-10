@@ -341,7 +341,7 @@ module.exports.checkForHangingGame = async () => {
     const currentTime = moment();
 
     const cacheKeys = await redisKeys('*');
-    const sessionKeys = cacheKeys.filter((key) => key.startsWith(config.get('cache.prefix.gameSession')));
+    const sessionKeys = cacheKeys.filter((key) => key.startsWith(`${config.get('cache.prefix.gameSession')}::`));
     logger('Got session keys: ', sessionKeys);
 
     const cachedGameSessions = await Promise.all(sessionKeys.map((key) => redisGet(key)));
