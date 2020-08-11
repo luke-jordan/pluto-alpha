@@ -119,7 +119,7 @@ const safeSetCache = async (activeTxId, value) => {
     } catch (err) {
         logger('Erorr setting cache');
     }
-}
+};
 
 /**
  * Method in need of some cleaning up / refactoring to simplify cases, but which is purposefully highly flexible. Cases:
