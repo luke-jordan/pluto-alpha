@@ -361,7 +361,7 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
 
         redisKeysStub.resolves(['some-key', `GAME_SESSION::${testSessionId}`]);
         redisMGetStub.resolves([mockCachedGameSession]);
-        redisDelStub.resolves('OK');
+        redisDelStub.resolves(1);
 
         const resultOfExpiry = await handler.checkForHangingGame();
         expect(resultOfExpiry).to.exist;
