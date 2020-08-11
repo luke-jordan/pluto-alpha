@@ -204,6 +204,7 @@ module.exports.fetchOrValidateFinalScore = async (sessionId, finalScore = null) 
     const cachedGameSession = await redisGetParsed(`${config.get('cache.prefix.gameSession')}::${sessionId}`);
     logger('Fetching final score from: ', cachedGameSession);
 
+    // Validate if finalScore is consistent with cached scores or return last cached score
     const sessionGameResults = cachedGameSession.gameEvents;
     const { numberTaps } = sessionGameResults[sessionGameResults.length - 1];
     logger('Last cached score: ', numberTaps);
