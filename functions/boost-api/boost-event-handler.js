@@ -20,6 +20,8 @@ const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
 // //////////////////////////// HELPER METHODS ///////////////////////////////////////////
 
+const highestStatus = (statusList) => statusList.sort(util.statusSorter)[0];
+
 // this takes the event and creates the arguments to pass to persistence to get applicable boosts, i.e.,
 // those that still have budget remaining and are in offered or pending state for this user
 const extractFindBoostKey = (event) => {
@@ -41,28 +43,34 @@ const shouldCreateBoostForAccount = (event, boost) => {
     return statusesToCheck.some((statusCondition) => conditionTester.testCondition(event, statusConditions[statusCondition][0]));
 };
 
-const extractPendingAccountsAndUserIds = async (initiatingAccountId, boosts) => {
-    logger('Initiating account ID: ', initiatingAccountId);
-    const selectPromises = boosts.map((boost) => {
-        const redeemsAll = boost.flags && boost.flags.indexOf('REDEEM_ALL_AT_ONCE') >= 0;
-        const restrictToInitiator = boost.boostAudienceType === 'GENERAL' || !redeemsAll;
-        const findAccountsParams = { boostIds: [boost.boostId], status: util.ACTIVE_BOOST_STATUS };
-        if (restrictToInitiator) {
-            findAccountsParams.accountIds = [initiatingAccountId];
-        }
-        logger('Assembled parameters for finding accounts: ', findAccountsParams);
-        try {
-            return persistence.findAccountsForBoost(findAccountsParams);
-        } catch (err) {
-            logger('FATAL_ERROR:', err);
-            return { };
-        }
-    });
+const assembleStatusChangeAccountMap = async (boost, initiatingAccountId, newStatus) => {
+    const redeemsAll = boost.flags && boost.flags.indexOf('REDEEM_ALL_AT_ONCE') >= 0;
+    const restrictToInitiator = boost.boostAudienceType === 'GENERAL' || !redeemsAll;
+    
+    // now we fetch the relevant accounts
+    const findAccountsParams = { boostIds: [boost.boostId], status: util.ACTIVE_BOOST_STATUS };
+    if (restrictToInitiator) {
+        findAccountsParams.accountIds = [initiatingAccountId];
+    }
+    const initialAccounts = await persistence.findAccountsForBoost(findAccountsParams);
+    if (!initialAccounts || initialAccounts.length === 0) {
+        return { boostId: boost.boostId, accountUserMap: {} };
+    }
 
+    // then we add the new status, and return
+    const { boostId, accountUserMap: existingAccountMap } = initialAccounts[0];
+    const newStatusReducer = (obj, accountId) => ({ ...obj, [accountId]: { ...existingAccountMap[accountId], newStatus }});
+    const newAccountMap = Object.keys(existingAccountMap).reduce(newStatusReducer, {});
+    return { boostId, accountUserMap: newAccountMap };
+}
+
+const extractPendingAccountsAndUserIds = async (initiatingAccountId, boosts, boostStatusChangeDict) => {
+    logger('Assembling status change, accountIDs and userIDs, initiating account ID: ', initiatingAccountId, ' and change dict: ', boostStatusChangeDict);
+    const extractNewStatus = (boost) => highestStatus(boostStatusChangeDict[boost.boostId]);
+    const selectPromises = boosts.map((boost) => assembleStatusChangeAccountMap(boost, initiatingAccountId, extractNewStatus(boost)));
     const affectedAccountArray = await Promise.all(selectPromises);
     logger('Affected accounts: ', JSON.stringify(affectedAccountArray));
-    return affectedAccountArray.map((result) => result[0]).
-        reduce((obj, item) => ({ ...obj, [item.boostId]: item.accountUserMap }), {});
+    return affectedAccountArray.reduce((obj, item) => ({ ...obj, [item.boostId]: item.accountUserMap }), {});
 };
 
 // //////////////////////////// PRIMARY METHODS ///////////////////////////////////////////
@@ -129,19 +137,18 @@ const generateUpdateInstructions = (alteredBoosts, boostStatusChangeDict, affect
     logger('Generating update instructions, with boost status to change: ', JSON.stringify(boostStatusChangeDict));
     return alteredBoosts.map((boost) => {
         const boostId = boost.boostId;
-        const boostStatusSorted = boostStatusChangeDict[boostId].sort(util.statusSorter);
-        
-        const highestStatus = boostStatusSorted[0];
+        const newStatus = highestStatus(boostStatusChangeDict[boostId]);
+
         // see notes elsewhere about side-effects of premature over-parallelization, and its lingering effects;
         // to straighten out and make more comprehensible as soon as time permits
         const thisBoostAccountMap = affectedAccountsUsersDict[boostId];
         const allPriorStatus = [...new Set(Object.values(thisBoostAccountMap).map(({ status }) => status))];
         const priorStatus = allPriorStatus.length === 1 ? allPriorStatus[0] : 'MIXED';
         
-        const isChangeRedemption = highestStatus === 'REDEEMED';
+        const isChangeRedemption = newStatus === 'REDEEMED';
         const appliesToAll = boost.flags && boost.flags.indexOf('REDEEM_ALL_AT_ONCE') >= 0;
 
-        const logContext = { newStatus: highestStatus, oldStatus: priorStatus, boostAmount: boost.boostAmount };
+        const logContext = { newStatus, oldStatus: priorStatus, boostAmount: boost.boostAmount };
         const { transactionId, savedAmount, transferResults } = logContextBase;
         if (transactionId) {
             logContext.transactionId = transactionId;
@@ -161,7 +168,7 @@ const generateUpdateInstructions = (alteredBoosts, boostStatusChangeDict, affect
         return {
             boostId,
             accountIds: Object.keys(thisBoostAccountMap),
-            newStatus: highestStatus,
+            newStatus,
             stillActive: !(isChangeRedemption && appliesToAll),
             logType: 'STATUS_CHANGE',
             logContext
@@ -312,7 +319,7 @@ const processEventForExistingBoosts = async (event) => {
 
     logger('At least one boost was triggered. First step is to extract affected accounts, then tell the float to transfer from bonus pool');
     // note : this is in the form, top level keys: boostID, which gives a dict, whose own key is the account ID, and an object with userId and status
-    const affectedAccountsDict = await extractPendingAccountsAndUserIds(event.accountId, boostsForStatusChange);
+    const affectedAccountsDict = await extractPendingAccountsAndUserIds(event.accountId, boostsForStatusChange, boostStatusChangeDict);
     logger('Retrieved affected accounts and user IDs, with status: ', JSON.stringify(affectedAccountsDict));
 
     // then we prepar to update the statuses of the boosts, and hook up appropriate logs

@@ -144,8 +144,8 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
 
         const expectedRedemptionMap = {
             [testBoostId]: {
-                'account-id-3': { userId: 'some-user-id', status: 'PENDING' },
-                'account-id-1': { userId: 'some-user-id2', status: 'PENDING' }
+                'account-id-3': { userId: 'some-user-id', status: 'PENDING', newStatus: 'REDEEMED' },
+                'account-id-1': { userId: 'some-user-id2', status: 'PENDING', newStatus: 'REDEEMED' }
             }
         };
 
@@ -218,8 +218,8 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         
         const expectedRedemptionMap = {
             [testBoostId]: {
-                'account-id-1': { userId: 'some-user-id1', status: 'PENDING' },
-                'account-id-2': { userId: 'some-user-id2', status: 'PENDING' }
+                'account-id-1': { userId: 'some-user-id1', status: 'PENDING', newStatus: 'REDEEMED' },
+                'account-id-2': { userId: 'some-user-id2', status: 'PENDING', newStatus: 'REDEEMED' }
             }
         };
 
@@ -311,8 +311,8 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         
         const expectedRedemptionMap = {
             [testBoostId]: {
-                'account-id-1': { userId: 'some-user-id1', status: 'PENDING' },
-                'account-id-2': { userId: 'some-user-id2', status: 'PENDING' }
+                'account-id-1': { userId: 'some-user-id1', status: 'PENDING', newStatus: 'REDEEMED' },
+                'account-id-2': { userId: 'some-user-id2', status: 'PENDING', newStatus: 'REDEEMED' }
             }
         };
 

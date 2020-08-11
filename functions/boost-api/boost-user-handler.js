@@ -119,8 +119,6 @@ module.exports.processUserBoostResponse = async (event) => {
             return { statusCode: 200, body: JSON.stringify(returnResult)};
         }
 
-        const accountDict = { [boostId]: { [accountId]: { userId: systemWideUserId } }};
-
         const resultBody = { result: 'TRIGGERED', statusMet: statusResult, endTime: boost.boostEndTime.valueOf() };
 
         let resultOfTransfer = {};
@@ -128,6 +126,7 @@ module.exports.processUserBoostResponse = async (event) => {
 
         if (statusResult.includes('REDEEMED')) {
             // do this first, as if it fails, we do not want to proceed
+            const accountDict = { [boostId]: { [accountId]: { userId: systemWideUserId, newStatus: 'REDEEMED' } }};
             const redemptionCall = { redemptionBoosts: [boost], affectedAccountsDict: accountDict, event: { accountId, eventType }};
             resultOfTransfer = await boostRedemptionHandler.redeemOrRevokeBoosts(redemptionCall);
             logger('Boost process-redemption, result of transfer: ', resultOfTransfer);

@@ -56,6 +56,7 @@ const generateMultiplier = (distribution) => {
 const calculateRandomBoostAmount = ({ boostAmount, boostUnit, rewardParameters }) => {
     const { distribution, realizedRewardModuloZeroTarget, minRewardAmountPerUser } = rewardParameters;
 
+    const maxBoostAmount = opsUtil.convertToUnit(boostAmount, boostUnit, DEFAULT_UNIT);
     const minBoostAmount = minRewardAmountPerUser 
         ? opsUtil.convertToUnit(minRewardAmountPerUser.amount, minRewardAmountPerUser.unit, DEFAULT_UNIT) : 0;
     
@@ -63,8 +64,8 @@ const calculateRandomBoostAmount = ({ boostAmount, boostUnit, rewardParameters }
     logger('Random award, generated multiplier: ', multiplier);
 
     // eslint-disable-next-line no-mixed-operators
-    let calculatedBoostAmount = Math.round(multiplier * (boostAmount - minBoostAmount) + minBoostAmount); // todo : use decimal light
-    logger('Initial calculated boost amount: ', calculatedBoostAmount);
+    let calculatedBoostAmount = Math.round(multiplier * (maxBoostAmount - minBoostAmount) + minBoostAmount); // todo : use decimal light
+    logger('Initial calculated boost amount: ', calculatedBoostAmount, ' working in unit: ', boostUnit);
     
     const amountToSnapTo = opsUtil.convertToUnit(realizedRewardModuloZeroTarget || 1, boostUnit, DEFAULT_UNIT);
     logger('Will need to snap to modulo 0 of : ', amountToSnapTo, ' current gap: ', calculatedBoostAmount % amountToSnapTo);
@@ -74,7 +75,7 @@ const calculateRandomBoostAmount = ({ boostAmount, boostUnit, rewardParameters }
     }
 
     // Try again if the calculatedBoostAmount is rounded to a value greater than the boost amount or less than min amount
-    if (calculatedBoostAmount > boostAmount) {
+    if (calculatedBoostAmount > maxBoostAmount) {
         return calculateRandomBoostAmount({ boostAmount, boostUnit, rewardParameters });
     }
 
@@ -83,43 +84,44 @@ const calculateRandomBoostAmount = ({ boostAmount, boostUnit, rewardParameters }
 };
 
 
-const calculateConsolationAmount = ({ boostUnit, rewardParameters }) => {
-    const consolationAmount = rewardParameters.consolationPrize.amount;
-    const boostAmount = opsUtil.convertToUnit(consolationAmount.amount, consolationAmount.unit, boostUnit);
+const calculateConsolationAmount = (consolationAmount, consolationType) => {
+    let calculatedAmount = opsUtil.convertToUnit(consolationAmount.amount, consolationAmount.unit, DEFAULT_UNIT);
 
-    if (rewardParameters.consolationPrize.type === 'RANDOM') {
-        const calculatedAmount = calculateRandomBoostAmount({ boostAmount, boostUnit, rewardParameters });
-        return { boostAmount: calculatedAmount, amountFromBonus: calculatedAmount };
+    if (consolationType === 'RANDOM') {
+        const rewardParameters = { distribution: 'UNIFORM' };
+        const randomParams = { boostAmount: consolationAmount.amount, boostUnit: consolationAmount.unit, rewardParameters };
+        calculatedAmount = opsUtil.convertToUnit(calculateRandomBoostAmount(randomParams), consolationAmount.unit, DEFAULT_UNIT);
+        return { calculatedAmount, amountFromBonus: calculatedAmount };
     }
 
-    return { boostAmount, amountFromBonus: boostAmount };
+    return { calculatedAmount, amountFromBonus: calculatedAmount };
 };
 
 const obtainConsolationAccountsAndAmount = (boost, affectedAccountDict) => {
     logger('Calculating consolation amount and recipeints');
-    const { boostId, boostUnit, rewardParameters } = boost;
-    const { recipients } = rewardParameters.consolationPrize;
+    const { boostId, rewardParameters } = boost;
+    const { recipients, type, amount } = rewardParameters.consolationPrize;
 
     const accountUserMap = affectedAccountDict[boostId];
     const accountIds = Object.keys(accountUserMap);
-    const recipientAccounts = accountIds.filter((accountId) => accountUserMap[accountId].status === 'CONSOLED');
-    logger('Got possible recipients: ', recipientAccounts);
+    const recipientAccounts = accountIds.filter((accountId) => accountUserMap[accountId].newStatus === 'CONSOLED');
+    logger('In consolation, have possible recipients: ', recipientAccounts);
 
-    const consolationDetails = { consolationAmount: calculateConsolationAmount({ boostUnit, rewardParameters }) };
-    logger('Calculated consolation amount, have: ', consolationDetails);
+    const consolationDetails = { consolationAmount: calculateConsolationAmount(amount, type), recipientAccounts };
+    logger('Calculated consolation amount, as: ', consolationDetails);
     
-    if (recipients.basis === 'ALL') {
-        consolationDetails.recipientAccounts = recipientAccounts;
-    }
+    // if (recipients.basis === 'ALL') {
+    //     consolationDetails.recipientAccounts = recipientAccounts;
+    // }
 
-    if (recipients.basis === 'ABSOLUTE') {
-        consolationDetails.recipientAccounts = recipientAccounts.slice(0, recipients.value);
-    }
+    // if (recipients.basis === 'ABSOLUTE') {
+    //     consolationDetails.recipientAccounts = recipientAccounts.slice(0, recipients.value);
+    // }
 
-    if (recipients.basis === 'PROPORTION') {
-        const numberOfRecipients = Math.round(recipientAccounts.length * recipients.value);
-        consolationDetails.recipientAccounts = recipientAccounts.slice(0, numberOfRecipients);
-    }
+    // if (recipients.basis === 'PROPORTION') {
+    //     const numberOfRecipients = Math.round(recipientAccounts.length * recipients.value);
+    //     consolationDetails.recipientAccounts = recipientAccounts.slice(0, numberOfRecipients);
+    // }
 
     logger('Got consolation details: ', consolationDetails);
     return consolationDetails;
@@ -129,10 +131,14 @@ const generateConsolationInstructions = async (boost, affectedAccountDict) => {
     const consolationDetails = obtainConsolationAccountsAndAmount(boost, affectedAccountDict);
 
     const { recipientAccounts, consolationAmount } = consolationDetails;
+    const { calculatedAmount, amountFromBonus } = consolationAmount;
 
     const recipients = recipientAccounts.map((recipientId) => ({ 
-        recipientId, amount: consolationAmount.boostAmount, recipientType: 'END_USER_ACCOUNT'
+        recipientId, amount: calculatedAmount, recipientType: 'END_USER_ACCOUNT'
     }));
+
+    // a little ugly but just in case in future we want to allow consolation amounts for friend tourns
+    const referenceAmounts = { consolationAmount: calculatedAmount, amountFromBonus }
 
     return {
         floatId: boost.fromFloatId,
@@ -140,14 +146,14 @@ const generateConsolationInstructions = async (boost, affectedAccountDict) => {
         fromId: boost.fromBonusPoolId,
         fromType: 'BONUS_POOL',
         currency: boost.boostCurrency,
-        unit: boost.boostUnit,
+        unit: DEFAULT_UNIT,
         identifier: boost.boostId,
         relatedEntityType: 'BOOST_REDEMPTION',
         allocType: 'BOOST_REDEMPTION',
         allocState: 'SETTLED',
         transactionType: 'BOOST_REDEMPTION',
         settlementStatus: 'SETTLED',
-        referenceAmounts: consolationAmount,
+        referenceAmounts,
         recipients
     };
 };
@@ -193,14 +199,17 @@ const triggerFloatTransfers = async (transferInstructions) => {
     const transferResults = JSON.parse(resultOfTransfer.body);
     
     // what a code smell but things are just too rough right now, at some point there will be sleep and this will have to get cleaned up
-    const extractRefAmounts = (boostId) => transferInstructions.find((instruction) => instruction.identifier === boostId);
-    const mergeResultWithRef = (boostId) => ({ ...transferResults[boostId], ...extractRefAmounts(boostId).referenceAmounts });
+    const findInstruction = (boostId) => transferInstructions.find((instruction) => instruction.identifier === boostId);
+    const summaizeResult = (boostId) => ({ ...transferResults[boostId], ...findInstruction(boostId).referenceAmounts, unit: findInstruction(boostId).unit });
     const resultsWithReferenceAmounts = Object.keys(transferResults).reduce((obj, boostId) => 
-        ({ ...obj, [boostId]: mergeResultWithRef(boostId) }), {});
+        ({ ...obj, [boostId]: summaizeResult(boostId) }), {});
 
     return resultsWithReferenceAmounts;
 };
 
+/**
+ * USED ONLY FOR FRIEND TOURNAMENTS WHERE USERS EXPLICITLY FUND THE BOOST
+ */
 const handleTransferToBonusPool = async (affectedAccountDict, boost, pooledContributionMap, event) => {
     logger('Pool contribution map : ', pooledContributionMap);
     
@@ -286,7 +295,7 @@ const generateFloatTransferInstructions = async (affectedAccountDict, boost, rev
     const accountUserMap = affectedAccountDict[boost.boostId];
     const accountIds = Object.keys(accountUserMap);
 
-    const recipientAccounts = accountIds.filter((accountId) => accountUserMap[accountId].status === 'REDEEMED');
+    const recipientAccounts = accountIds.filter((accountId) => accountUserMap[accountId].newStatus === 'REDEEMED');
 
     const referenceAmounts = exports.calculateBoostAmount(boost, pooledContributionMap);
     const { boostAmount } = referenceAmounts;
@@ -444,16 +453,40 @@ module.exports.redeemOrRevokeBoosts = async ({ redemptionBoosts, revocationBoost
     logger('***** Revoke instructions: ', revokeInstructions);
 
     const transferInstructions = redeemInstructions.concat(revokeInstructions);
-    const resultOfTransfers = await (transferInstructions.length === 0 ? {} : triggerFloatTransfers(transferInstructions));
+    let resultOfTransfers = await (transferInstructions.length === 0 ? {} : triggerFloatTransfers(transferInstructions));
     logger('Result of transfers: ', resultOfTransfers);
 
-    const boostConsolations = boostsToRedeem.filter((boost) => boost.rewardParameters && boost.rewardParameters.consolationPrize);
+    const boostsWithConsolations = boostsToRedeem.filter((boost) => boost.rewardParameters && boost.rewardParameters.consolationPrize);
 
-    if (boostConsolations.length > 0) {
-        const consolationInstructions = await Promise.all(boostConsolations.map((boost) => generateConsolationInstructions(boost, affectedAccountsDict)));
+    if (boostsWithConsolations.length > 0) {
+        const consolationInstructions = await Promise.all(boostsWithConsolations.map((boost) => generateConsolationInstructions(boost, affectedAccountsDict)));
         logger('***** Consolation instructions: ', consolationInstructions);
         const resultOfConsolations = await triggerFloatTransfers(consolationInstructions);
         logger('Result of consolations: ', resultOfConsolations);
+        resultOfTransfers = Object.keys(resultOfTransfers).map((boostId) => {
+            if (!Object.keys(resultOfConsolations).includes(boostId)) {
+                return { boostId, result: resultOfTransfers[boostId] };
+            }
+
+            const boostResult = resultOfTransfers[boostId];
+            const consolationResult = resultOfConsolations[boostId];
+
+            const totalAmount = opsUtil.convertToUnit(boostResult.boostAmount, boostResult.unit, DEFAULT_UNIT) + 
+                consolationResult.consolationAmount * consolationResult.accountTxIds.length;
+            const totalFromBonus = opsUtil.convertToUnit(boostResult.amountFromBonus, boostResult.unit, DEFAULT_UNIT) +
+                consolationResult.amountFromBonus * consolationResult.accountTxIds.length;
+            
+            const mergedResult = {
+                accountTxIds: [...boostResult.accountTxIds, ...consolationResult.accountTxIds],
+                floatTxIds: [...boostResult.floatTxIds, ...consolationResult.floatTxIds],
+                boostAmount: totalAmount,
+                amountFromBonus: totalFromBonus,
+                unit: DEFAULT_UNIT
+            };
+            logger('**** MERGED RESULT: ', mergedResult);
+
+            return { boostId, result: mergedResult };
+        }).reduce((obj, { boostId, result }) => ({ ...obj, [boostId]: result }), {});
     }
 
     // then: construct & send redemption messages

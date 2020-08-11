@@ -111,7 +111,7 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
         expect(redemptionHandlerStub).to.have.been.calledOnceWithExactly({
             redemptionBoosts: [boostAsRelevant],
             affectedAccountsDict: {
-                [testBoostId]: { [testAccountId]: { userId: testUserId }}
+                [testBoostId]: { [testAccountId]: { userId: testUserId, newStatus: 'REDEEMED' }}
             },
             event: { accountId: testAccountId, eventType: 'USER_GAME_COMPLETION' }
         });

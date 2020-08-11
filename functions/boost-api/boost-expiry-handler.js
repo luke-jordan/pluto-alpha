@@ -39,8 +39,11 @@ const generateRedemptionAccountMap = async (boostId, winningAccounts) => {
     logger('Generating redemption account map, submitting account parameters: ', findAccountParams);
 
     const accountInfo = await persistence.findAccountsForBoost(findAccountParams);
+    const { accountUserMap } = accountInfo[0];
+    const accountMap = Object.keys(accountUserMap).
+        reduce((obj, accountId) => ({ ...obj, [accountId]: { ...accountUserMap[accountId], newStatus: 'REDEEMED' } }), {});
 
-    return { [boostId]: accountInfo[0].accountUserMap };
+    return { [boostId]: accountMap };
 };
 
 const checkIfAccountWinsTournament = (accountId, redemptionConditions, accountScoreList) => {
