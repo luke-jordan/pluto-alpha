@@ -21,7 +21,7 @@
         "ttl": {
             "accountId": 3600,
             "gameBoost": 3600,
-            "gameSession": 1800
+            "gameSession": 300
         }
     },
     "time": {

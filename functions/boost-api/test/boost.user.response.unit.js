@@ -20,13 +20,7 @@ const insertBoostLogStub = sinon.stub();
 
 const redemptionHandlerStub = sinon.stub();
 
-const promisifyStub = sinon.stub();
-
-const redisKeysStub = sinon.stub();
-const redisDelStub = sinon.stub();
-const redisSetStub = sinon.stub();
-const redisGetStub = sinon.stub();
-const redisMGetStub = sinon.stub();
+const finalScoreStub = sinon.stub();
 
 const lamdbaInvokeStub = sinon.stub();
 
@@ -35,12 +29,6 @@ class MockLambdaClient {
         this.invoke = lamdbaInvokeStub;
     }
 }
-
-promisifyStub.onCall(0).returns({ bind: () => redisKeysStub });
-promisifyStub.onCall(1).returns({ bind: () => redisDelStub });
-promisifyStub.onCall(2).returns({ bind: () => redisSetStub });
-promisifyStub.onCall(3).returns({ bind: () => redisGetStub });
-promisifyStub.onCall(4).returns({ bind: () => redisMGetStub });
 
 const proxyquire = require('proxyquire').noCallThru();
 
@@ -56,20 +44,13 @@ const handler = proxyquire('../boost-user-handler', {
     './boost-redemption-handler': {
         'redeemOrRevokeBoosts': redemptionHandlerStub
     },
+    './cache-handler': {
+        'fetchOrValidateFinalScore': finalScoreStub
+    },
     'aws-sdk': {
         'Lambda': MockLambdaClient,
          // eslint-disable-next-line no-empty-function
          'config': { update: () => ({}) }
-    },
-    'redis': {
-        'createClient': () => ({
-            'get': redisGetStub,
-            'set': redisSetStub
-        }),
-        '@noCallThru': true
-    },
-    'util': {
-        'promisify': promisifyStub
     },
     '@noCallThru': true
 });
@@ -372,5 +353,111 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
 
         expect(result).to.exist;
         expect(result.statusCode).to.equal(500);
+    });
+
+    it('Consolidates final game results properly, redeems when game is won', async () => {
+        const testSessionId = uuid();
+
+        const boostEndTime = moment().add(1, 'day');
+
+        const gameParams = {
+            gameType: 'MATCH_OBJECTS',
+            timeLimitSeconds: 60,
+            winningThreshold: 50,
+            instructionBand: 'Select objects you have not selected before in the match',
+            entryCondition: 'save_event_greater_than #{100000:HUNDREDTH_CENT:USD}'
+        };
+
+        const boostAsRelevant = {
+            boostId: testBoostId,
+            label: 'Match Objects',
+            boostType: 'GAME',
+            boostAmount: 10000,
+            boostUnit: 'HUNDREDTH_CENT',
+            boostCurrency: 'ZAR',
+            boostEndTime,
+            gameParams,
+            statusConditions: {
+                OFFERED: ['message_instruction_created'],
+                UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
+                REDEEMED: ['number_taps_greater_than #{10::40000}']
+            }
+        };
+
+        finalScoreStub.resolves(10);
+
+        fetchBoostStub.resolves(boostAsRelevant);
+        getAccountIdForUserStub.resolves(testAccountId);
+
+        fetchAccountStatusStub.resolves({ boostStatus: 'UNLOCKED' });
+        redemptionHandlerStub.resolves({ [testBoostId]: { result: 'SUCCESS', boostAmount: 10000 }});
+
+        const expectedResult = { 
+            result: 'TRIGGERED', 
+            statusMet: ['REDEEMED'], 
+            endTime: boostAsRelevant.boostEndTime.valueOf(),
+            amountAllocated: { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'ZAR' }
+        };
+
+        const testEventBody = {
+            eventType: 'USER_GAME_COMPLETION',
+            boostId: testBoostId,
+            sessionId: testSessionId,
+            numberTaps: 10,
+            timeTakenMillis: 30000
+        };
+
+        const testEvent = testHelper.wrapEvent(testEventBody, testUserId, 'ORDINARY_USER');
+
+        const resultOfCompletion = await handler.processUserBoostResponse(testEvent);
+        const resultBody = testHelper.standardOkayChecks(resultOfCompletion);
+        expect(resultBody).to.deep.equal(expectedResult);
+
+        expect(finalScoreStub).to.have.been.calledOnceWithExactly(testSessionId, 10);
+
+        expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testBoostId);
+
+        const affectedAccountsDict = {
+            [testBoostId]: {
+                [testAccountId]: { userId: testUserId }
+            }
+        };
+
+        const redemptionArgs = {
+            redemptionBoosts: [boostAsRelevant],
+            affectedAccountsDict,
+            event: {
+                accountId: testAccountId,
+                eventType: 'USER_GAME_COMPLETION'
+            }
+        };
+
+        expect(redemptionHandlerStub).to.have.been.calledOnceWithExactly(redemptionArgs);
+        
+        const expectedLogContext = { 
+            newStatus: 'REDEEMED',
+            boostAmount: 10000,
+            processType: 'USER',
+            submittedParams: { ...testEventBody, numberTaps: 10 }
+        };
+        
+        const expectedUpdateInstruction = {
+            boostId: testBoostId,
+            accountIds: [testAccountId],
+            newStatus: 'REDEEMED',
+            logType: 'STATUS_CHANGE',
+            logContext: expectedLogContext
+        };
+
+        const expectedGameLog = {
+            boostId: testBoostId,
+            accountId: testAccountId,
+            logType: 'GAME_RESPONSE',
+            logContext: { numberTaps: 10, timeTakenMillis: 30000 }
+        };
+
+        expect(updateBoostAccountStub).to.have.been.calledOnceWithExactly([expectedUpdateInstruction]);
+        expect(insertBoostLogStub).to.have.been.calledOnceWithExactly([expectedGameLog]);
+        expect(updateBoostRedeemedStub).to.have.been.calledOnceWithExactly([testBoostId]);
     });
 });
