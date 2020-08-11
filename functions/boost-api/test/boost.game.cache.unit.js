@@ -118,6 +118,7 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
             systemWideUserId: testSystemId,
             sessionId: testSessionId,
             gameEndTime: expectedEndTime,
+            status: 'ACTIVE',
             gameEvents: [{
                 timestamp: testCurrentTime,
                 numberTaps: 0
@@ -138,6 +139,7 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
             systemWideUserId: testSystemId,
             sessionId: testSessionId,
             gameEndTime: gameEndTime.valueOf(),
+            status: 'ACTIVE',
             gameEvents: [{
                 timestamp: testStartTime.valueOf(),
                 numberTaps: 0
@@ -170,6 +172,7 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
             systemWideUserId: testSystemId,
             sessionId: testSessionId,
             gameEndTime: gameEndTime.valueOf(),
+            status: 'ACTIVE',
             gameEvents: [
                 { timestamp: testStartTime.valueOf(), numberTaps: 0 },
                 { timestamp: testCurrentTime.valueOf(), numberTaps: 8 }
@@ -190,6 +193,7 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
             systemWideUserId: testSystemId,
             sessionId: testSessionId,
             gameEndTime: testEndTime,
+            status: 'ACTIVE',
             gameEvents: [{
                 timestamp: testStartTime,
                 numberTaps: 0
@@ -228,6 +232,7 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
             systemWideUserId: testSystemId,
             sessionId: testSessionId,
             gameEndTime: gameEndTime.valueOf(),
+            status: 'ACTIVE',
             gameEvents: [
                 { timestamp: moment().valueOf(), numberTaps: 0 },
                 { timestamp: moment().valueOf(), numberTaps: 8 },
@@ -262,6 +267,7 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
             systemWideUserId: testSystemId,
             sessionId: testSessionId,
             gameEndTime: moment().valueOf(),
+            status: 'FINALIZING',
             gameEvents: [
                 { timestamp: moment().valueOf(), numberTaps: 3 },
                 { timestamp: moment().valueOf(), numberTaps: 5 },

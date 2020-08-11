@@ -66,6 +66,7 @@ const handleGameInitialisation = async (boostId, systemWideUserId) => {
         systemWideUserId,
         sessionId,
         gameEndTime,
+        status: 'ACTIVE',
         gameEvents: [{
             timestamp: currentTime,
             numberTaps: 0
@@ -82,6 +83,10 @@ const handleGameInitialisation = async (boostId, systemWideUserId) => {
 const isGameFinished = (gameSession, currentTime) => currentTime.valueOf() > gameSession.gameEndTime;
 
 const isValidGameResult = (gameSession, currentTime) => {
+    if (gameSession.status !== 'ACTIVE') {
+        return false;
+    }
+
     const sessionGameResults = gameSession.gameEvents;
     const mostRecentGameResult = sessionGameResults[sessionGameResults.length - 1];
     logger('Got most recent game result: ', mostRecentGameResult);
