@@ -8,7 +8,6 @@ const uuid = require('uuid/v4');
 const statusCodes = require('statuses');
 
 const persistence = require('./persistence/rds.boost');
-
 const util = require('./boost.util');
 
 const Redis = require('redis');
@@ -80,8 +79,6 @@ const handleGameInitialisation = async (boostId, systemWideUserId) => {
     return { statusCode: 200, body: JSON.stringify({ sessionId })};
 };
 
-const isGameFinished = (gameSession, currentTime) => currentTime.valueOf() > gameSession.gameEndTime;
-
 const isValidGameResult = (gameSession, currentTime) => {
     if (gameSession.status !== 'ACTIVE') {
         return false;
@@ -99,7 +96,7 @@ const isValidGameResult = (gameSession, currentTime) => {
         return false;
     }
 
-    if (isGameFinished(gameSession, currentTime)) {
+    if (currentTime.valueOf() > gameSession.gameEndTime) {
         return false;
     }
 
@@ -160,7 +157,7 @@ module.exports.cacheGameResponse = async (event) => {
     }
 };
 
-const deactivateSession = async (gameSession) => {
+const expireGameSession = async (gameSession) => {
     gameSession.status = 'EXPIRED';
     const cacheKey = `${config.get('cache.prefix.gameSession')}::${gameSession.sessionId}`;
     return redisSet(cacheKey, JSON.stringify(gameSession), 'EX', config.get('cache.ttl.gameSession'));
@@ -181,11 +178,11 @@ module.exports.checkForHangingGame = async () => {
         logger('Got cached game sessions: ', cachedGameSessions);
 
         const parsedGameSessions = cachedGameSessions.map((gameSession) => JSON.parse(gameSession));
-        const hangingGameSessions = parsedGameSessions.filter((game) => isGameFinished(game, currentTime));
+        const hangingGameSessions = parsedGameSessions.filter((gameSession) => currentTime.valueOf() > gameSession.gameEndTime);
         logger('Got hanging game sessions: ', hangingGameSessions);
 
         if (hangingGameSessions.length > 0) {
-            const expiryPromises = hangingGameSessions.map((gameSession) => deactivateSession(gameSession));
+            const expiryPromises = hangingGameSessions.map((gameSession) => expireGameSession(gameSession));
             await Promise.all(expiryPromises);
         }
     
