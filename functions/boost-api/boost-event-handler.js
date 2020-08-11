@@ -62,7 +62,7 @@ const assembleStatusChangeAccountMap = async (boost, initiatingAccountId, newSta
     const newStatusReducer = (obj, accountId) => ({ ...obj, [accountId]: { ...existingAccountMap[accountId], newStatus }});
     const newAccountMap = Object.keys(existingAccountMap).reduce(newStatusReducer, {});
     return { boostId, accountUserMap: newAccountMap };
-}
+};
 
 const extractPendingAccountsAndUserIds = async (initiatingAccountId, boosts, boostStatusChangeDict) => {
     logger('Assembling status change, accountIDs and userIDs, initiating account ID: ', initiatingAccountId, ' and change dict: ', boostStatusChangeDict);

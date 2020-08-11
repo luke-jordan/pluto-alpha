@@ -262,7 +262,7 @@ describe('*** UNIT TEST NON-TOURNAMENT EXPIRY ***', () => {
             redemptionBoosts: [mockBoost], 
             affectedAccountsDict: { [testBoostId]: mockRedemptionMap }, 
             event: { eventType: 'BOOST_RANDOM_SELECTED', boostId: testBoostId }
-        })
+        });
 
         const expectedUpdate = (newStatus, accounts) => ({ boostId: testBoostId, accountIds: accounts, newStatus, logType: 'STATUS_CHANGE' });
 

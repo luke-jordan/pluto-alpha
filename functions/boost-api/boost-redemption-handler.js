@@ -100,7 +100,7 @@ const calculateConsolationAmount = (consolationAmount, consolationType) => {
 const obtainConsolationAccountsAndAmount = (boost, affectedAccountDict) => {
     logger('Calculating consolation amount and recipeints');
     const { boostId, rewardParameters } = boost;
-    const { recipients, type, amount } = rewardParameters.consolationPrize;
+    const { type, amount } = rewardParameters.consolationPrize;
 
     const accountUserMap = affectedAccountDict[boostId];
     const accountIds = Object.keys(accountUserMap);
@@ -110,6 +110,7 @@ const obtainConsolationAccountsAndAmount = (boost, affectedAccountDict) => {
     const consolationDetails = { consolationAmount: calculateConsolationAmount(amount, type), recipientAccounts };
     logger('Calculated consolation amount, as: ', consolationDetails);
     
+    // todo : we will actually move this into boost-expiry-handler itself
     // if (recipients.basis === 'ALL') {
     //     consolationDetails.recipientAccounts = recipientAccounts;
     // }
@@ -127,7 +128,7 @@ const obtainConsolationAccountsAndAmount = (boost, affectedAccountDict) => {
     return consolationDetails;
 };
 
-const generateConsolationInstructions = async (boost, affectedAccountDict) => {
+const generateConsolationInstructions = (boost, affectedAccountDict) => {
     const consolationDetails = obtainConsolationAccountsAndAmount(boost, affectedAccountDict);
 
     const { recipientAccounts, consolationAmount } = consolationDetails;
@@ -138,7 +139,7 @@ const generateConsolationInstructions = async (boost, affectedAccountDict) => {
     }));
 
     // a little ugly but just in case in future we want to allow consolation amounts for friend tourns
-    const referenceAmounts = { consolationAmount: calculatedAmount, amountFromBonus }
+    const referenceAmounts = { consolationAmount: calculatedAmount, amountFromBonus };
 
     return {
         floatId: boost.fromFloatId,
@@ -428,6 +429,31 @@ const createPublishEventPromises = (parameters) => {
     return publishPromises;
 };
 
+const knitConsolationResults = (resultOfWinnerTransfers, resultOfConsolations) => Object.keys(resultOfWinnerTransfers).map((boostId) => {
+    if (!Object.keys(resultOfConsolations).includes(boostId)) {
+        return { boostId, result: resultOfWinnerTransfers[boostId] };
+    }
+
+    const boostResult = resultOfWinnerTransfers[boostId];
+    const consolationResult = resultOfConsolations[boostId];
+
+    const totalAmount = opsUtil.convertToUnit(boostResult.boostAmount, boostResult.unit, DEFAULT_UNIT) + 
+        (consolationResult.consolationAmount * consolationResult.accountTxIds.length);
+    const totalFromBonus = opsUtil.convertToUnit(boostResult.amountFromBonus, boostResult.unit, DEFAULT_UNIT) +
+        (consolationResult.amountFromBonus * consolationResult.accountTxIds.length);
+    
+    const mergedResult = {
+        accountTxIds: [...boostResult.accountTxIds, ...consolationResult.accountTxIds],
+        floatTxIds: [...boostResult.floatTxIds, ...consolationResult.floatTxIds],
+        boostAmount: totalAmount,
+        amountFromBonus: totalFromBonus,
+        unit: DEFAULT_UNIT
+    };
+
+    logger('**** MERGED RESULT: ', mergedResult);
+
+    return { boostId, result: mergedResult };
+}).reduce((obj, { boostId, result }) => ({ ...obj, [boostId]: result }), {});
 
 /**
  * Complicated thing in here is affectedAccountsDict. It stores, for each boost, the accounts whose statusses have been changed. Format:
@@ -459,34 +485,11 @@ module.exports.redeemOrRevokeBoosts = async ({ redemptionBoosts, revocationBoost
     const boostsWithConsolations = boostsToRedeem.filter((boost) => boost.rewardParameters && boost.rewardParameters.consolationPrize);
 
     if (boostsWithConsolations.length > 0) {
-        const consolationInstructions = await Promise.all(boostsWithConsolations.map((boost) => generateConsolationInstructions(boost, affectedAccountsDict)));
-        logger('***** Consolation instructions: ', consolationInstructions);
+        const consolationInstructions = boostsWithConsolations.map((boost) => generateConsolationInstructions(boost, affectedAccountsDict));
+        logger('***** Consolation instructions: ', JSON.stringify(consolationInstructions));
         const resultOfConsolations = await triggerFloatTransfers(consolationInstructions);
-        logger('Result of consolations: ', resultOfConsolations);
-        resultOfTransfers = Object.keys(resultOfTransfers).map((boostId) => {
-            if (!Object.keys(resultOfConsolations).includes(boostId)) {
-                return { boostId, result: resultOfTransfers[boostId] };
-            }
-
-            const boostResult = resultOfTransfers[boostId];
-            const consolationResult = resultOfConsolations[boostId];
-
-            const totalAmount = opsUtil.convertToUnit(boostResult.boostAmount, boostResult.unit, DEFAULT_UNIT) + 
-                consolationResult.consolationAmount * consolationResult.accountTxIds.length;
-            const totalFromBonus = opsUtil.convertToUnit(boostResult.amountFromBonus, boostResult.unit, DEFAULT_UNIT) +
-                consolationResult.amountFromBonus * consolationResult.accountTxIds.length;
-            
-            const mergedResult = {
-                accountTxIds: [...boostResult.accountTxIds, ...consolationResult.accountTxIds],
-                floatTxIds: [...boostResult.floatTxIds, ...consolationResult.floatTxIds],
-                boostAmount: totalAmount,
-                amountFromBonus: totalFromBonus,
-                unit: DEFAULT_UNIT
-            };
-            logger('**** MERGED RESULT: ', mergedResult);
-
-            return { boostId, result: mergedResult };
-        }).reduce((obj, { boostId, result }) => ({ ...obj, [boostId]: result }), {});
+        logger('Result of consolation transfers: ', JSON.stringify(resultOfConsolations));
+        resultOfTransfers = knitConsolationResults(resultOfTransfers, resultOfConsolations);
     }
 
     // then: construct & send redemption messages
@@ -498,9 +501,7 @@ module.exports.redeemOrRevokeBoosts = async ({ redemptionBoosts, revocationBoost
     let finalPromises = [];
     if (messageInstructionsFlat.length > 0) {
         const messageInvocation = generateMessageSendInvocation(messageInstructionsFlat);
-        logger('Message invocation: ', messageInvocation);
         const messagePromise = lambda.invoke(messageInvocation).promise();
-        logger('Obtained message promise');
         finalPromises.push(messagePromise);
     }
     

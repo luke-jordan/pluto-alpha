@@ -251,7 +251,7 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
             statusConditions: {
                 REDEEMED: ['number_taps_greater_than #{10::10000}'],
                 FAILED: ['number_taps_less_than #{10::10000}']
-            },
+            }
         };
 
         fetchBoostStub.resolves(boostAsRelevant);

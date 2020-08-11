@@ -90,7 +90,7 @@ describe('*** UNIT TEST BOOST CREATION *** Persists ML params', () => {
         winningThreshold: 20,
         instructionBand: 'Tap the screen as many times as you can in 20 seconds',
         entryCondition: 'save_event_greater_than #{100000:HUNDREDTH_CENT:USD}',
-        allowRepeatPlay: false,
+        allowRepeatPlay: false
     };
 
     const mockBoostToFromPersistence = {
@@ -163,7 +163,7 @@ describe('*** UNIT TEST BOOST CREATION *** Persists ML params', () => {
                 boostStatus: 'ALL',
                 presentationType: 'MACHINE_DETERMINED',
                 template: messageTemplates.UNLOCKED,
-                allowRepeatPlay: false,
+                allowRepeatPlay: false
             }],
             mlParameters: {
                 maxPortionOfAudience: 0.20,

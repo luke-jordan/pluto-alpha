@@ -135,7 +135,7 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
         const mergedAccountTxIds = [...mockWinnerAllocationResult[testBoostId].accountTxIds, ...mockConsolationAllocResult[testBoostId].accountTxIds];
         const mergedFloatTxIds = [...mockWinnerAllocationResult[testBoostId].floatTxIds, ...mockConsolationAllocResult[testBoostId].floatTxIds];
 
-        const expectedTotalAmount = testBoostAmountHCent + 3 * expectedAmountInHCent;
+        const expectedTotalAmount = testBoostAmountHCent + (3 * expectedAmountInHCent);
 
         const expectedResult = {
             [testBoostId]: {
@@ -220,7 +220,7 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
         const mergedAccountTxIds = [...mockWinnerAllocationResult[testBoostId].accountTxIds, ...mockConsolationAllocResult[testBoostId].accountTxIds];
         const mergedFloatTxIds = [...mockWinnerAllocationResult[testBoostId].floatTxIds, ...mockConsolationAllocResult[testBoostId].floatTxIds];
 
-        const expectedTotalAmount = testBoostAmountHCent + 2 * randomConsolationAmount;
+        const expectedTotalAmount = testBoostAmountHCent + (2 * randomConsolationAmount);
 
         const expectedResult = {
             [testBoostId]: {
