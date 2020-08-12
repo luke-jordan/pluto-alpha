@@ -7,11 +7,16 @@ const stringify = require('json-stable-stringify');
 
 const publisher = require('publish-common');
 const opsUtil = require('ops-util-common');
+const boostUtil = require('./boost.util');
 
 const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
 const DEFAULT_UNIT = 'HUNDREDTH_CENT';
+
+// ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// ///////////////////////////////// COMPLEX AMOUNTS (POOLED, RANDOM, ETC.) ///////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 const calculatePooledBoostAmount = (boost, userCount) => {
     if (userCount <= 1) {
@@ -48,10 +53,10 @@ const generateMultiplier = (distribution) => {
     }
 };
 
-const calculateRandomBoostAmount = (boost) => {
-    const { distribution, realizedRewardModuloZeroTarget, minRewardAmountPerUser } = boost.rewardParameters;
-    
-    const boostAmount = opsUtil.convertToUnit(boost.boostAmount, boost.boostUnit, DEFAULT_UNIT);
+const calculateRandomBoostAmount = ({ boostAmount, boostUnit, rewardParameters }) => {
+    const { distribution, realizedRewardModuloZeroTarget, minRewardAmountPerUser } = rewardParameters;
+
+    const maxBoostAmount = opsUtil.convertToUnit(boostAmount, boostUnit, DEFAULT_UNIT);
     const minBoostAmount = minRewardAmountPerUser 
         ? opsUtil.convertToUnit(minRewardAmountPerUser.amount, minRewardAmountPerUser.unit, DEFAULT_UNIT) : 0;
     
@@ -59,10 +64,10 @@ const calculateRandomBoostAmount = (boost) => {
     logger('Random award, generated multiplier: ', multiplier);
 
     // eslint-disable-next-line no-mixed-operators
-    let calculatedBoostAmount = Math.round(multiplier * (boostAmount - minBoostAmount) + minBoostAmount); // todo : use decimal light
-    logger('Initial calculated boost amount: ', calculatedBoostAmount);
+    let calculatedBoostAmount = Math.round(multiplier * (maxBoostAmount - minBoostAmount) + minBoostAmount); // todo : use decimal light
+    logger('Initial calculated boost amount: ', calculatedBoostAmount, ' working in unit: ', boostUnit);
     
-    const amountToSnapTo = opsUtil.convertToUnit(realizedRewardModuloZeroTarget || 1, boost.boostUnit, DEFAULT_UNIT);
+    const amountToSnapTo = opsUtil.convertToUnit(realizedRewardModuloZeroTarget || 1, boostUnit, DEFAULT_UNIT);
     logger('Will need to snap to modulo 0 of : ', amountToSnapTo, ' current gap: ', calculatedBoostAmount % amountToSnapTo);
     if (calculatedBoostAmount % amountToSnapTo > 0) {
         const amountAboveSnap = calculatedBoostAmount % amountToSnapTo;
@@ -70,12 +75,109 @@ const calculateRandomBoostAmount = (boost) => {
     }
 
     // Try again if the calculatedBoostAmount is rounded to a value greater than the boost amount or less than min amount
-    if (calculatedBoostAmount > boostAmount) {
-        return calculateRandomBoostAmount(boost);
+    if (calculatedBoostAmount > maxBoostAmount) {
+        return calculateRandomBoostAmount({ boostAmount, boostUnit, rewardParameters });
     }
 
     logger('Random boost award, calculated amount:', calculatedBoostAmount);
-    return opsUtil.convertToUnit(calculatedBoostAmount, DEFAULT_UNIT, boost.boostUnit);
+    return opsUtil.convertToUnit(calculatedBoostAmount, DEFAULT_UNIT, boostUnit);
+};
+
+
+const calculateConsolationAmount = (consolationAmount, consolationType) => {
+    let calculatedAmount = opsUtil.convertToUnit(consolationAmount.amount, consolationAmount.unit, DEFAULT_UNIT);
+
+    if (consolationType === 'RANDOM') {
+        const rewardParameters = { distribution: 'UNIFORM' };
+        const randomParams = { boostAmount: consolationAmount.amount, boostUnit: consolationAmount.unit, rewardParameters };
+        calculatedAmount = opsUtil.convertToUnit(calculateRandomBoostAmount(randomParams), consolationAmount.unit, DEFAULT_UNIT);
+        return { calculatedAmount, amountFromBonus: calculatedAmount };
+    }
+
+    return { calculatedAmount, amountFromBonus: calculatedAmount };
+};
+
+const obtainConsolationAccountsAndAmount = (boost, affectedAccountDict) => {
+    logger('Calculating consolation amount and recipeints');
+    const { boostId, rewardParameters } = boost;
+    const { type, amount } = rewardParameters.consolationPrize;
+
+    const accountUserMap = affectedAccountDict[boostId];
+    const accountIds = Object.keys(accountUserMap);
+    const recipientAccounts = accountIds.filter((accountId) => accountUserMap[accountId].newStatus === 'CONSOLED');
+    logger('In consolation, have possible recipients: ', recipientAccounts);
+
+    const consolationDetails = { consolationAmount: calculateConsolationAmount(amount, type), recipientAccounts };
+    logger('Calculated consolation amount, as: ', consolationDetails);
+    
+    // todo : we will actually move this into boost-expiry-handler itself
+    // if (recipients.basis === 'ALL') {
+    //     consolationDetails.recipientAccounts = recipientAccounts;
+    // }
+
+    // if (recipients.basis === 'ABSOLUTE') {
+    //     consolationDetails.recipientAccounts = recipientAccounts.slice(0, recipients.value);
+    // }
+
+    // if (recipients.basis === 'PROPORTION') {
+    //     const numberOfRecipients = Math.round(recipientAccounts.length * recipients.value);
+    //     consolationDetails.recipientAccounts = recipientAccounts.slice(0, numberOfRecipients);
+    // }
+
+    logger('Got consolation details: ', consolationDetails);
+    return consolationDetails;
+};
+
+const generateConsolationInstructions = (boost, affectedAccountDict) => {
+    const consolationDetails = obtainConsolationAccountsAndAmount(boost, affectedAccountDict);
+
+    const { recipientAccounts, consolationAmount } = consolationDetails;
+    const { calculatedAmount, amountFromBonus } = consolationAmount;
+
+    const recipients = recipientAccounts.map((recipientId) => ({ 
+        recipientId, amount: calculatedAmount, recipientType: 'END_USER_ACCOUNT'
+    }));
+
+    // a little ugly but just in case in future we want to allow consolation amounts for friend tourns
+    const referenceAmounts = { consolationAmount: calculatedAmount, amountFromBonus };
+
+    return {
+        floatId: boost.fromFloatId,
+        clientId: boost.forClientId,
+        fromId: boost.fromBonusPoolId,
+        fromType: 'BONUS_POOL',
+        currency: boost.boostCurrency,
+        unit: DEFAULT_UNIT,
+        identifier: boost.boostId,
+        relatedEntityType: 'BOOST_REDEMPTION',
+        allocType: 'BOOST_REDEMPTION',
+        allocState: 'SETTLED',
+        transactionType: 'BOOST_REDEMPTION',
+        settlementStatus: 'SETTLED',
+        referenceAmounts,
+        recipients
+    };
+};
+
+/** Used also in expiry handler to set the boost amount once this is done, so exporting */
+module.exports.calculateBoostAmount = (boost, pooledContributionMap) => {
+    const { boostId, boostUnit, rewardParameters } = boost;
+
+    const rewardType = rewardParameters ? rewardParameters.rewardType : 'STANDARD';
+
+    if (rewardType === 'POOLED') {
+        const accountIds = pooledContributionMap[boostId];
+        const userCount = accountIds.length;
+        return calculatePooledBoostAmount(boost, userCount);
+    }
+
+    if (rewardType === 'RANDOM') {
+        const boostAmount = opsUtil.convertToUnit(boost.boostAmount, boostUnit, DEFAULT_UNIT);
+        const calculatedAmount = calculateRandomBoostAmount({ boostAmount, boostUnit, rewardParameters });
+        return { boostAmount: calculatedAmount, amountFromBonus: calculatedAmount };
+    }
+
+    return { boostAmount: boost.boostAmount, amountFromBonus: boost.boostAmount };
 };
 
 const triggerFloatTransfers = async (transferInstructions) => {
@@ -98,14 +200,17 @@ const triggerFloatTransfers = async (transferInstructions) => {
     const transferResults = JSON.parse(resultOfTransfer.body);
     
     // what a code smell but things are just too rough right now, at some point there will be sleep and this will have to get cleaned up
-    const extractRefAmounts = (boostId) => transferInstructions.find((instruction) => instruction.identifier === boostId);
-    const mergeResultWithRef = (boostId) => ({ ...transferResults[boostId], ...extractRefAmounts(boostId).referenceAmounts });
+    const findInstruction = (boostId) => transferInstructions.find((instruction) => instruction.identifier === boostId);
+    const summaizeResult = (boostId) => ({ ...transferResults[boostId], ...findInstruction(boostId).referenceAmounts, unit: findInstruction(boostId).unit });
     const resultsWithReferenceAmounts = Object.keys(transferResults).reduce((obj, boostId) => 
-        ({ ...obj, [boostId]: mergeResultWithRef(boostId) }), {});
+        ({ ...obj, [boostId]: summaizeResult(boostId) }), {});
 
     return resultsWithReferenceAmounts;
 };
 
+/**
+ * USED ONLY FOR FRIEND TOURNAMENTS WHERE USERS EXPLICITLY FUND THE BOOST
+ */
 const handleTransferToBonusPool = async (affectedAccountDict, boost, pooledContributionMap, event) => {
     logger('Pool contribution map : ', pooledContributionMap);
     
@@ -120,8 +225,6 @@ const handleTransferToBonusPool = async (affectedAccountDict, boost, pooledContr
     }
 
     const { rewardParameters } = boost;
-    logger('Reward parameters : ', rewardParameters);
-
     const { poolContributionPerUser } = rewardParameters;
     
     const contribInDefault = opsUtil.convertToUnit(poolContributionPerUser.amount * rewardParameters.percentPoolAsReward, poolContributionPerUser.unit, DEFAULT_UNIT);
@@ -174,24 +277,26 @@ const handleTransferToBonusPool = async (affectedAccountDict, boost, pooledContr
     const accountIdsAffected = Object.keys(affectedAccountDict[boost.boostId]).filter((accountId) => accountIds.includes(accountId));
     logger('Provides accountIds with user Ids present: ', accountIdsAffected);
     const userIds = accountIdsAffected.map((accountId) => affectedAccountDict[boost.boostId][accountId].userId);
-    logger('And user IDs: ', userIds);
-
+    
     const resultOfPublish = await publisher.publishMultiUserEvent(userIds, 'BOOST_POOL_FUNDED', { context: eventLogContext });
 
     logger('Result of publish:', resultOfPublish);
-
     return { resultOfTransfer, resultOfPublish };
 };
 
 // note: this is only called for redeemed boosts, by definition. also means it is 'settled' by definition. it redeemes, no matter prior status
 // further note: if this is a revocation, the negative will work as required on sums, but test the hell out of this (and viz transfer-handler)
 const generateFloatTransferInstructions = async (affectedAccountDict, boost, revoke, pooledContributionMap = {}, event = {}) => {
-    const recipientAccounts = Object.keys(affectedAccountDict[boost.boostId]);
     // if pooled reward handle initial transfers from accounts to bonus pool
     if (boost.rewardParameters && boost.rewardParameters.rewardType === 'POOLED') {
         const resultOfInitialTransfer = await handleTransferToBonusPool(affectedAccountDict, boost, pooledContributionMap, event);
         logger('Result of initial transfer to bonus pool:', resultOfInitialTransfer);
     }
+
+    const accountUserMap = affectedAccountDict[boost.boostId];
+    const accountIds = Object.keys(accountUserMap);
+
+    const recipientAccounts = accountIds.filter((accountId) => accountUserMap[accountId].newStatus === 'REDEEMED');
 
     const referenceAmounts = exports.calculateBoostAmount(boost, pooledContributionMap);
     const { boostAmount } = referenceAmounts;
@@ -227,25 +332,13 @@ const generateFloatTransferInstructions = async (affectedAccountDict, boost, rev
     };
 };
 
+// ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// ///////////////////////////////// MESSAGE HANDLING (IN-BUILT TRIGGERS) /////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 const generateMsgInstruction = (instructionId, destinationUserId, boost) => {
-    const numberFormat = new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: boost.boostCurrency,
-        maximumFractionDigits: 0,
-        minimumFractionDigits: 0
-    });
-
-    const unitDivisors = {
-        'HUNDREDTH_CENT': 100 * 100,
-        'WHOLE_CENT': 100,
-        'WHOLE_CURRENCY': 1 
-    };
-
-    const wholeCurrencyAmount = boost.boostAmount / unitDivisors[boost.boostUnit];
-    const formattedBoostAmount = numberFormat.format(wholeCurrencyAmount);
-    
-    // logger('Formatted boost amount, whole currency: ', formattedBoostAmount);
-
+    const { boostAmount, boostUnit, boostCurrency } = boost;
+    const formattedBoostAmount = opsUtil.formatAmountCurrency({ amount: boostAmount, unit: boostUnit, currency: boostCurrency }, 0);    
     return {
         instructionId,
         destinationUserId,
@@ -261,15 +354,11 @@ const assembleMessageForInstruction = (boost, boostInstruction, affectedAccountU
     logger(`Generating message for target ${target} and instruction ID ${instructionId}`);
 
     if (target === 'ALL') {
-        // generate messages for all the users
-        return Object.values(affectedAccountUserDict).
-            map((userObject) => generateMsgInstruction(instructionId, userObject.userId, boost));
+        const allUserIds = Object.values(affectedAccountUserDict);
+        return allUserIds.map((userObject) => generateMsgInstruction(instructionId, userObject.userId, boost));
     } else if (Reflect.has(affectedAccountUserDict, target)) {
-        // generate messages for just this user
         const userObjectForTarget = affectedAccountUserDict[target];
-        logger('user object for target: ', userObjectForTarget);
         const userMsgInstruction = generateMsgInstruction(instructionId, userObjectForTarget.userId, boost);
-        logger('Generated instruction: ', userMsgInstruction);
         return [userMsgInstruction];
     }
     
@@ -286,12 +375,10 @@ const assembleMessageInstructions = (boost, affectedAccountUserDict) => {
     logger('Boost msg instructions: ', boostMessageInstructions);
     logger('Affected account dict: ', affectedAccountUserDict);
     const assembledMessages = [];
-    // todo : make work for other statuses
     boostMessageInstructions.
         filter((entry) => entry.status === 'REDEEMED').
         forEach((entry) => {
             const thisEntryInstructions = assembleMessageForInstruction(boost, entry, affectedAccountUserDict);
-            logger('Got this back: ', thisEntryInstructions);
             assembledMessages.push(...thisEntryInstructions);
         });
     
@@ -299,11 +386,13 @@ const assembleMessageInstructions = (boost, affectedAccountUserDict) => {
     return assembledMessages;
 };
 
-const generateMessageSendInvocation = (messageInstructions) => ({
-    FunctionName: config.get('lambdas.messageSend'),
-    InvocationType: 'Event',
-    Payload: stringify({ instructions: messageInstructions })
-});
+const generateMessageSendInvocation = (messageInstructions) => (
+    boostUtil.lambdaParameters({ instructions: messageInstructions }, 'messageSend', false)
+);
+
+// ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// ///////////////////////////////// EVENT HANDLING /////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 const createPublishEventPromises = (parameters) => {
     const { boost, affectedAccountsUserDict: affectedAccountMap, transferResults, transferInstructions, isRevocation, event } = parameters;
@@ -340,23 +429,31 @@ const createPublishEventPromises = (parameters) => {
     return publishPromises;
 };
 
-/** Used also in expiry handler to set the boost amount once this is done, so exporting */
-module.exports.calculateBoostAmount = (boost, pooledContributionMap) => {
-    const rewardType = boost.rewardParameters ? boost.rewardParameters.rewardType : 'STANDARD';
-
-    if (rewardType === 'POOLED') {
-        const accountIds = pooledContributionMap[boost.boostId];
-        const userCount = accountIds.length;
-        return calculatePooledBoostAmount(boost, userCount);
+const knitConsolationResults = (resultOfWinnerTransfers, resultOfConsolations) => Object.keys(resultOfWinnerTransfers).map((boostId) => {
+    if (!Object.keys(resultOfConsolations).includes(boostId)) {
+        return { boostId, result: resultOfWinnerTransfers[boostId] };
     }
 
-    if (rewardType === 'RANDOM') {
-        const boostAmount = calculateRandomBoostAmount(boost);
-        return { boostAmount, amountFromBonus: boostAmount };
-    }
+    const boostResult = resultOfWinnerTransfers[boostId];
+    const consolationResult = resultOfConsolations[boostId];
 
-    return { boostAmount: boost.boostAmount, amountFromBonus: boost.boostAmount };
-};
+    const totalAmount = opsUtil.convertToUnit(boostResult.boostAmount, boostResult.unit, DEFAULT_UNIT) + 
+        (consolationResult.consolationAmount * consolationResult.accountTxIds.length);
+    const totalFromBonus = opsUtil.convertToUnit(boostResult.amountFromBonus, boostResult.unit, DEFAULT_UNIT) +
+        (consolationResult.amountFromBonus * consolationResult.accountTxIds.length);
+    
+    const mergedResult = {
+        accountTxIds: [...boostResult.accountTxIds, ...consolationResult.accountTxIds],
+        floatTxIds: [...boostResult.floatTxIds, ...consolationResult.floatTxIds],
+        boostAmount: totalAmount,
+        amountFromBonus: totalFromBonus,
+        unit: DEFAULT_UNIT
+    };
+
+    logger('**** MERGED RESULT: ', mergedResult);
+
+    return { boostId, result: mergedResult };
+}).reduce((obj, { boostId, result }) => ({ ...obj, [boostId]: result }), {});
 
 /**
  * Complicated thing in here is affectedAccountsDict. It stores, for each boost, the accounts whose statusses have been changed. Format:
@@ -382,8 +479,18 @@ module.exports.redeemOrRevokeBoosts = async ({ redemptionBoosts, revocationBoost
     logger('***** Revoke instructions: ', revokeInstructions);
 
     const transferInstructions = redeemInstructions.concat(revokeInstructions);
-    const resultOfTransfers = await (transferInstructions.length === 0 ? {} : triggerFloatTransfers(transferInstructions));
+    let resultOfTransfers = await (transferInstructions.length === 0 ? {} : triggerFloatTransfers(transferInstructions));
     logger('Result of transfers: ', resultOfTransfers);
+
+    const boostsWithConsolations = boostsToRedeem.filter((boost) => boost.rewardParameters && boost.rewardParameters.consolationPrize);
+
+    if (boostsWithConsolations.length > 0) {
+        const consolationInstructions = boostsWithConsolations.map((boost) => generateConsolationInstructions(boost, affectedAccountsDict));
+        logger('***** Consolation instructions: ', JSON.stringify(consolationInstructions));
+        const resultOfConsolations = await triggerFloatTransfers(consolationInstructions);
+        logger('Result of consolation transfers: ', JSON.stringify(resultOfConsolations));
+        resultOfTransfers = knitConsolationResults(resultOfTransfers, resultOfConsolations);
+    }
 
     // then: construct & send redemption messages
     const messageInstructionsNested = boostsToRedeem.map((boost) => assembleMessageInstructions(boost, affectedAccountsDict[boost.boostId]));
@@ -394,9 +501,7 @@ module.exports.redeemOrRevokeBoosts = async ({ redemptionBoosts, revocationBoost
     let finalPromises = [];
     if (messageInstructionsFlat.length > 0) {
         const messageInvocation = generateMessageSendInvocation(messageInstructionsFlat);
-        logger('Message invocation: ', messageInvocation);
         const messagePromise = lambda.invoke(messageInvocation).promise();
-        logger('Obtained message promise');
         finalPromises.push(messagePromise);
     }
     

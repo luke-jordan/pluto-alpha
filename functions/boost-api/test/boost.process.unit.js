@@ -282,7 +282,10 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
 
         expect(resultOfEventRecord).to.exist;
 
-        const expectedAccountDict = { [testBoostId]: { ...mockAccountUserMap }};
+        const expectedAccountDict = { 
+            [testBoostId]: { [testAccountId]: { userId: testUserId, status: 'OFFERED', newStatus: 'REDEEMED' } }
+        };
+
         const expectedRedemptionCall = { 
             redemptionBoosts: [boostFromPersistence], 
             revocationBoosts: [], 
