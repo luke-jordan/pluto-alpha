@@ -34,15 +34,6 @@ const fetchAccountIdsForPooledRewards = async (redemptionBoosts) => {
     return pooledContributionMap;
 };
 
-const generateRedemptionAccountMap = async (boostId, winningAccounts) => {
-    const findAccountParams = { boostIds: [boostId], accountIds: winningAccounts, status: util.ACTIVE_BOOST_STATUS };
-    logger('Generating redemption account map, submitting account parameters: ', findAccountParams);
-
-    const accountInfo = await persistence.findAccountsForBoost(findAccountParams);
-
-    return { [boostId]: accountInfo[0].accountUserMap };
-};
-
 const checkIfAccountWinsTournament = (accountId, redemptionConditions, accountScoreList) => {
     const eventContext = { accountScoreList };
     const event = { eventType: 'BOOST_EXPIRED', accountId, eventContext };
@@ -113,14 +104,32 @@ const expireAccountsForBoost = async (boost, specifiedAccountIds) => {
     await publisher.publishMultiUserEvent(userIds, 'BOOST_EXPIRED', { context: { boostId }});
 };
 
-const handleScoredBoostWinners = async (boost, winningAccounts, eventType = 'BOOST_TOURNAMENT_WON') => {
+const generateRedemptionAccountMap = async (boostId, winningAccounts, consolationAccounts = []) => {
+    const findAccountParams = { boostIds: [boostId], accountIds: [...winningAccounts, ...consolationAccounts], status: util.ACTIVE_BOOST_STATUS };
+    logger('Generating redemption account map, submitting account parameters: ', findAccountParams);
+
+    const accountInfo = await persistence.findAccountsForBoost(findAccountParams);
+    
+    const { accountUserMap } = accountInfo[0];
+    const newStatusSelector = (accountId) => (winningAccounts.includes(accountId) ? 'REDEEMED' : 'CONSOLED');
+
+    const accountMap = Object.keys(accountUserMap).
+        reduce((obj, accountId) => ({ ...obj, [accountId]: { ...accountUserMap[accountId], newStatus: newStatusSelector(accountId) } }), {});
+
+    return { [boostId]: accountMap };
+};
+
+const handleScoredBoostWinners = async (boost, winningAccounts, otherPlayerAccounts, eventType = 'BOOST_TOURNAMENT_WON') => {
     const { boostId } = boost;
 
-    const redemptionAccountDict = await generateRedemptionAccountMap(boostId, winningAccounts);
+    const consolationAccounts = boost.statusConditions.CONSOLED && boost.rewardParameters ? otherPlayerAccounts : [];
+    const redemptionAccountDict = await generateRedemptionAccountMap(boostId, winningAccounts, consolationAccounts);
+
     logger('Redemption account dict: ', redemptionAccountDict);
 
     const redemptionEvent = { eventType, boostId };
     const redemptionCall = { 
+        redemptionBoosts: [boost],
         affectedAccountsDict: redemptionAccountDict, 
         event: redemptionEvent 
     };
@@ -137,19 +146,22 @@ const handleScoredBoostWinners = async (boost, winningAccounts, eventType = 'BOO
 
         redemptionCall.pooledContributionMap = pooledContributionMap;
     }
-
-    redemptionCall.redemptionBoosts = [boost]; // so it has the right amount in it for things like events etc
         
     const resultOfRedemptions = await boostRedemptionHandler.redeemOrRevokeBoosts(redemptionCall);
-    logger('Result of redemptions for winners: ', resultOfRedemptions);
+    logger('Result of redemptions for winners: ', JSON.stringify(resultOfRedemptions));
 
-    const redemptionUpdate = { boostId, accountIds: winningAccounts, logType: 'STATUS_CHANGE', newStatus: 'REDEEMED' };
-    logger('Setting winning accounts to redeemed via: ', redemptionUpdate);
-    const resultOfRedeemUpdate = await persistence.updateBoostAccountStatus([redemptionUpdate]);
+    const updateInstructions = [{ boostId, accountIds: winningAccounts, logType: 'STATUS_CHANGE', newStatus: 'REDEEMED' }];
+    if (consolationAccounts.length > 0) {
+        updateInstructions.push({ boostId, accountIds: consolationAccounts, logType: 'STATUS_CHANGE', newStatus: 'CONSOLED' });
+    }
+    logger('Setting winning accounts to redeemed via: ', JSON.stringify(updateInstructions));
+    const resultOfRedeemUpdate = await persistence.updateBoostAccountStatus(updateInstructions);
     logger('And result of redemption account update: ', resultOfRedeemUpdate);
 
     const winningUserIds = Object.values(redemptionAccountDict[boostId]).map((entry) => entry.userId);
     await publisher.publishMultiUserEvent(winningUserIds, eventType, { context: { boostId }});
+
+    return [...winningAccounts, ...consolationAccounts];
 };
 
 const handleRandomScoring = async (boost) => {
@@ -165,7 +177,7 @@ const handleRandomScoring = async (boost) => {
 
     if (winningAccounts.length > 0) {
         logger('Awarding boost to accounts:', winningAccounts);
-        await handleScoredBoostWinners(boost, winningAccounts, 'BOOST_RANDOM_SELECTED');
+        await handleScoredBoostWinners(boost, winningAccounts, [], 'BOOST_RANDOM_SELECTED');
     }
 
     // flipping the rest of pending to failed, and then to expired (in time, consolidate with tournament doing same)
@@ -226,15 +238,17 @@ module.exports.handleExpiredBoost = async (boostId) => {
     // not the most efficient thing in the world, but it will not happen often, and we can optimize later
     const winningAccounts = accountIdsThatResponded.filter((accountId) => checkIfAccountWinsTournament(accountId, statusConditions.REDEEMED, boostGameLogs));
     
+    let accountsToNotExpire = winningAccounts;
     if (winningAccounts.length > 0) {
         logger('Handling tournament result, awarding to winners: ', winningAccounts);
-        await handleScoredBoostWinners(boost, winningAccounts);
+        const otherPlayerAccounts = accountIdsThatResponded.filter((accountId) => !winningAccounts.includes(accountId));
+        accountsToNotExpire = await handleScoredBoostWinners(boost, winningAccounts, otherPlayerAccounts);
     }
 
     const allAccountMap = await persistence.findAccountsForBoost({ boostIds: [boostId], status: util.ACTIVE_BOOST_STATUS });
     const allAccountIds = Object.keys(allAccountMap[0].accountUserMap);
     
-    const remainingAccounts = allAccountIds.filter((accountId) => !winningAccounts.includes(accountId));
+    const remainingAccounts = allAccountIds.filter((accountId) => !accountsToNotExpire.includes(accountId));
     
     logger('Will expire these remaining accounts: ', remainingAccounts);
     await expireAccountsForBoost(boost, remainingAccounts);
