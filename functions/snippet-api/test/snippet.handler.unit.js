@@ -70,7 +70,7 @@ describe('*** UNIT TEST SNIPPET HANDLER FUNCTIONS ***', () => {
             fetchCount: 1
         };
 
-        const mockLog = {
+        const mockSnippetLog = {
             userId: testSystemId,
             snippetId: 'snippet-id-1',
             logType: 'SNIPPET_VIEWED',
@@ -99,7 +99,7 @@ describe('*** UNIT TEST SNIPPET HANDLER FUNCTIONS ***', () => {
         expect(fetchSnippetStatusesStub).to.have.been.calledOnceWithExactly(['snippet-id-1'], testSystemId);
         expect(incrementStub).to.have.been.calledOnceWithExactly('snippet-id-1', testSystemId, 'VIEWED');
         expect(updateSnippetStatusStub).to.have.been.calledOnceWithExactly('snippet-id-1', testSystemId, 'VIEWED');
-        expect(insertLogStub).to.have.been.calledWithExactly(mockLog);
+        expect(insertLogStub).to.have.been.calledWithExactly(mockSnippetLog);
     });
 
     it('Updates a snippets status properly, SQS batch', async () => {      
@@ -113,7 +113,7 @@ describe('*** UNIT TEST SNIPPET HANDLER FUNCTIONS ***', () => {
             uppdatedTime: testUpdatedTime
         }];
 
-        const mockLogObject = (snippetId) => ({
+        const mockSnippetLog = (snippetId) => ({
             userId: testSystemId,
             snippetId,
             logType: 'SNIPPET_VIEWED',
@@ -143,8 +143,8 @@ describe('*** UNIT TEST SNIPPET HANDLER FUNCTIONS ***', () => {
         expect(incrementStub).to.have.been.calledWithExactly('snippet-id-1', testSystemId, 'VIEWED');
         expect(incrementStub).to.have.been.calledWithExactly('snippet-id-2', testSystemId, 'VIEWED');
         expect(updateSnippetStatusStub).to.have.been.calledOnceWithExactly('snippet-id-1', testSystemId, 'VIEWED');
-        expect(insertLogStub).to.have.been.calledWithExactly(mockLogObject('snippet-id-1'));
-        expect(insertLogStub).to.have.been.calledWithExactly(mockLogObject('snippet-id-2'));
+        expect(insertLogStub).to.have.been.calledWithExactly(mockSnippetLog('snippet-id-1'));
+        expect(insertLogStub).to.have.been.calledWithExactly(mockSnippetLog('snippet-id-2'));
         [fetchSnippetStatusesStub, incrementStub, insertLogStub].map((stub) => expect(stub.callCount).to.equal(2));
     });
 
@@ -186,7 +186,7 @@ describe('*** UNIT TEST SNIPPET HANDLER FUNCTIONS ***', () => {
             snippets: [expectedFirst, expectedSecond]
         });
 
-        expect(fetchUncreatedSnippetsStub).to.have.been.calledOnceWithExactly(testSystemId);
+        expect(fetchUncreatedSnippetsStub).to.have.been.calledOnceWithExactly(testSystemId, false);
         expect(queueEventsStub).to.have.been.calledOnceWithExactly(testQueueName, [testQueuePayload]);
         expect(fetchCreatedSnippetsStub).to.have.not.been.called;
         expect(isPreviewUserStub).to.have.not.been.called;
@@ -224,8 +224,8 @@ describe('*** UNIT TEST SNIPPET HANDLER FUNCTIONS ***', () => {
             snippets: [expectedFirst, expectedSecond]
         });
 
-        expect(fetchUncreatedSnippetsStub).to.have.been.calledOnceWithExactly(testSystemId);
-        expect(fetchCreatedSnippetsStub).to.have.been.calledOnceWithExactly(testSystemId);
+        expect(fetchUncreatedSnippetsStub).to.have.been.calledOnceWithExactly(testSystemId, false);
+        expect(fetchCreatedSnippetsStub).to.have.been.calledOnceWithExactly(testSystemId, false);
         expect(isPreviewUserStub).to.have.been.calledOnceWithExactly(testSystemId);
         expect(previewSnippetStub).to.have.not.been.called;
         expect(queueEventsStub).to.have.not.been.called;
@@ -263,7 +263,7 @@ describe('*** UNIT TEST SNIPPET HANDLER FUNCTIONS ***', () => {
             snippets: [expectedFirst, expectedSecond, expectedThird]
         });
         
-        expect(fetchUncreatedSnippetsStub).to.have.been.calledOnceWithExactly(testSystemId);
+        expect(fetchUncreatedSnippetsStub).to.have.been.calledOnceWithExactly(testSystemId, false);
         expect(isPreviewUserStub).to.have.been.calledOnceWithExactly(testSystemId);
         expect(previewSnippetStub).to.have.been.calledOnce;
         expect(fetchCreatedSnippetsStub).to.have.not.been.called;

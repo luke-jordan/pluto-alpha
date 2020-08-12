@@ -17,16 +17,25 @@ const snippetLogTable = config.get('tables.snippetLogTable');
 const snippetJoinTable = config.get('tables.snippetJoinTable');
 const previewUserTable = config.get('tables.previewUserTable');
 
-const transformSnippet = (snippet) => ({
-    snippetId: snippet.snippetId || snippet.snippetDataSnippetSnippetId,
-    title: snippet.title,
-    body: snippet.body,
-    active: snippet.active,
-    fetchCount: snippet.fetchCount || 0,
-    viewCount: snippet.viewCount || 0,
-    snippetStatus: snippet.snippetStatus || 'UNCREATED',
-    snippetPriority: snippet.snippetPriority
-});
+const transformSnippet = (snippet) => {
+    const transformedSnippet = {
+        snippetId: snippet.snippetId || snippet.snippetDataSnippetSnippetId,
+        title: snippet.title,
+        body: snippet.body,
+        active: snippet.active,
+        fetchCount: snippet.fetchCount || 0,
+        viewCount: snippet.viewCount || 0,
+        snippetStatus: snippet.snippetStatus || 'UNCREATED',
+        snippetPriority: snippet.snippetPriority
+    };
+
+    if (snippet.responseOptions) {
+        Reflect.deleteProperty(snippet.responseOptions, 'correctAnswerText');
+        transformedSnippet.responseOptions = snippet.responseOptions;
+    }
+
+    return transformedSnippet;
+};
 
 const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}}`).join(', ');
 const extractColumnNames = (keys) => keys.map((key) => decamelize(key)).join(', ');
@@ -114,23 +123,32 @@ module.exports.updateSnippetStatus = async (snippetId, userId, status) => {
  * This function fetches unread snippets for a user.
  * @param {string} systemWideUserId The user for whom the snippets are sought.
  */
-module.exports.fetchUncreatedSnippets = async (systemWideUserId) => {
-    const selectQuery = `select * from ${snippetTable} where active = $1 and snippet_id not in ` +
+module.exports.fetchUncreatedSnippets = async (systemWideUserId, includeQuestionSnippets = false) => {
+    let selectQuery = `select * from ${snippetTable} where active = $1 and snippet_id not in ` +
         `(select snippet_id from ${snippetJoinTable} where user_id = $2 and snippet_status = $3)`;
+
+    const responseOptionsClause = includeQuestionSnippets ? ' and response_options not null' : ' and response_options = null';
+    selectQuery += responseOptionsClause;
+  
     logger('Fetching unread snippets with query:', selectQuery);
     const resultOfFetch = await rdsConnection.selectQuery(selectQuery, [true, systemWideUserId, 'VIEWED']);
     // logger('Raw result of fetch: ', resultOfFetch);
-    return resultOfFetch.map((result) => transformSnippet(camelCaseKeys(result)));
+    return resultOfFetch.map((result) => transformSnippet(camelCaseKeys(result), includeQuestionSnippets));
 };
 
 /**
  * This function fetches viewed snippets for a user.
  * @param {string} systemWideUserId The user for whom the snippets are sought.
  */
-module.exports.fetchCreatedSnippets = async (systemWideUserId) => {
-    const selectQuery = `select * from ${snippetJoinTable} inner join ${snippetTable} ` + 
+module.exports.fetchCreatedSnippets = async (systemWideUserId, includeQuestionSnippets = false) => {
+    let selectQuery = `select * from ${snippetJoinTable} inner join ${snippetTable} ` + 
         `on ${snippetJoinTable}.snippet_id = ${snippetTable}.snippet_id ` +
         `where user_id = $1 and active = $2`;
+
+    const responseOptionsClause = includeQuestionSnippets 
+        ? ' and response_options not null' : ' and response_options = null';
+
+    selectQuery += responseOptionsClause;
     logger('Fetching unread snippets with query:', selectQuery);
     const resultOfFetch = await rdsConnection.selectQuery(selectQuery, [systemWideUserId, true]);
     return resultOfFetch.map((result) => transformSnippet(camelCaseKeys(result)));
