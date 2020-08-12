@@ -71,7 +71,7 @@ const isInitialStatusBefore = (initialStatus, comparisonStatus) => {
         return true;
     }
 
-    const statusOrder = ['CREATED', 'OFFERED', 'UNLOCKED', 'PENDING', 'REDEEMED', 'FAILED'];
+    const statusOrder = ['CREATED', 'OFFERED', 'UNLOCKED', 'PENDING', 'REDEEMED', 'CONSOLED', 'FAILED'];
     return statusOrder.indexOf(initialStatus) < statusOrder.indexOf(comparisonStatus);
 };
 
@@ -98,6 +98,9 @@ const extractStatusConditions = (gameParams, initialStatus) => {
     if (isInitialStatusBefore(initialStatus, 'FAILED') && !isTournament && !allowRepeatPlay) {
         const relevantParam = gameParams.gameType === 'DESTROY_IMAGE' ? 'percent_destroyed_below' : 'number_taps_less_than';
         statusConditions['FAILED'] = [`${relevantParam} #{${gameParams.winningThreshold}::${gameParams.timeLimitSeconds * 1000}}`];
+    }
+    if (isInitialStatusBefore(initialStatus, 'CONSOLED') && gameParams.hasConsolationPrize) {
+        statusConditions['CONSOLED'] = ['status_at_expiry #{PENDING}'];
     }
     return statusConditions;
 };
