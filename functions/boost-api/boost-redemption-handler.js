@@ -394,7 +394,8 @@ const generateMessageSendInvocation = (messageInstructions) => (
 // ///////////////////////////////// EVENT HANDLING /////////////////////////////////////////////
 // ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-const createPublishEventPromises = (parameters) => {
+// converting this to execute earlier, since otherwise lambda is returning before the deep ticks are done
+const executeEventPublication = async (parameters) => {
     const { boost, affectedAccountsUserDict: affectedAccountMap, transferResults, transferInstructions, isRevocation, event } = parameters;
     
     const boostUpdateTimeMillis = parameters.boostUpdateTime ? parameters.boostUpdateTime.valueOf() : moment().valueOf();
@@ -421,12 +422,14 @@ const createPublishEventPromises = (parameters) => {
         if (event.accountId && affectedAccountMap[event.accountId]) {
             options.initiator = affectedAccountMap[event.accountId]['userId'];
         }
+
         logger(`Publishing: ${affectedAccountMap[accountId]['userId']}::${eventType}`);
         return publisher.publishUserEvent(affectedAccountMap[accountId]['userId'], eventType, options);
     });
 
-    // logger('Publish result: ', publishPromises);
-    return publishPromises;
+    const publicationResult = await Promise.all(publishPromises);
+    logger('Publish result: ', JSON.stringify(publicationResult));
+    return publicationResult;
 };
 
 const knitConsolationResults = (resultOfWinnerTransfers, resultOfConsolations) => Object.keys(resultOfWinnerTransfers).map((boostId) => {
@@ -506,7 +509,7 @@ module.exports.redeemOrRevokeBoosts = async ({ redemptionBoosts, revocationBoost
     }
     
     if (transferInstructions.length > 0) {
-        const mapBoostToEventPublish = (boost, isRevocation) => createPublishEventPromises({ 
+        const mapBoostToEventPublish = (boost, isRevocation) => executeEventPublication({ 
             boost,
             affectedAccountsUserDict: affectedAccountsDict[boost.boostId],
             transferResults: resultOfTransfers[boost.boostId],

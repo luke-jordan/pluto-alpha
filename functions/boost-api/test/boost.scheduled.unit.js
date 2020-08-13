@@ -434,7 +434,7 @@ describe('*** UNIT TEST CHECKING FOR TIME-BASED CONDITIONS ***', async () => {
 
         const expectedRedemptionCall = { 
             redemptionBoosts: [mockBoostToRedeem], 
-            affectedAccountsDict: { 'boost-id': { 'account-1': { userId: 'user-1', status: 'OFFERED' } } }, // not nice
+            affectedAccountsDict: { 'boost-id': { 'account-1': { userId: 'user-1', status: 'OFFERED', newStatus: 'REDEEMED' } } }, // not nice
             event: expectedEventForRedemption
         };
         expect(redemptionHandlerStub).to.have.been.calledOnceWithExactly(expectedRedemptionCall);
