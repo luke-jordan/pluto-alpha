@@ -10,7 +10,7 @@ resource "aws_lambda_function" "boost_scheduled" {
   handler                        = "boost-scheduled-handler.handleAllScheduledTasks"
   memory_size                    = 256
   runtime                        = "nodejs12.x"
-  timeout                        = 15
+  timeout                        = 60
   tags                           = {"environment"  = "${terraform.workspace}"}
   
   s3_bucket = "pluto.lambda.${terraform.workspace}"
