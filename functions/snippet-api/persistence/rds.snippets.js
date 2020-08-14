@@ -17,7 +17,7 @@ const snippetLogTable = config.get('tables.snippetLogTable');
 const snippetJoinTable = config.get('tables.snippetJoinTable');
 const previewUserTable = config.get('tables.previewUserTable');
 
-const transformSnippet = (snippet) => {
+const transformSnippet = (snippet, keepAnswers = false) => {
     const transformedSnippet = {
         snippetId: snippet.snippetId || snippet.snippetDataSnippetSnippetId,
         title: snippet.title,
@@ -30,7 +30,10 @@ const transformSnippet = (snippet) => {
     };
 
     if (snippet.responseOptions) {
-        Reflect.deleteProperty(snippet.responseOptions, 'correctAnswerText');
+        if (!keepAnswers) {
+            Reflect.deleteProperty(snippet.responseOptions, 'correctAnswerText');
+        }
+
         transformedSnippet.responseOptions = snippet.responseOptions;
     }
 

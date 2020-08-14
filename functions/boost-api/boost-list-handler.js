@@ -239,6 +239,23 @@ const calculateBoostYield = async (boostId) => {
     return boostAndSavedAmount.map((boostAmountDetails) => calculateYield(boostAmountDetails));
 };
 
+const fetchQuestionSnippets = async (snippetIds, role) => {
+    const questionSnippets = await persistence.fetchSnippets(snippetIds);
+    logger('Got question snippets: ', questionSnippets);
+
+    const transformedSnippets = questionSnippets.map((snippet) => {
+        const { title, body, responseOptions } = snippet;
+        
+        if (role !== 'SYSTEM_ADMIN') {
+            Reflect.deleteProperty(responseOptions, 'correctAnswerText');
+        }
+
+        return { title, body, responseOptions };
+    });
+
+    return transformedSnippets;
+};
+
 /**
  * This method provides the details of a boost, including (if a friend tournament), the score logs
  */
@@ -265,6 +282,10 @@ module.exports.fetchBoostDetails = async (event) => {
 
         if (role === 'SYSTEM_ADMIN') {
             boost.boostYields = await calculateBoostYield(boostId);
+        }
+
+        if(boost.gameParams && boost.gameParams.gameType === 'QUIZ') {
+            boost.questionSnippets = await fetchQuestionSnippets(questionSnippetIds, role);
         }
 
         logger('Returning assembled boost: ', boost);

@@ -164,7 +164,7 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
         expect(queryStub).to.have.been.calledWithExactly(selectQuery, [true, testSystemId, 'VIEWED']);
     });
 
-    it('Fetches uncreated question snippets', async () => {
+    it.skip('Fetches uncreated question snippets', async () => {
         const mockQuestionSnippet = { ...mockSnippetFromRds };
 
         mockQuestionSnippet['body'] = 'How often can you save?';

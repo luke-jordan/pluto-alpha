@@ -61,6 +61,27 @@ const generateUpdateInstruction = ({ boostId, statusResult, accountId, boostAmou
     };
 };
 
+const calculateUserQuizScore = async (gameParams, userResponses) => {
+    const questionSnippetIds = gameParams.questionSnippetIds;
+    const questionSnippets = await persistence.fetchSnippets(questionSnippetIds);
+    logger('Got question snippets: ', questionSnippets);
+    logger('User resposes: ', userResponses)
+
+    const correctAnswers = userResponses.filter((userResponse) => {
+        const { snippetId, userAnswerText } = userResponse;
+        const questionSnippet = questionSnippets.filter((snippet) => snippet.snippetId == snippetId);
+        return userAnswerText === questionSnippet.responseOptions.correctAnswerText;
+    });
+
+    logger(`User quiz score is ${correctAnswers.length}/${questionSnippetIds.length}`);
+
+    return {
+        percentDestroyed: Number(correctAnswers.length / questionSnippetIds.length).toFixed(2),
+        numberCorrectAnswers: correctAnswers.length,
+        numberQuestions: questionSnippetIds.length,
+        correctAnswers: questionSnippets.map((snippet) => snippet.responseOptions.correctAnswerText) 
+    };
+};
 
 /**
  * @param {object} event The event from API GW. Contains a body with the parameters:
@@ -100,6 +121,12 @@ module.exports.processUserBoostResponse = async (event) => {
         const allowableStatus = ['CREATED', 'OFFERED', 'UNLOCKED']; // as long as not redeemed or pending, status check will do the rest
         if (!allowableStatus.includes(currentStatus)) {
             return { statusCode: statusCodes('Bad Request'), body: JSON.stringify({ message: 'Boost is not unlocked', status: currentStatus }) };
+        }
+
+        let resultOfQuiz = {};
+        if (boost.boostType === 'GAME' && boost.gameParams.gameType === 'QUIZ') {
+            resultOfQuiz = await calculateUserQuizScore(boost.gameParams, params.userResponses);
+            params.percentDestroyed = resultOfQuiz.percentDestroyed;
         }
 
         const statusEvent = { eventType, eventContext: params };
@@ -150,6 +177,10 @@ module.exports.processUserBoostResponse = async (event) => {
 
         if (statusResult.includes('PENDING')) {
             await expireFinishedTournaments(boost);
+        }
+
+        if (resultOfQuiz && Object.keys(resultOfQuiz) > 0) {
+            resultBody.resultOfQuiz = resultOfQuiz;
         }
 
         return {

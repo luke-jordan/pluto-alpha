@@ -48,7 +48,8 @@
         "audienceJoinTable": "audience_data.audience_account_join",
         "friendshipTable": "friend_data.core_friend_relationship",
         "profileTable": "UserProfileTable",
-        "clientFloatTable": "ClientFloatTable"
+        "clientFloatTable": "ClientFloatTable",
+        "snippetTable": "snippet_data.snippet"
     },
     "lambdas": {
         "floatTransfer": "float_transfer",

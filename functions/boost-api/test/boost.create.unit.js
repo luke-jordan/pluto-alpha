@@ -444,7 +444,7 @@ describe('** UNIT TEST SOME BOOST VALIDATION ***', () => {
         commonAssertions();
     });
 
-    it('Fail on missing game parameters where boost tyoe is GAME', async () => {
+    it('Fail on missing game parameters where boost type is GAME', async () => {
         const expectedError = 'Boost games require game parameters';
 
         const eventBody = { ...testBodyOfEvent };
