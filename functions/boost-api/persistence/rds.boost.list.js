@@ -230,8 +230,9 @@ module.exports.sumBoostAndSavedAmounts = async (boostIds) => {
 };
 
 module.exports.fetchSnippets = async (snippetIds) => {
-    const selectQuery = `select * from ${config.get('tables.snippetTable')} where snippet_id in (${extractArrayIndices(snippetIds)})`;
+    const selectQuery = `select title, body, response_options from ${config.get('tables.snippetTable')} ` + 
+        `where snippet_id in (${extractArrayIndices(snippetIds)})`;
     const resultOfFetch = await rdsConnection.selectQuery(selectQuery, snippetIds);
     logger('Result of snippet fetch: ', resultOfFetch);
-    return resultOfQuery.map((result) => camelizeKeys(result));
+    return resultOfFetch.map((result) => camelizeKeys(result));
 };

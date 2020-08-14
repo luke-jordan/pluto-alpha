@@ -63,23 +63,21 @@ const generateUpdateInstruction = ({ boostId, statusResult, accountId, boostAmou
 
 const calculateUserQuizScore = async (gameParams, userResponses) => {
     const questionSnippetIds = gameParams.questionSnippetIds;
-    const questionSnippets = await persistence.fetchSnippets(questionSnippetIds);
+    const questionSnippets = await persistence.fetchQuestionSnippets(questionSnippetIds);
     logger('Got question snippets: ', questionSnippets);
-    logger('User resposes: ', userResponses)
 
     const correctAnswers = userResponses.filter((userResponse) => {
         const { snippetId, userAnswerText } = userResponse;
-        const questionSnippet = questionSnippets.filter((snippet) => snippet.snippetId == snippetId);
-        return userAnswerText === questionSnippet.responseOptions.correctAnswerText;
+        const questionSnippet = questionSnippets.filter((snippet) => snippet.snippetId === snippetId);
+        return userAnswerText === questionSnippet[0].responseOptions.correctAnswerText;
     });
 
-    logger(`User quiz score is ${correctAnswers.length}/${questionSnippetIds.length}`);
+    logger(`User quiz score is: ${correctAnswers.length}/${questionSnippetIds.length}`);
 
     return {
-        percentDestroyed: Number(correctAnswers.length / questionSnippetIds.length).toFixed(2),
+        correctAnswers: questionSnippets.map((snippet) => snippet.responseOptions.correctAnswerText),
         numberCorrectAnswers: correctAnswers.length,
-        numberQuestions: questionSnippetIds.length,
-        correctAnswers: questionSnippets.map((snippet) => snippet.responseOptions.correctAnswerText) 
+        numberQuestions: questionSnippetIds.length
     };
 };
 
@@ -126,7 +124,9 @@ module.exports.processUserBoostResponse = async (event) => {
         let resultOfQuiz = {};
         if (boost.boostType === 'GAME' && boost.gameParams.gameType === 'QUIZ') {
             resultOfQuiz = await calculateUserQuizScore(boost.gameParams, params.userResponses);
-            params.percentDestroyed = resultOfQuiz.percentDestroyed;
+            
+            const { numberCorrectAnswers, numberQuestions } = resultOfQuiz;
+            params.percentDestroyed = Number(numberCorrectAnswers / numberQuestions).toFixed(2);
         }
 
         const statusEvent = { eventType, eventContext: params };
@@ -179,7 +179,7 @@ module.exports.processUserBoostResponse = async (event) => {
             await expireFinishedTournaments(boost);
         }
 
-        if (resultOfQuiz && Object.keys(resultOfQuiz) > 0) {
+        if (resultOfQuiz && Object.keys(resultOfQuiz).length > 0) {
             resultBody.resultOfQuiz = resultOfQuiz;
         }
 

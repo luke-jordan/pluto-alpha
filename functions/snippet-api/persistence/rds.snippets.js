@@ -136,7 +136,7 @@ module.exports.fetchUncreatedSnippets = async (systemWideUserId, includeQuestion
     logger('Fetching unread snippets with query:', selectQuery);
     const resultOfFetch = await rdsConnection.selectQuery(selectQuery, [true, systemWideUserId, 'VIEWED']);
     // logger('Raw result of fetch: ', resultOfFetch);
-    return resultOfFetch.map((result) => transformSnippet(camelCaseKeys(result), includeQuestionSnippets));
+    return resultOfFetch.map((result) => transformSnippet(camelCaseKeys(result)));
 };
 
 /**

@@ -444,4 +444,27 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
         expect(resultOfSum).to.deep.equal(expectedResult);
         expect(queryStub).to.have.been.calledOnceWithExactly(sumQuery, ['REDEEMED', 'boost-id-1', 'boost-id-2']);
     });
+
+    it('Fetches snippets', async () => {
+        const questionSnippetFromRds = {
+            'title': 'Quiz Snippet 2',
+            'body': 'How often can you withdraw from your Jupiter account?',
+            'response_options': {
+                responseTexts: [
+                    'Whenever planet Jupiter is at the zenith of your location',
+                    'Every Friday at 6pm',
+                    'As often as you like'
+                ],
+                correctAnswerText: 'As often you like'
+            }
+        };
+
+        queryStub.resolves([questionSnippetFromRds]);
+
+        const resultOfFetch = await rds.fetchSnippets(['snippet-id-1']);
+        expect(resultOfFetch).to.deep.equal([camelizeKeys(questionSnippetFromRds)]);
+
+        const selectQuery = 'select title, body, response_options from snippet_data.snippet where snippet_id in ($1)';
+        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, ['snippet-id-1']);
+    });
 });

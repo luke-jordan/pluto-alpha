@@ -18,6 +18,7 @@ const sumAmountsStub = sinon.stub();
 
 const fetchBoostDetailsStub = sinon.stub();
 const fetchTournScoresStub = sinon.stub();
+const fetchSnippetsStub = sinon.stub();
 
 const cacheGetStub = sinon.stub();
 const cacheMultiGetStub = sinon.stub();
@@ -32,7 +33,7 @@ const handler = proxyquire('../boost-list-handler', {
         'sumBoostAndSavedAmounts': sumAmountsStub,
         'fetchBoostDetails': fetchBoostDetailsStub,
         'fetchBoostScoreLogs': fetchTournScoresStub,
-        
+        'fetchSnippets': fetchSnippetsStub,
         '@noCallThru': true
     },
     'ioredis': class {
@@ -165,7 +166,7 @@ describe('*** UNIT TEST BOOST DETAILS (CHANGED AND SPECIFIED) ***', () => {
 
     const mockBoost = {
         boostId: testBoostId,
-        creatingUserId: '',
+        creatingUserId: 'user-id',
         label: 'Tournament!',
         active: true,
         boostType: 'GAME',
@@ -393,6 +394,58 @@ describe('*** UNIT TEST BOOST DETAILS (CHANGED AND SPECIFIED) ***', () => {
 
         expect(findAccountsStub).to.have.been.calledOnceWithExactly('admin-id');
         expect(fetchBoostDetailsStub).to.have.been.calledOnceWithExactly('boost-id-1', true);
+    });
+
+    it('Fetches details for quiz boost', async () => {
+        const testQuizBoost = { ...mockBoost };
+
+        testQuizBoost.flags = [];
+        testQuizBoost.accountIds = ['account-id-1'];
+        testQuizBoost.gameParams = {
+            gameType: 'QUIZ',
+            timeLimitSeconds: 30,
+            winningThreshold: 10,
+            instructionBand: 'Answer all quiz questions correctly in 30 seconds',
+            entryCondition: 'save_event_greater_than #{100000:HUNDREDTH_CENT:USD}',
+            questionSnippetIds: ['snippet-id-1']
+        };
+
+        findAccountsStub.resolves(['account-id-1']);
+        fetchBoostDetailsStub.resolves(testQuizBoost);
+
+        const testQuestionSnippet = {
+            title: 'Quiz Snippet 2',
+            body: 'How often can you withdraw from your Jupiter account?',
+            responseOptions: {
+                responseTexts: [
+                    'As often as you like',
+                    'Tuesdays and Thursdays',
+                    'Mondays and Wednesdays'
+                ],
+                correctAnswerText: 'As often you like'
+            }
+        };
+
+        fetchSnippetsStub.resolves([testQuestionSnippet]);
+
+        const testEvent = wrapEvent({ boostId: 'boost-id-1' }, 'user-id', 'ORDINARY_USER');
+        
+        const resultOfFetch = await handler.fetchBoostDetails(testEvent);
+        const resultBody = helper.standardOkayChecks(resultOfFetch, true);
+
+        const expectedSnippet = { ...testQuestionSnippet };
+        
+        Reflect.deleteProperty(expectedSnippet.responseOptions, 'correctAnswerText');
+        const expectedResult = { ...testQuizBoost, questionSnippets: [expectedSnippet] };
+
+        expect(resultBody).to.deep.equal(expectedResult);
+
+        expect(cacheGetStub).to.have.been.calledOnceWithExactly(`ACCOUNT_ID::user-id`);
+
+        expect(findAccountsStub).to.have.been.calledOnceWithExactly('user-id');
+        expect(fetchBoostDetailsStub).to.have.been.calledOnceWithExactly('boost-id-1', true);
+
+        helper.expectNoCalls(sumAmountsStub, fetchTournScoresStub, cacheMultiGetStub);
     });
     
 });

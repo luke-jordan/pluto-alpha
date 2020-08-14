@@ -239,13 +239,12 @@ const calculateBoostYield = async (boostId) => {
     return boostAndSavedAmount.map((boostAmountDetails) => calculateYield(boostAmountDetails));
 };
 
-const fetchQuestionSnippets = async (snippetIds, role) => {
+const fetchQuestionSnippets = async (role, snippetIds) => {
     const questionSnippets = await persistence.fetchSnippets(snippetIds);
     logger('Got question snippets: ', questionSnippets);
 
     const transformedSnippets = questionSnippets.map((snippet) => {
         const { title, body, responseOptions } = snippet;
-        
         if (role !== 'SYSTEM_ADMIN') {
             Reflect.deleteProperty(responseOptions, 'correctAnswerText');
         }
@@ -284,8 +283,9 @@ module.exports.fetchBoostDetails = async (event) => {
             boost.boostYields = await calculateBoostYield(boostId);
         }
 
-        if(boost.gameParams && boost.gameParams.gameType === 'QUIZ') {
-            boost.questionSnippets = await fetchQuestionSnippets(questionSnippetIds, role);
+        if (boost.gameParams && boost.gameParams.gameType === 'QUIZ') {
+            const { questionSnippetIds } = boost.gameParams;
+            boost.questionSnippets = await fetchQuestionSnippets(role, questionSnippetIds);
         }
 
         logger('Returning assembled boost: ', boost);
