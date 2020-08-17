@@ -195,7 +195,7 @@ describe('*** UNIT TEST BOOST TOURNAMENT END HANDLING', () => {
         const mockBoost = mockTournamentBoost('DESTROY_IMAGE', {
                 UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
                 PENDING: ['percent_destroyed_above #{0::10000}'],
-                REDEEMED: ['percent_destroyed_in_first_N #{2::10000}'],
+                REDEEMED: ['percent_destroyed_in_first_N #{1::10000}'],
                 CONSOLED: ['status_at_expiry #{PENDING}']
         });
 
@@ -230,7 +230,7 @@ describe('*** UNIT TEST BOOST TOURNAMENT END HANDLING', () => {
         
         const expectedRedemptionMap = {
             [testBoostId]: {
-                'account-id-1': { userId: 'some-user-id1', status: 'PENDING', newStatus: 'REDEEMED' },
+                'account-id-1': { userId: 'some-user-id1', status: 'PENDING', newStatus: 'CONSOLED' },
                 'account-id-2': { userId: 'some-user-id2', status: 'PENDING', newStatus: 'REDEEMED' },
                 'account-id-3': { userId: 'some-user-id3', status: 'PENDING', newStatus: 'CONSOLED' }
             }
@@ -244,8 +244,8 @@ describe('*** UNIT TEST BOOST TOURNAMENT END HANDLING', () => {
             { boostId: testBoostId, accountIds, newStatus, logType: 'STATUS_CHANGE', logContext: { amountAwarded: { amount, unit: 'HUNDREDTH_CENT', currency: 'USD' } }}
         );
         
-        const expectedRedemptionUpdate = expectedUpdate(['account-id-1', 'account-id-2'], 'REDEEMED', 50000);
-        const expectedConsoledUpdate = expectedUpdate(['account-id-3'], 'CONSOLED', mockConsolationAmount);
+        const expectedRedemptionUpdate = expectedUpdate(['account-id-2'], 'REDEEMED', 50000);
+        const expectedConsoledUpdate = expectedUpdate(['account-id-1', 'account-id-3'], 'CONSOLED', mockConsolationAmount);
         const expectedExpiredUpdate = expectedUpdate(['account-id-4'], 'EXPIRED');
         Reflect.deleteProperty(expectedExpiredUpdate, 'logContext'); // as not necessary
 
