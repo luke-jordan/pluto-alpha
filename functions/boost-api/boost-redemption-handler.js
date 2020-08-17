@@ -399,14 +399,18 @@ const executeEventPublication = async (parameters) => {
     const { boost, affectedAccountsUserDict: affectedAccountMap, transferResults, transferInstructions, isRevocation, event } = parameters;
     
     const boostUpdateTimeMillis = parameters.boostUpdateTime ? parameters.boostUpdateTime.valueOf() : moment().valueOf();
-    const eventType = parameters.specifiedEventType || (isRevocation ? 'BOOST_REVOKED' : 'BOOST_REDEEMED');
     
-    logger('Publishing redemption promises, with transfer results: ', transferResults);
+    logger('Publishing redemption promises, with transfer results: ', transferResults, ' from instructions: ', transferInstructions);
     
     const publishPromises = Object.keys(affectedAccountMap).map((accountId) => {
         const { referenceAmounts } = transferInstructions;
         const boostAmount = isRevocation ? -referenceAmounts.boostAmount : referenceAmounts.boostAmount;
         
+        const { newStatus, userId } = affectedAccountMap[accountId];
+        
+        const eventFromStatus = `BOOST_${newStatus}`;
+        const eventType = parameters.specifiedEventType || eventFromStatus;
+            
         const context = {
             accountId,
             boostId: boost.boostId,
@@ -414,17 +418,22 @@ const executeEventPublication = async (parameters) => {
             boostCategory: boost.boostCategory,
             boostUpdateTimeMillis,
             boostAmount: `${boostAmount}::${boost.boostUnit}::${boost.boostCurrency}`,
-            amountFromBonus: `${referenceAmounts.amountFromBonus}::${boost.boostUnit}::${boost.boostCurrency}`,
+            amountFromBonus: `${transferResults.amountFromBonus}::${transferResults.unit}::${boost.boostCurrency}`,
             transferResults,
             triggeringEventContext: event.eventContext
         };
+
+        if (transferResults.consolationAmount) {
+            context.consolationAmount = `${transferResults.consolationAmount}::${transferResults.unit}::${boost.boostCurrency}`;
+        }
+
         const options = { context };
         if (event.accountId && affectedAccountMap[event.accountId]) {
             options.initiator = affectedAccountMap[event.accountId]['userId'];
         }
 
-        logger(`Publishing: ${affectedAccountMap[accountId]['userId']}::${eventType}`);
-        return publisher.publishUserEvent(affectedAccountMap[accountId]['userId'], eventType, options);
+        logger(`Publishing: ${userId}::${eventType}`);
+        return publisher.publishUserEvent(userId, eventType, options);
     });
 
     const publicationResult = await Promise.all(publishPromises);
@@ -440,15 +449,16 @@ const knitConsolationResults = (resultOfWinnerTransfers, resultOfConsolations) =
     const boostResult = resultOfWinnerTransfers[boostId];
     const consolationResult = resultOfConsolations[boostId];
 
-    const totalAmount = opsUtil.convertToUnit(boostResult.boostAmount, boostResult.unit, DEFAULT_UNIT) + 
-        (consolationResult.consolationAmount * consolationResult.accountTxIds.length);
+    // const totalAmount = opsUtil.convertToUnit(boostResult.boostAmount, boostResult.unit, DEFAULT_UNIT) + 
+    //     (consolationResult.consolationAmount * consolationResult.accountTxIds.length);
     const totalFromBonus = opsUtil.convertToUnit(boostResult.amountFromBonus, boostResult.unit, DEFAULT_UNIT) +
         (consolationResult.amountFromBonus * consolationResult.accountTxIds.length);
     
     const mergedResult = {
         accountTxIds: [...boostResult.accountTxIds, ...consolationResult.accountTxIds],
         floatTxIds: [...boostResult.floatTxIds, ...consolationResult.floatTxIds],
-        boostAmount: totalAmount,
+        boostAmount: opsUtil.convertToUnit(boostResult.boostAmount, boostResult.unit, DEFAULT_UNIT),
+        consolationAmount: consolationResult.consolationAmount,
         amountFromBonus: totalFromBonus,
         unit: DEFAULT_UNIT
     };

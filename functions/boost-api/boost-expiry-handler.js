@@ -150,10 +150,17 @@ const handleScoredBoostWinners = async (boost, winningAccounts, otherPlayerAccou
     const resultOfRedemptions = await boostRedemptionHandler.redeemOrRevokeBoosts(redemptionCall);
     logger('Result of redemptions for winners: ', JSON.stringify(resultOfRedemptions));
 
-    const updateInstructions = [{ boostId, accountIds: winningAccounts, logType: 'STATUS_CHANGE', newStatus: 'REDEEMED' }];
+    const redeemResult = resultOfRedemptions[boostId] || {}; // just in case
+    const logContext = (amount) => ({ amountAwarded: { amount, unit: redeemResult.unit, currency: boost.boostCurrency }}); 
+    
+    const winningLogContext = logContext(redeemResult.boostAmount);
+    const updateInstructions = [{ boostId, accountIds: winningAccounts, logType: 'STATUS_CHANGE', newStatus: 'REDEEMED', logContext: winningLogContext }];
+
     if (consolationAccounts.length > 0) {
-        updateInstructions.push({ boostId, accountIds: consolationAccounts, logType: 'STATUS_CHANGE', newStatus: 'CONSOLED' });
+        const consoleLogContext = logContext(redeemResult.consolationAmount);
+        updateInstructions.push({ boostId, accountIds: consolationAccounts, logType: 'STATUS_CHANGE', newStatus: 'CONSOLED', logContext: consoleLogContext });
     }
+
     logger('Setting winning accounts to redeemed via: ', JSON.stringify(updateInstructions));
     const resultOfRedeemUpdate = await persistence.updateBoostAccountStatus(updateInstructions);
     logger('And result of redemption account update: ', resultOfRedeemUpdate);

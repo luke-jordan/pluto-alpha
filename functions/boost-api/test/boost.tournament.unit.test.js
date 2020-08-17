@@ -73,7 +73,7 @@ const ACTIVE_BOOST_STATUS = ['CREATED', 'OFFERED', 'UNLOCKED', 'PENDING'];
 
 const testBoostId = uuid();
 
-describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
+describe('*** UNIT TEST BOOST TOURNAMENT END HANDLING', () => {
 
     beforeEach(() => (testHelper.resetStubs(
         fetchBoostStub, findAccountsStub, findBoostLogsStub, updateBoostAccountStub, redemptionHandlerStub, publishMultiUserStub,
@@ -129,6 +129,8 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
             'account-id-4': { userId: 'some-user-id4', status: 'PENDING' }
         }));
 
+        redemptionHandlerStub.resolves({ [testBoostId]: { boostAmount: mockBoost.boostAmount, unit: mockBoost.boostUnit }});
+
         const resultOfExpiry = await handler.handleExpiredBoost(testBoostId);
         expect(resultOfExpiry).to.exist;
         expect(resultOfExpiry).to.have.property('statusCode', 200);
@@ -157,7 +159,8 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
             boostId: testBoostId,
             accountIds: ['account-id-1', 'account-id-3'],
             newStatus: 'REDEEMED',
-            logType: 'STATUS_CHANGE'
+            logType: 'STATUS_CHANGE',
+            logContext: { amountAwarded: { amount: mockBoost.boostAmount, unit: 'HUNDREDTH_CENT', currency: 'USD' } }
         };
 
         const expectedExpiredUpdate = {
@@ -192,7 +195,7 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         const mockBoost = mockTournamentBoost('DESTROY_IMAGE', {
                 UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
                 PENDING: ['percent_destroyed_above #{0::10000}'],
-                REDEEMED: ['percent_destroyed_in_first_N #{2::10000}'],
+                REDEEMED: ['percent_destroyed_in_first_N #{1::10000}'],
                 CONSOLED: ['status_at_expiry #{PENDING}']
         });
 
@@ -213,9 +216,13 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         findAccountsStub.onSecondCall().resolves(formAccountResponse(mockAccountUserMap([1, 2, 3, 4], 'PENDING'))); // all
         findAccountsStub.onThirdCall().resolves(formAccountResponse(mockAccountUserMap([4], 'OFFERED')));
 
+        const mockConsolationAmount = 55 * 100; // $0.55
+        redemptionHandlerStub.resolves({ [testBoostId]: 
+            { result: 'SUCCESS', boostAmount: 50000, consolationAmount: mockConsolationAmount, amountFromBonus: 50000 + mockConsolationAmount, unit: 'HUNDREDTH_CENT' }
+        });
+
         const resultOfExpiry = await handler.handleExpiredBoost(testBoostId);
         expect(resultOfExpiry).to.exist;
-        expect(resultOfExpiry).to.have.property('statusCode', 200);
 
         // just testing the most important things, rest covered above
         expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testBoostId);
@@ -223,7 +230,7 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         
         const expectedRedemptionMap = {
             [testBoostId]: {
-                'account-id-1': { userId: 'some-user-id1', status: 'PENDING', newStatus: 'REDEEMED' },
+                'account-id-1': { userId: 'some-user-id1', status: 'PENDING', newStatus: 'CONSOLED' },
                 'account-id-2': { userId: 'some-user-id2', status: 'PENDING', newStatus: 'REDEEMED' },
                 'account-id-3': { userId: 'some-user-id3', status: 'PENDING', newStatus: 'CONSOLED' }
             }
@@ -233,11 +240,14 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         const redemptionCall = { redemptionBoosts: [mockBoost], affectedAccountsDict: expectedRedemptionMap, event: redemptionEvent };
         expect(redemptionHandlerStub).to.have.been.calledOnceWithExactly(redemptionCall);
 
-        const expectedUpdate = (accountIds, newStatus) => ({ boostId: testBoostId, accountIds, newStatus, logType: 'STATUS_CHANGE' });
-        const expectedRedemptionUpdate = expectedUpdate(['account-id-1', 'account-id-2'], 'REDEEMED');
-
-        const expectedConsoledUpdate = expectedUpdate(['account-id-3'], 'CONSOLED');
+        const expectedUpdate = (accountIds, newStatus, amount) => (
+            { boostId: testBoostId, accountIds, newStatus, logType: 'STATUS_CHANGE', logContext: { amountAwarded: { amount, unit: 'HUNDREDTH_CENT', currency: 'USD' } }}
+        );
+        
+        const expectedRedemptionUpdate = expectedUpdate(['account-id-2'], 'REDEEMED', 50000);
+        const expectedConsoledUpdate = expectedUpdate(['account-id-1', 'account-id-3'], 'CONSOLED', mockConsolationAmount);
         const expectedExpiredUpdate = expectedUpdate(['account-id-4'], 'EXPIRED');
+        Reflect.deleteProperty(expectedExpiredUpdate, 'logContext'); // as not necessary
 
         const expectedLogObject = (accountId, ranking, percentDestroyed) => ({ 
             boostId: testBoostId,
@@ -298,6 +308,8 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
 
         const expectedRewardAmount = 3 * mockPoolContrib * mockPercentAward;
         calculateAmountStub.returns({ boostAmount: expectedRewardAmount });
+
+        redemptionHandlerStub.resolves({ [testBoostId]: { boostAmount: expectedRewardAmount }});
 
         const resultOfExpiry = await handler.handleExpiredBoost(testBoostId);
         expect(resultOfExpiry).to.deep.equal({ statusCode: 200, boostsRedeemed: 2 });

@@ -12,6 +12,8 @@ resource "aws_lambda_function" "message_event_process" {
   runtime                        = "nodejs12.x"
   timeout                        = 900
   tags                           = {"environment"  = "${terraform.workspace}"}
+
+  reserved_concurrent_executions = 5
   
   s3_bucket = "pluto.lambda.${terraform.workspace}"
   s3_key = "user_messaging_api/${var.deploy_code_commit_hash}.zip"

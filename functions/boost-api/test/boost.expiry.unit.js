@@ -244,6 +244,8 @@ describe('*** UNIT TEST NON-TOURNAMENT EXPIRY ***', () => {
             'account-id-6': userStatus(6)
         }));
 
+        redemptionHandlerStub.resolves({ [testBoostId]: { boostAmount: 50000, unit: 'HUNDREDTH_CENT' } });
+
         expireIndividualOffersStub.resolves([]); // just needed to avoid spurious error
 
         const resultOfSelection = await handler.checkForBoostsToExpire({ boostId: testBoostId });
@@ -266,7 +268,8 @@ describe('*** UNIT TEST NON-TOURNAMENT EXPIRY ***', () => {
 
         const expectedUpdate = (newStatus, accounts) => ({ boostId: testBoostId, accountIds: accounts, newStatus, logType: 'STATUS_CHANGE' });
 
-        const expectedRedemptionUpdate = expectedUpdate('REDEEMED', winningAccounts);
+        const winnerLogContext = { amountAwarded: { amount: 50000, unit: 'HUNDREDTH_CENT', currency: 'USD' } };
+        const expectedRedemptionUpdate = { ...expectedUpdate('REDEEMED', winningAccounts), logContext: winnerLogContext };
         const expectedFailedUpdate = expectedUpdate('FAILED', ['account-id-1', 'account-id-2', 'account-id-3']);
         const expectedExpiredUpdate = expectedUpdate('EXPIRED', ['account-id-7']);
 
