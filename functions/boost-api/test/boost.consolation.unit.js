@@ -141,7 +141,8 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
             [testBoostId]: {
                 accountTxIds: mergedAccountTxIds,
                 floatTxIds: mergedFloatTxIds,
-                boostAmount: expectedTotalAmount, 
+                boostAmount: testBoostAmountHCent,
+                consolationAmount: expectedAmountInHCent, 
                 amountFromBonus: expectedTotalAmount,
                 unit: 'HUNDREDTH_CENT'
             }
@@ -154,6 +155,8 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
         expect(lamdbaInvokeStub).to.have.been.calledTwice;
 
         expect(publishStub.callCount).to.equal(4);
+        expect(publishStub).to.have.been.calledWith('user-id-1', 'BOOST_REDEEMED');
+        expect(publishStub).to.have.been.calledWith('user-id-2', 'BOOST_CONSOLED');
     });
 
     it('Awards random consolation prize to specified number of users', async () => {
@@ -194,6 +197,8 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
             boostAmount: testBoostAmountHCent,
             boostUnit: 'HUNDREDTH_CENT',
             boostCurrency: 'USD',
+            boostType: 'GAME',
+            boostCategory: 'QUIZ',
             fromFloatId: testFloatId,
             fromBonusPoolId: testBonusPoolId,
             rewardParameters
@@ -214,6 +219,9 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
             event: { }
         };
 
+        const mockUpdateMoment = moment();
+        momentStub.returns(mockUpdateMoment);
+
         const resultOfConsolation = await handler.redeemOrRevokeBoosts(mockEvent);
         expect(resultOfConsolation).to.exist;
 
@@ -226,7 +234,8 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
             [testBoostId]: {
                 accountTxIds: mergedAccountTxIds,
                 floatTxIds: mergedFloatTxIds,
-                boostAmount: expectedTotalAmount, 
+                boostAmount: testBoostAmountHCent,
+                consolationAmount: randomConsolationAmount,
                 amountFromBonus: expectedTotalAmount,
                 unit: 'HUNDREDTH_CENT'
             }
@@ -239,6 +248,22 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
         expect(lamdbaInvokeStub).to.have.been.calledTwice;
         
         expect(publishStub.callCount).to.equal(4);
+
+        const expectedBoostContext = {
+            accountId: 'account-id-2',
+            boostId: testBoostId,
+            boostType: 'GAME',
+            boostCategory: 'QUIZ',
+            boostUpdateTimeMillis: mockUpdateMoment.valueOf(),
+            boostAmount: `${testBoostAmountHCent}::HUNDREDTH_CENT::USD`,
+            consolationAmount: `${randomConsolationAmount}::HUNDREDTH_CENT::USD`,
+            amountFromBonus: `${expectedTotalAmount}::HUNDREDTH_CENT::USD`,
+            transferResults: expectedResult[testBoostId],
+            triggeringEventContext: undefined
+        };
+
+        expect(publishStub).to.have.been.calledWith('user-id-2', 'BOOST_CONSOLED', { context: expectedBoostContext });
+        
         mathRandomStub.restore();
     });
 
@@ -310,7 +335,8 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
             [testBoostId]: {
                 accountTxIds: mergedAccountTxIds,
                 floatTxIds: mergedFloatTxIds,
-                boostAmount: expectedAmount, 
+                boostAmount: testBoostAmountHCent,
+                consolationAmount: 10000, 
                 amountFromBonus: expectedAmount,
                 unit: 'HUNDREDTH_CENT'
             }
