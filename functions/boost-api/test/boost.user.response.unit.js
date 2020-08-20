@@ -87,7 +87,8 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
                 OFFERED: ['message_instruction_created'],
                 UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
                 REDEEMED: ['number_taps_greater_than #{10::10000}']
-            }
+            },
+            flags: []
         };
 
         fetchBoostStub.resolves(boostAsRelevant);
@@ -115,7 +116,7 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
         expect(redemptionHandlerStub).to.have.been.calledOnceWithExactly({
             redemptionBoosts: [boostAsRelevant],
             affectedAccountsDict: {
-                [testBoostId]: { [testAccountId]: { userId: testUserId }}
+                [testBoostId]: { [testAccountId]: { userId: testUserId, newStatus: 'REDEEMED' }}
             },
             event: { accountId: testAccountId, eventType: 'USER_GAME_COMPLETION' }
         });
@@ -213,8 +214,9 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
         expect(lamdbaInvokeStub).to.have.been.calledWithExactly(expiryInvocation);
     });
 
-    it('Fails when not enough taps', async () => {
+    it('Sends no status back if allows replays', async () => {
         const testEvent = {
+            eventType: 'USER_GAME_COMPLETION',
             boostId: testBoostId,
             numberTaps: 8,
             timeTakenMillis: 9000
@@ -223,8 +225,9 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
         const boostAsRelevant = {
             boostId: testBoostId,
             statusConditions: {
-                REDEEMED: ['number_taps_greater_than #{11::10000}']
-            }
+                REDEEMED: ['number_taps_greater_than #{10::10000}']
+            },
+            flags: ['ALLOW_REPEAT_PLAY']
         };
 
         fetchBoostStub.resolves(boostAsRelevant);
@@ -237,7 +240,53 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
         expect(result.body).to.deep.equal(JSON.stringify({ result: 'NO_CHANGE' }));
     });
 
-    it('Records response properly if it is a tournament for later, but no status change', async () => {
+    it('Send back failed if does not allow replay', async () => {
+        const testEvent = {
+            eventType: 'USER_GAME_COMPLETION',
+            boostId: testBoostId,
+            numberTaps: 8,
+            timeTakenMillis: 9000
+        };
+    
+        const boostAsRelevant = {
+            boostId: testBoostId,
+            boostType: 'GAME',
+            boostAmount: 10,
+            boostEndTime: moment().add(1, 'day'),
+            statusConditions: {
+                REDEEMED: ['number_taps_greater_than #{10::10000}'],
+                FAILED: ['number_taps_less_than #{10::10000}']
+            }
+        };
+
+        fetchBoostStub.resolves(boostAsRelevant);
+        getAccountIdForUserStub.resolves(testAccountId);
+        fetchAccountStatusStub.withArgs(testBoostId, testAccountId).resolves({ boostStatus: 'UNLOCKED' });
+
+        const expectedResult = { 
+            result: 'TRIGGERED', 
+            statusMet: ['FAILED'], 
+            endTime: boostAsRelevant.boostEndTime.valueOf()
+        };
+        const result = await handler.processUserBoostResponse(testHelper.wrapEvent(testEvent, testUserId, 'ORDINARY_USER'));
+        expect(result.body).to.deep.equal(JSON.stringify(expectedResult));
+
+        const expectedGameLog = { boostId: testBoostId, accountId: testAccountId, logType: 'GAME_RESPONSE', logContext: { numberTaps: 8, timeTakenMillis: 9000 }};
+        expect(insertBoostLogStub).to.have.been.calledOnceWithExactly([expectedGameLog]);
+
+        const expectedUpdateInstruction = {
+            boostId: testBoostId,
+            accountIds: [testAccountId],
+            newStatus: 'FAILED',
+            logType: 'STATUS_CHANGE',
+            logContext: { newStatus: 'FAILED', processType: 'USER', boostAmount: 10, submittedParams: testEvent }
+        };
+
+        expect(updateBoostAccountStub).to.have.been.calledOnceWithExactly([expectedUpdateInstruction]);
+        testHelper.expectNoCalls(redemptionHandlerStub, updateBoostRedeemedStub, lamdbaInvokeStub);
+    });
+
+    it('Records response properly if it is a tournament with replay, but no status change', async () => {
         const testEvent = {
             eventType: 'USER_GAME_COMPLETION',
             boostId: testBoostId,
@@ -257,12 +306,13 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
             boostEndTime: moment().endOf('day'),
             statusConditions: {
                 REDEEMED: ['number_taps_in_first_N #{2::10000}']
-            }
+            },
+            flags: ['ALLOW_REPEAT_PLAY']
         };
 
         fetchBoostStub.resolves(boostAsRelevant);
         getAccountIdForUserStub.resolves(testAccountId);
-        fetchAccountStatusStub.withArgs(testBoostId, testAccountId).resolves({ boostStatus: 'UNLOCKED' });
+        fetchAccountStatusStub.withArgs(testBoostId, testAccountId).resolves({ boostStatus: 'PENDING' });
         lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 202 }) });
 
         const expectedResult = { 
@@ -291,7 +341,7 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
         expect(lamdbaInvokeStub).to.not.have.been.called; // expiry will have no way to know
     });
 
-    it('Fails on boost not unlocked', async () => {
+    it('Fails on boost not unlocked and not allow repeat play', async () => {
         const testEvent = {
             boostId: testBoostId,
             numberTaps: 8,
@@ -302,16 +352,17 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
             boostId: testBoostId,
             statusConditions: {
                 REDEEMED: ['number_taps_greater_than #{10::10000}']
-            }
+            },
+            flags: []
         };
 
         fetchBoostStub.resolves(boostAsRelevant);
         getAccountIdForUserStub.resolves(testAccountId);
-        fetchAccountStatusStub.withArgs(testBoostId, testAccountId).resolves({ boostStatus: 'REDEEMED' });
+        fetchAccountStatusStub.withArgs(testBoostId, testAccountId).resolves({ boostStatus: 'PENDING' });
         
         const result = await handler.processUserBoostResponse(testHelper.wrapEvent(testEvent, testUserId, 'ORDINARY_USER'));
         expect(result.statusCode).to.deep.equal(400);
-        expect(result.body).to.deep.equal(JSON.stringify({ message: 'Boost is not unlocked', status: 'REDEEMED' }));
+        expect(result.body).to.deep.equal(JSON.stringify({ message: 'Boost is not open and repeat play not allowed', status: 'PENDING' }));
     });
 
     it('Fails if boost not offered to user', async () => {
@@ -419,7 +470,10 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
 
         const affectedAccountsDict = {
             [testBoostId]: {
-                [testAccountId]: { userId: testUserId }
+                [testAccountId]: {
+                    newStatus: 'REDEEMED',
+                    userId: testUserId
+                }
             }
         };
 

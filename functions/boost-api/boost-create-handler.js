@@ -71,26 +71,36 @@ const isInitialStatusBefore = (initialStatus, comparisonStatus) => {
         return true;
     }
 
-    const statusOrder = ['CREATED', 'OFFERED', 'UNLOCKED', 'PENDING', 'REDEEMED'];
+    const statusOrder = ['CREATED', 'OFFERED', 'UNLOCKED', 'PENDING', 'REDEEMED', 'CONSOLED', 'FAILED'];
     return statusOrder.indexOf(initialStatus) < statusOrder.indexOf(comparisonStatus);
 };
 
 const extractStatusConditions = (gameParams, initialStatus) => {
-    // all games start with this
     const statusConditions = {};
+    
+    const allowRepeatPlay = typeof gameParams.allowRepeatPlay === 'boolean' && gameParams.allowRepeatPlay; // to avoid truthiness
+    const isTournament = typeof gameParams.numberWinners === 'number';
+    
     if (isInitialStatusBefore(initialStatus, 'OFFERED')) {
         statusConditions['OFFERED'] = ['message_instruction_created'];
     }
     if (isInitialStatusBefore(initialStatus, 'UNLOCKED')) {
         statusConditions['UNLOCKED'] = [gameParams.entryCondition];
     }
-    if (isInitialStatusBefore(initialStatus, 'PENDING') && gameParams.numberWinners) {
-        // this is a tournament, so add a pending condition, which is taps or percent above 0
+    if (isInitialStatusBefore(initialStatus, 'PENDING') && isTournament) {
+        // this is a tournament, so add a pending condition, which is taps or percent above 0 [note: status is still 'pending' even if can play again]
         const relevantParam = gameParams.gameType === 'DESTROY_IMAGE' ? 'percent_destroyed_above' : 'number_taps_greater_than';
         statusConditions['PENDING'] = [`${relevantParam} #{0::${gameParams.timeLimitSeconds * 1000}}`];
     }
     if (isInitialStatusBefore(initialStatus, 'REDEEMED')) {
         statusConditions['REDEEMED'] = convertParamsToRedemptionCondition(gameParams);
+    }
+    if (isInitialStatusBefore(initialStatus, 'FAILED') && !isTournament && !allowRepeatPlay) {
+        const relevantParam = gameParams.gameType === 'DESTROY_IMAGE' ? 'percent_destroyed_below' : 'number_taps_less_than';
+        statusConditions['FAILED'] = [`${relevantParam} #{${gameParams.winningThreshold}::${gameParams.timeLimitSeconds * 1000}}`];
+    }
+    if (isInitialStatusBefore(initialStatus, 'CONSOLED') && gameParams.hasConsolationPrize) {
+        statusConditions['CONSOLED'] = ['status_at_expiry #{PENDING}'];
     }
     return statusConditions;
 };

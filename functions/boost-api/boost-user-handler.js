@@ -99,8 +99,12 @@ module.exports.processUserBoostResponse = async (event) => {
 
         const { boostStatus: currentStatus } = boostAccountJoin;
         const allowableStatus = ['CREATED', 'OFFERED', 'UNLOCKED']; // as long as not redeemed or pending, status check will do the rest
+        if (boost.flags && boost.flags.includes('ALLOW_REPEAT_PLAY')) {
+            allowableStatus.push('PENDING');
+        }
+
         if (!allowableStatus.includes(currentStatus)) {
-            return { statusCode: statusCodes('Bad Request'), body: JSON.stringify({ message: 'Boost is not unlocked', status: currentStatus }) };
+            return { statusCode: statusCodes('Bad Request'), body: JSON.stringify({ message: 'Boost is not open and repeat play not allowed', status: currentStatus }) };
         }
 
         if (boost.boostType === 'GAME' && sessionId) {
@@ -122,8 +126,6 @@ module.exports.processUserBoostResponse = async (event) => {
             return { statusCode: 200, body: JSON.stringify(returnResult)};
         }
 
-        const accountDict = { [boostId]: { [accountId]: { userId: systemWideUserId } }};
-
         const resultBody = { result: 'TRIGGERED', statusMet: statusResult, endTime: boost.boostEndTime.valueOf() };
 
         let resultOfTransfer = {};
@@ -131,6 +133,7 @@ module.exports.processUserBoostResponse = async (event) => {
 
         if (statusResult.includes('REDEEMED')) {
             // do this first, as if it fails, we do not want to proceed
+            const accountDict = { [boostId]: { [accountId]: { userId: systemWideUserId, newStatus: 'REDEEMED' } }};
             const redemptionCall = { redemptionBoosts: [boost], affectedAccountsDict: accountDict, event: { accountId, eventType }};
             resultOfTransfer = await boostRedemptionHandler.redeemOrRevokeBoosts(redemptionCall);
             logger('Boost process-redemption, result of transfer: ', resultOfTransfer);

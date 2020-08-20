@@ -98,6 +98,8 @@ module.exports.listUserBoosts = async (event) => {
 // ////////////////////////// BOOST DETAILS //////////////////////////////////////////////////
 // ////////////////////////////////////////////////////////////////////////////////////////////
 
+const isBoostRedeemedOrConsoled = ({ boostStatus }) => ['REDEEMED', 'CONSOLED'].includes(boostStatus); 
+
 const addLogsToBoost = (boost, allLogs, keyToUse) => {
     boost[keyToUse] = allLogs ? allLogs.filter((log) => log.boostId === boost.boostId) : [];
     return boost;
@@ -126,28 +128,29 @@ const addOutcomeLogsToBoosts = async (gameBoosts, allBoosts, accountId) => {
     return [...assembledGameBoosts, ...nonGameBoosts];
 };
 
-const obtainRedeemedOrActiveBoosts = async (accountId) => {
+const obtainPositivelyChangedBoosts = async (accountId) => {
     // todo : make this pattern more sensible, also do some sorting
     const changeCutOff = moment().subtract(config.get('time.changeCutOff.value'), config.get('time.changeCutOff.unit'));
-    const excludedForActive = ['CREATED', 'OFFERED', 'EXPIRED', 'FAILED'];
+    const excludedForPositivelyChanged = ['CREATED', 'OFFERED', 'EXPIRED', 'FAILED'];
     
-    const listActiveBoosts = await persistence.fetchUserBoosts(accountId, { changedSinceTime: changeCutOff, excludedStatus: excludedForActive });
+    const listActiveBoosts = await persistence.fetchUserBoosts(accountId, { changedSinceTime: changeCutOff, excludedStatus: excludedForPositivelyChanged });
     
     // makes a mess of a complex query to do either filter or query inside RDS call above, and may need it else
-    const unitConvertedBoosts = listActiveBoosts.filter((boost) => boost.boostStatus === 'REDEEMED' || moment(boost.endTime).isAfter(moment())).
+    const unitConvertedBoosts = listActiveBoosts.filter((boost) => isBoostRedeemedOrConsoled(boost) || moment(boost.endTime).isAfter(moment())).
         map(convertBoostToWholeNumber);
     logger('Have boosts after filter, and conversion: ', JSON.stringify(unitConvertedBoosts));
 
-    // if a boost has been redeemed, and it is a game, we attach game outcome logs to tell the user how they did, else just return all
-    const redeemedGameBoosts = unitConvertedBoosts.filter((boost) => boost.boostStatus === 'REDEEMED' && boost.boostType === 'GAME');
+    // if a boost has been redeemed (or has consolation prize), and it is a game, we attach game outcome logs to tell the user
+    // how they did, else just return all status logs but not the game ones
+    const redeemedGameBoosts = unitConvertedBoosts.filter((boost) => isBoostRedeemedOrConsoled(boost) && boost.boostType === 'GAME');
     return addOutcomeLogsToBoosts(redeemedGameBoosts, unitConvertedBoosts, accountId);    
 };
 
-const obtainExpiredOrFailedBoosts = async (accountId) => {
+const obtainNegativelyChangedBoosts = async (accountId) => {
     const expiredCutOff = moment().subtract(config.get('time.expiredCutOff.value'), config.get('time.expiredCutOff.unit'));
     logger('Fetching boosts since: ', expiredCutOff);
 
-    const excludedForExpired = ['CREATED', 'OFFERED', 'PENDING', 'UNLOCKED', 'REDEEMED'];
+    const excludedForExpired = ['CREATED', 'OFFERED', 'PENDING', 'UNLOCKED', 'REDEEMED', 'CONSOLED'];
     const listExpiredBoosts = await persistence.fetchUserBoosts(accountId, { changedSinceTime: expiredCutOff, excludedStatus: excludedForExpired });
     logger('From persistence, expired boosts: ', JSON.stringify(listExpiredBoosts));
 
@@ -176,7 +179,7 @@ module.exports.listChangedBoosts = async (event) => {
         const accountId = await fetchUserDefaultAccount(systemWideUserId);
 
         const [listActiveBoosts, listExpiredBoosts] = await Promise.all([
-            obtainRedeemedOrActiveBoosts(accountId), obtainExpiredOrFailedBoosts(accountId)
+            obtainPositivelyChangedBoosts(accountId), obtainNegativelyChangedBoosts(accountId)
         ]);
         
         return util.wrapHttpResponse([...listActiveBoosts, ...listExpiredBoosts]);

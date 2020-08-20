@@ -97,7 +97,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
 
         const mockAccountMap = {
             [testBoostId]: {
-                [testAccountId]: { userId: testUserId, status: 'OFFERED' }
+                [testAccountId]: { userId: testUserId, newStatus: 'REDEEMED' }
             }
         };
 
@@ -113,7 +113,8 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             [testBoostId]: {
                 ...mockTransferResult,
                 boostAmount: testAmount,
-                amountFromBonus: testAmount
+                amountFromBonus: testAmount,
+                unit: 'HUNDREDTH_CENT'
             }
         };
 
@@ -133,7 +134,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
                 boostType: 'SIMPLE',
                 boostCategory: 'SIMPLE_SAVE',
                 boostUpdateTimeMillis: mockMoment.valueOf(),
-                transferResults: { ...expectedAllocationResult[testBoostId], boostAmount: testAmount, amountFromBonus: testAmount },
+                transferResults: { ...expectedAllocationResult[testBoostId], boostAmount: testAmount, amountFromBonus: testAmount, unit: 'HUNDREDTH_CENT' },
                 triggeringEventContext: 'PROVIDED_CONTEXT'
             }
         };
@@ -239,8 +240,8 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
 
         const mockAccountMap = {
             [testBoostId]: {
-                [testReferredAccountId]: { userId: testReferredUserId, status: 'PENDING' },
-                [testReferringAccountId]: { userId: testReferringUserId, status: 'PENDING' }
+                [testReferredAccountId]: { userId: testReferredUserId, newStatus: 'REDEEMED' },
+                [testReferringAccountId]: { userId: testReferringUserId, newStatus: 'REDEEMED' }
             }
         };
 
@@ -255,7 +256,8 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             [testBoostId]: {
                 ...mockTransferResult,
                 boostAmount: testAmount,
-                amountFromBonus: testAmount
+                amountFromBonus: testAmount,
+                unit: 'HUNDREDTH_CENT'
             }
         };
 
@@ -331,7 +333,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
 
         const mockAccountMap = {
             [testBoostId]: {
-                [testAccountId]: { userId: testUserId, status: 'REDEEMED' }
+                [testAccountId]: { userId: testUserId, newStatus: 'REDEEMED' }
             }
         };
 
@@ -348,7 +350,8 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             [testBoostId]: {
                 ...mockTransferResult[testBoostId],
                 boostAmount: testAmount,
-                amountFromBonus: testAmount
+                amountFromBonus: testAmount,
+                unit: 'HUNDREDTH_CENT'
             }
         };
 

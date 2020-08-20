@@ -206,10 +206,14 @@ resource "aws_iam_policy" "lambda_invoke_ops_warmup_access" {
                 "${aws_lambda_function.balance_fetch_wrapper.arn}",
                 "${aws_lambda_function.save_initiate.arn}",
                 "${aws_lambda_function.save_payment_check.arn}",
+                "${aws_lambda_function.save_payment_complete.arn}",
                 "${aws_lambda_function.message_user_fetch.arn}",
                 "${aws_lambda_function.user_history_list.arn}",
+                "${aws_lambda_function.boost_user_list.arn}",
                 "${aws_lambda_function.referral_verify.arn}",
-                "${aws_lambda_function.user_history_aggregate.arn}"
+                "${aws_lambda_function.user_history_aggregate.arn}",
+                "${aws_lambda_function.friend_list.arn}",
+                "${aws_lambda_function.user_save_heat_fetch.arn}"
             ],
             "Condition": {
                 "StringEquals": {

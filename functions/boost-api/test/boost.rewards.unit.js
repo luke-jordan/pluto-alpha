@@ -108,7 +108,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
 
         const mockAccountMap = {
             [testBoostId]: {
-                [testAccountId]: { userId: testUserId, status: 'OFFERED' }
+                [testAccountId]: { userId: testUserId, newStatus: 'REDEEMED' }
             }
         };
 
@@ -126,7 +126,8 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             [testBoostId]: {
                 ...mockAllocationResult[testBoostId], 
                 boostAmount: testCalculatedAmount, 
-                amountFromBonus: testCalculatedAmount
+                amountFromBonus: testCalculatedAmount,
+                unit: 'HUNDREDTH_CENT'
             }
         };
         expect(resultOfRedemption).to.deep.equal(expectedResult);
@@ -221,7 +222,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
 
         const mockAccountMap = {
             [testBoostId]: {
-                [testAccountId]: { userId: testUserId, status: 'OFFERED' }
+                [testAccountId]: { userId: testUserId, newStatus: 'REDEEMED' }
             }
         };
 
@@ -247,7 +248,8 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             [testBoostId]: {
                 ...mockAllocationResult[testBoostId],
                 amountFromBonus: testBonusPoolAmount,
-                boostAmount: testCalculatedAmount
+                boostAmount: testCalculatedAmount,
+                unit: 'HUNDREDTH_CENT'
             }
         };
 

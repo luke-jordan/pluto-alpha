@@ -101,6 +101,26 @@ const handleActiveTx = async (activeTxId, activeTx = null) => {
     return JSON.parse(cacheResult);
 };
 
+const safeCheckCache = async (activeTxId) => {
+    // redis connection dropping because of known lambda-elasticache issues are curious spurious fatal errors here
+    try {
+        const activeTx = await redis.get(activeTxId);
+        logger('Got cached transaction state:', activeTx);
+        return activeTx;
+    } catch (err) {
+        logger('Error on transaction handling');
+        return null;
+    }
+};
+
+const safeSetCache = async (activeTxId, value) => {
+    try {
+        await redis.set(activeTxId, value, 'EX', config.get('cache.ttls.float'));
+    } catch (err) {
+        logger('Erorr setting cache');
+    }
+};
+
 /**
  * Method in need of some cleaning up / refactoring to simplify cases, but which is purposefully highly flexible. Cases:
  * Allocations from bonus pool to users; allocation from client pool to users; allocation from company pool to users.
@@ -120,13 +140,12 @@ const handleInstruction = async (instruction) => {
     logger('Received transfer instruction, recipients: ', instruction.recipients);
 
     const activeTxId = uuid5(JSON.stringify(instruction), config.get('cache.namespace'));
-    const activeTx = await redis.get(activeTxId);
-    logger('Got cached transaction state:', activeTx);
+    const activeTx = await safeCheckCache(activeTxId);
     if (activeTx) {
         return handleActiveTx(activeTxId, activeTx);
     }
 
-    await redis.set(activeTxId, 'PENDING', 'EX', config.get('cache.ttls.float'));
+    await safeSetCache(activeTxId, 'PENDING');
 
     const nonUserAllocRequests = []; // for bonus pool and client share
     const userAllocRequests = [];
@@ -206,7 +225,7 @@ const handleInstruction = async (instruction) => {
         }
     };
 
-    await redis.set(activeTxId, JSON.stringify(finalResult), 'EX', config.get('cache.ttls.float'));
+    await safeSetCache(activeTxId, JSON.stringify(finalResult));
     return finalResult;
 };
 

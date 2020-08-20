@@ -237,11 +237,14 @@ describe('*** UNIT TEST NON-TOURNAMENT EXPIRY ***', () => {
 
         findAccountsStub.onFirstCall().resolves(formAccountResponse(accountsForBoost));
 
+        const userStatus = (index) => ({ userId: `user-id-${index}`, status: 'PENDING' });
         findAccountsStub.onSecondCall().resolves(formAccountResponse({ // winners
-            'account-id-4': { userId: 'user-id-4', status: 'PENDING' },
-            'account-id-5': { userId: 'user-id-5', status: 'PENDING' },
-            'account-id-6': { userId: 'user-id-6', status: 'PENDING' }
+            'account-id-4': userStatus(4),
+            'account-id-5': userStatus(5),
+            'account-id-6': userStatus(6)
         }));
+
+        redemptionHandlerStub.resolves({ [testBoostId]: { boostAmount: 50000, unit: 'HUNDREDTH_CENT' } });
 
         expireIndividualOffersStub.resolves([]); // just needed to avoid spurious error
 
@@ -254,9 +257,19 @@ describe('*** UNIT TEST NON-TOURNAMENT EXPIRY ***', () => {
         expect(findAccountsStub).to.have.been.calledWithExactly({ boostIds: [testBoostId], status: ['OFFERED', 'PENDING'] });
         expect(findAccountsStub).to.have.been.calledWithExactly({ boostIds: [testBoostId], status: ACTIVE_BOOST_STATUS, accountIds: winningAccounts });
 
+
+        const redemptionStatus = (index) => ({ ...userStatus(index), newStatus: 'REDEEMED' });
+        const mockRedemptionMap = winningAccounts.reduce((obj, accountId, index) => ({ ...obj, [accountId]: redemptionStatus(index + 4) }), {}); 
+        expect(redemptionHandlerStub).to.have.been.calledOnceWithExactly({
+            redemptionBoosts: [mockBoost], 
+            affectedAccountsDict: { [testBoostId]: mockRedemptionMap }, 
+            event: { eventType: 'BOOST_RANDOM_SELECTED', boostId: testBoostId }
+        });
+
         const expectedUpdate = (newStatus, accounts) => ({ boostId: testBoostId, accountIds: accounts, newStatus, logType: 'STATUS_CHANGE' });
 
-        const expectedRedemptionUpdate = expectedUpdate('REDEEMED', winningAccounts);
+        const winnerLogContext = { amountAwarded: { amount: 50000, unit: 'HUNDREDTH_CENT', currency: 'USD' } };
+        const expectedRedemptionUpdate = { ...expectedUpdate('REDEEMED', winningAccounts), logContext: winnerLogContext };
         const expectedFailedUpdate = expectedUpdate('FAILED', ['account-id-1', 'account-id-2', 'account-id-3']);
         const expectedExpiredUpdate = expectedUpdate('EXPIRED', ['account-id-7']);
 
