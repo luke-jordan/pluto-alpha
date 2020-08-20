@@ -20,7 +20,7 @@ const insertBoostLogStub = sinon.stub();
 
 const redemptionHandlerStub = sinon.stub();
 
-const finalScoreStub = sinon.stub();
+const fetchFinalScoreStub = sinon.stub();
 
 const lamdbaInvokeStub = sinon.stub();
 
@@ -45,7 +45,7 @@ const handler = proxyquire('../boost-user-handler', {
         'redeemOrRevokeBoosts': redemptionHandlerStub
     },
     './cache-handler': {
-        'fetchOrValidateFinalScore': finalScoreStub
+        'fetchOrValidateFinalScore': fetchFinalScoreStub
     },
     'aws-sdk': {
         'Lambda': MockLambdaClient,
@@ -384,7 +384,7 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
             }
         };
 
-        finalScoreStub.resolves(10);
+        fetchFinalScoreStub.resolves(10);
 
         fetchBoostStub.resolves(boostAsRelevant);
         getAccountIdForUserStub.resolves(testAccountId);
@@ -413,7 +413,7 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
         const resultBody = testHelper.standardOkayChecks(resultOfCompletion);
         expect(resultBody).to.deep.equal(expectedResult);
 
-        expect(finalScoreStub).to.have.been.calledOnceWithExactly(testSessionId, 10);
+        expect(fetchFinalScoreStub).to.have.been.calledOnceWithExactly(testSessionId, 10);
 
         expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testBoostId);
 

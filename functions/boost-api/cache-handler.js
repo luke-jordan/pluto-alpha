@@ -68,7 +68,7 @@ const handleGameInitialisation = async (boostId, systemWideUserId) => {
         status: 'ACTIVE',
         gameEvents: [{
             timestamp: currentTime,
-            numberTaps: 0
+            userScore: 0
         }]
     });
 
@@ -103,7 +103,7 @@ const isValidGameResult = (gameSession, currentTime) => {
     return true;
 };
 
-const handleInterimGameResult = async ({ sessionId, numberTaps }) => {
+const handleInterimGameResult = async ({ sessionId, userScore }) => {
     logger('Storing interim game results in cache');
     const currentTime = moment();
 
@@ -115,7 +115,7 @@ const handleInterimGameResult = async ({ sessionId, numberTaps }) => {
         return { statusCode: statusCodes('Bad Request') };
     }
 
-    cachedGameSession.gameEvents.push({ timestamp: currentTime.valueOf(), numberTaps });
+    cachedGameSession.gameEvents.push({ timestamp: currentTime.valueOf(), userScore });
     logger('New game session: ', cachedGameSession);
 
     await redisSet(cacheKey, JSON.stringify(cachedGameSession), 'EX', config.get('cache.ttl.gameSession'));
@@ -129,7 +129,7 @@ const handleInterimGameResult = async ({ sessionId, numberTaps }) => {
  * @property {string} boostId The boost from which the game prize is to be awarded from.
  * @property {string} eventType Identifies the event. Valid values are INITIALISE and GAME_IN_PROGRESSS.
  * @property {string} sessionId Sent with GAME_IN_PROGRESS events. The session id returned during game initialisation.
- * @property {number} numberTaps Also sent with GAME_IN_PROGRESS. The users score.
+ * @property {number} userScore Also sent with GAME_IN_PROGRESS. The users score.
  */
 module.exports.cacheGameResponse = async (event) => {
     try {
@@ -203,13 +203,13 @@ module.exports.fetchOrValidateFinalScore = async (sessionId, finalScore = null) 
 
     // Validate if finalScore is consistent with cached scores or return last cached score
     const sessionGameResults = cachedGameSession.gameEvents;
-    const { numberTaps } = sessionGameResults[sessionGameResults.length - 1];
-    logger('Last cached score: ', numberTaps);
+    const { userScore } = sessionGameResults[sessionGameResults.length - 1];
+    logger('Last cached score: ', userScore);
     
-    const maxTapsPerInterval = config.get('gameSession.maxTapsPerInterval');
-    if (finalScore && (finalScore - numberTaps) > maxTapsPerInterval) {
+    const maxScorePerInterval = config.get('gameSession.maxScorePerInterval');
+    if (finalScore && (finalScore - userScore) > maxScorePerInterval) {
         throw new Error('Inconsistent final score');
     }
 
-    return finalScore ? finalScore : numberTaps;
+    return finalScore ? finalScore : userScore;
 };

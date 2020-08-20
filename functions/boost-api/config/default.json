@@ -71,6 +71,6 @@
         "endpoint": "<insert here>"
     },
     "gameSession": {
-        "maxTapsPerInterval": 1
+        "maxScorePerInterval": 1
     }
 }

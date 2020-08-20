@@ -76,12 +76,12 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
         fetchAccountStatusStub, updateBoostAccountStub, updateBoostRedeemedStub, getAccountIdForUserStub, insertBoostLogStub,
         redisDelStub, redisKeysStub));
 
-    it('Initialises game session, sets up cache', async () => {
+    it('Initialises match objects game properly', async () => {
         const boostEndTime = moment().add(1, 'day').format();
         const testCurrentTime = moment().valueOf();
         const expectedEndTime = testCurrentTime + (60 * 1000); // time limit seconds to milliseconds
 
-        const mockGameBoost = {
+        const boostAsRelevant = {
             boostId: testBoostId,
             label: 'Match Objects',
             boostType: 'GAME',
@@ -95,7 +95,7 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
             }
         };
 
-        redisGetStub.resolves(JSON.stringify(mockGameBoost));
+        redisGetStub.resolves(JSON.stringify(boostAsRelevant));
 
         momentStub.returns({ valueOf: () => testCurrentTime });
         uuidStub.returns(testSessionId);
@@ -104,8 +104,8 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
         const testEvent = testHelper.wrapEvent(testEventBody, testSystemId, 'ORDINARY_USER');
 
         const resultOfInit = await handler.cacheGameResponse(testEvent);
-
         const resultBody = testHelper.standardOkayChecks(resultOfInit, false);
+
         expect(resultBody).to.deep.equal({ sessionId: testSessionId });
 
         const boostCacheKey = `${config.get('cache.prefix.gameBoost')}::${testBoostId}`;
@@ -121,7 +121,7 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
             status: 'ACTIVE',
             gameEvents: [{
                 timestamp: testCurrentTime,
-                numberTaps: 0
+                userScore: 0
             }]
         });
 
@@ -142,7 +142,7 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
             status: 'ACTIVE',
             gameEvents: [{
                 timestamp: testStartTime.valueOf(),
-                numberTaps: 0
+                userScore: 0
             }]
         };
 
@@ -155,13 +155,14 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
             eventType: 'GAME_IN_PROGRESS',
             boostId: testBoostId,
             sessionId: testSessionId,
-            numberTaps: 8
+            userScore: 8
         };
 
         const testEvent = testHelper.wrapEvent(testEventBody, testSystemId, 'ORDINARY_USER');
-        const resultOfCache = await handler.cacheGameResponse(testEvent);
 
+        const resultOfCache = await handler.cacheGameResponse(testEvent);
         const resultBody = testHelper.standardOkayChecks(resultOfCache, false);
+
         expect(resultBody).to.deep.equal({ result: 'SUCCESS' });
 
         const sessionCacheKey = `${config.get('cache.prefix.gameSession')}::${testSessionId}`;
@@ -174,8 +175,8 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
             gameEndTime: gameEndTime.valueOf(),
             status: 'ACTIVE',
             gameEvents: [
-                { timestamp: testStartTime.valueOf(), numberTaps: 0 },
-                { timestamp: testCurrentTime.valueOf(), numberTaps: 8 }
+                { timestamp: testStartTime.valueOf(), userScore: 0 },
+                { timestamp: testCurrentTime.valueOf(), userScore: 8 }
             ]
         });
 
@@ -196,7 +197,7 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
             status: 'ACTIVE',
             gameEvents: [{
                 timestamp: testStartTime,
-                numberTaps: 0
+                userScore: 0
             }]
         };
 
@@ -211,7 +212,7 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
             boostId: testBoostId,
             eventType: 'GAME_IN_PROGRESS',
             sessionId: testSessionId,
-            numberTaps: 13
+            userScore: 13
         };
 
         const testEvent = testHelper.wrapEvent(testEventBody, testSystemId, 'ORDINARY_USER');
@@ -234,9 +235,9 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
             gameEndTime: gameEndTime.valueOf(),
             status: 'ACTIVE',
             gameEvents: [
-                { timestamp: moment().valueOf(), numberTaps: 0 },
-                { timestamp: moment().valueOf(), numberTaps: 8 },
-                { timestamp: moment().valueOf(), numberTaps: 16 }
+                { timestamp: moment().valueOf(), userScore: 0 },
+                { timestamp: moment().valueOf(), userScore: 8 },
+                { timestamp: moment().valueOf(), userScore: 16 }
             ]
         };
 
@@ -269,9 +270,9 @@ describe('*** UNIT TEST BOOST GAME CACHE OPERATIONS ***', () => {
             gameEndTime: moment().valueOf(),
             status: 'FINALIZING',
             gameEvents: [
-                { timestamp: moment().valueOf(), numberTaps: 3 },
-                { timestamp: moment().valueOf(), numberTaps: 5 },
-                { timestamp: moment().valueOf(), numberTaps: 8 }
+                { timestamp: moment().valueOf(), userScore: 3 },
+                { timestamp: moment().valueOf(), userScore: 5 },
+                { timestamp: moment().valueOf(), userScore: 8 }
             ]
         });
 

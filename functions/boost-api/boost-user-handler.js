@@ -82,10 +82,6 @@ module.exports.processUserBoostResponse = async (event) => {
         const { systemWideUserId } = userDetails;
         const { boostId, sessionId, eventType, numberTaps } = params;
 
-        if (sessionId) {
-            params.numberTaps = await cacheHandler.fetchOrValidateFinalScore(sessionId, numberTaps);
-        }
-
         // todo : make sure boost is available for this account ID
         const [boost, accountId] = await Promise.all([
             persistence.fetchBoost(boostId), 
@@ -94,6 +90,12 @@ module.exports.processUserBoostResponse = async (event) => {
 
         logger('Fetched boost: ', boost);
         logger('Relevant account ID: ', accountId);
+
+        if (boost.boostType === 'GAME' && sessionId) {
+            if (boost.gameParams.gameType === 'MATCH_OBJECTS') {
+                params.numberTaps = await cacheHandler.fetchOrValidateFinalScore(sessionId, numberTaps);
+            }
+        }
 
         const boostAccountJoin = await persistence.fetchCurrentBoostStatus(boostId, accountId);
         logger('And current boost status: ', boostAccountJoin);
