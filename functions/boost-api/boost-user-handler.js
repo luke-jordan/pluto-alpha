@@ -91,12 +91,6 @@ module.exports.processUserBoostResponse = async (event) => {
         logger('Fetched boost: ', boost);
         logger('Relevant account ID: ', accountId);
 
-        if (boost.boostType === 'GAME' && sessionId) {
-            if (boost.gameParams.gameType === 'MATCH_OBJECTS') {
-                params.numberTaps = await cacheHandler.fetchOrValidateFinalScore(sessionId, numberTaps);
-            }
-        }
-
         const boostAccountJoin = await persistence.fetchCurrentBoostStatus(boostId, accountId);
         logger('And current boost status: ', boostAccountJoin);
         if (!boostAccountJoin) {
@@ -107,6 +101,12 @@ module.exports.processUserBoostResponse = async (event) => {
         const allowableStatus = ['CREATED', 'OFFERED', 'UNLOCKED']; // as long as not redeemed or pending, status check will do the rest
         if (!allowableStatus.includes(currentStatus)) {
             return { statusCode: statusCodes('Bad Request'), body: JSON.stringify({ message: 'Boost is not unlocked', status: currentStatus }) };
+        }
+
+        if (boost.boostType === 'GAME' && sessionId) {
+            if (boost.gameParams.gameType === 'MATCH_OBJECTS') {
+                params.numberTaps = await cacheHandler.fetchOrValidateFinalScore(sessionId, numberTaps);
+            }
         }
 
         const statusEvent = { eventType, eventContext: params };
