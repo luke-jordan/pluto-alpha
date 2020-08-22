@@ -54,11 +54,13 @@ const generateMultiplier = (distribution) => {
 };
 
 const calculateRandomBoostAmount = ({ boostAmount, boostUnit, rewardParameters }) => {
+    logger('Calculating random boost amount, passed boost unit: ', boostUnit, ' and reference amount (in unit): ', boostAmount);
     const { distribution, realizedRewardModuloZeroTarget, minRewardAmountPerUser } = rewardParameters;
 
     const maxBoostAmount = opsUtil.convertToUnit(boostAmount, boostUnit, DEFAULT_UNIT);
     const minBoostAmount = minRewardAmountPerUser 
         ? opsUtil.convertToUnit(minRewardAmountPerUser.amount, minRewardAmountPerUser.unit, DEFAULT_UNIT) : 0;
+    logger('Random reward, max amount: ', maxBoostAmount, ' min amount: ', minBoostAmount);
     
     const multiplier = generateMultiplier(distribution);
     logger('Random award, generated multiplier: ', multiplier);
@@ -172,8 +174,7 @@ module.exports.calculateBoostAmount = (boost, pooledContributionMap) => {
     }
 
     if (rewardType === 'RANDOM') {
-        const boostAmount = opsUtil.convertToUnit(boost.boostAmount, boostUnit, DEFAULT_UNIT);
-        const calculatedAmount = calculateRandomBoostAmount({ boostAmount, boostUnit, rewardParameters });
+        const calculatedAmount = calculateRandomBoostAmount({ boostAmount: boost.boostAmount, boostUnit, rewardParameters });
         return { boostAmount: calculatedAmount, amountFromBonus: calculatedAmount };
     }
 
@@ -299,6 +300,8 @@ const generateFloatTransferInstructions = async (affectedAccountDict, boost, rev
     const recipientAccounts = accountIds.filter((accountId) => accountUserMap[accountId].newStatus === 'REDEEMED');
 
     const referenceAmounts = exports.calculateBoostAmount(boost, pooledContributionMap);
+    logger('For boost ', boost.label, ' received amounts: ', JSON.stringify(referenceAmounts));
+    
     const { boostAmount } = referenceAmounts;
     logger('Calculated amounts for boost: ', boostAmount);
     
