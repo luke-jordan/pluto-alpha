@@ -99,8 +99,8 @@ describe('*** UNIT TESTING CREATE REFERRAL CODE ***', () => {
         shareLink: 'https://jupitersave.com'
     };
 
-    const expectedDynamoInsertionUserCode = {
-        referralCode: sampleRandomWord.toUpperCase().trim(),
+    const expectedDynamoInsertionUserCode = (referralCode = sampleRandomWord.toUpperCase().trim()) => ({
+        referralCode,
         codeType: 'USER',
         persistedTimeMillis: testPersistenceMoment.valueOf(),
         expiryTimeMillis: testExpiryTimeLong.valueOf(),
@@ -112,15 +112,15 @@ describe('*** UNIT TESTING CREATE REFERRAL CODE ***', () => {
             bonusPoolId: 'primary_bonus_pool',
             shareLink: 'https://jupitersave.com'
         }
-    };
+    });
 
-    const expectedDynamoProfileUpdateParams = {
+    const expectedDynamoProfileUpdateParams = (referralCode = sampleRandomWord.toUpperCase().trim()) => ({
         tableName: config.get('tables.userProfile'),
         itemKey: { systemWideUserId: testOrdinaryUserId },
         updateExpression: 'set referral_code = :rc',
-        substitutionDict: { ':rc': sampleRandomWord.toUpperCase().trim() },
+        substitutionDict: { ':rc': referralCode },
         returnOnlyUpdated: true
-    };
+    });
 
     beforeEach(() => testHelper.resetStubs(fetchRowStub, insertRowStub, updateRowStub, randomStub));
 
@@ -138,7 +138,8 @@ describe('*** UNIT TESTING CREATE REFERRAL CODE ***', () => {
     });
 
     it('Happy path referral code creation, user code, no word conflict', async () => {
-        randomStub.returns(sampleRandomWord);
+        randomStub.returns('THISRANDOMWORD');
+
         const { clientId, floatId } = stdCountryClientFloat;
         fetchRowStub.withArgs(clientFloatTable, { clientId, floatId }).resolves({ userReferralDefaults });
         fetchRowStub.withArgs(activeCodeTable, { countryCode: testCountryCode, referralCode: sampleRandomWord.toUpperCase() }, ['referralCode']).resolves({});
@@ -149,24 +150,28 @@ describe('*** UNIT TESTING CREATE REFERRAL CODE ***', () => {
         insertRowStub.resolves({ result: 'SUCCESS' });
         updateRowStub.withArgs(expectedDynamoProfileUpdateParams).resolves({ referralCode: sampleRandomWord.toUpperCase() });
         
-        logger('Expecting: ', expectedDynamoInsertionUserCode);
         const resultOfCall = await handler.create(userOpeningInvocation);
 
         const bodyOfResult = testHelper.standardOkayChecks(resultOfCall);
         expect(bodyOfResult).to.deep.equal({ persistedTimeMillis: testPersistenceMoment.valueOf() });
         
-        logger('Expected: ', expectedDynamoInsertionUserCode);
-        logger('Called:', insertRowStub.getCall(0).args[2]);
+        // logger('Expected: ', expectedDynamoInsertionUserCode);
+        // logger('Called:', insertRowStub.getCall(0).args[2]);
 
-        expect(insertRowStub).to.have.been.calledOnceWith(activeCodeTable, ['referralCode'], expectedDynamoInsertionUserCode);
-        expect(updateRowStub).to.have.been.calledOnceWith(expectedDynamoProfileUpdateParams);
+        const expectedReferralCode = `THISRANDOMWORD${moment().format('DD')}`;
+        expect(insertRowStub).to.have.been.calledOnceWith(activeCodeTable, ['referralCode'], expectedDynamoInsertionUserCode(expectedReferralCode));
+        expect(updateRowStub).to.have.been.calledOnceWith(expectedDynamoProfileUpdateParams(expectedReferralCode));
     });
 
     it('Happy path referral code creation, user code, handles initial word conflict', async () => {
         randomStub.onFirstCall().returns('takenWord');
-        fetchRowStub.withArgs(activeCodeTable, { countryCode: testCountryCode, referralCode: 'TAKENWORD' }, ['referralCode']).resolves({ referralCode: 'TAKENWORD' });
+
+        const daySuffix = moment().format('DD');
+        const acceptableCode = `${sampleRandomWord.toUpperCase().trim()}${daySuffix}`;
+        
+        fetchRowStub.withArgs(activeCodeTable, { countryCode: testCountryCode, referralCode: `TAKENWORD${daySuffix}` }, ['referralCode']).resolves({ referralCode: 'TAKENWORD' });
         randomStub.onSecondCall().returns(sampleRandomWord);
-        fetchRowStub.withArgs(activeCodeTable, { countryCode: testCountryCode, referralCode: sampleRandomWord }, ['referralCode']).resolves({});
+        fetchRowStub.withArgs(activeCodeTable, { countryCode: testCountryCode, referralCode: acceptableCode }, ['referralCode']).resolves({});
         
         momentStub.withArgs().returns(testPersistenceMoment);
         momentStub.withArgs([2050, 0, 1]).returns(testExpiryTimeLong);
@@ -174,16 +179,20 @@ describe('*** UNIT TESTING CREATE REFERRAL CODE ***', () => {
         const { clientId, floatId } = stdCountryClientFloat;
         fetchRowStub.withArgs(clientFloatTable, { clientId, floatId }).resolves({ userReferralDefaults });
         
-        insertRowStub.withArgs(activeCodeTable, ['referralCode'], expectedDynamoInsertionUserCode).resolves({ result: 'SUCCESS' });
-        updateRowStub.withArgs(expectedDynamoProfileUpdateParams).resolves({ referralCode: sampleRandomWord.toUpperCase() });
+        insertRowStub.resolves({ result: 'SUCCESS' });
+        updateRowStub.resolves({ referralCode: sampleRandomWord.toUpperCase() });
 
         const resultOfCall = await handler.create(userOpeningInvocation);
         const bodyOfResult = testHelper.standardOkayChecks(resultOfCall);
 
         expect(bodyOfResult).to.deep.equal({ persistedTimeMillis: testPersistenceMoment.valueOf() });
         expect(fetchRowStub).to.have.been.calledThrice;
-        expect(insertRowStub).to.have.been.calledOnce;
-        expect(updateRowStub).to.have.been.calledOnceWith(expectedDynamoProfileUpdateParams);
+
+        const expectedInsertArg = expectedDynamoInsertionUserCode(acceptableCode);
+        const expectedUpdateArg = expectedDynamoProfileUpdateParams(acceptableCode);
+
+        expect(insertRowStub).to.have.been.calledOnceWith(activeCodeTable, ['referralCode'], expectedInsertArg);
+        expect(updateRowStub).to.have.been.calledOnceWith(expectedUpdateArg);
     });
 
     it('Handles case changes and whitespace properly', async () => {

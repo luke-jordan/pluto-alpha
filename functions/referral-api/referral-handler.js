@@ -24,11 +24,11 @@ const isCodeAvailable = async (referralCode, countryCode) => {
 };
 
 const generateUnusedCode = async (countryCode) => {
-    logger('No referral code passed, so need to generate one randomly');
+    logger('No referral code passed, so need to generate one randomly, including two digits for the day');
     let attemptedWord = null;
     let unusedWordFound = false;
     while (!unusedWordFound) {
-        attemptedWord = randomWord().toUpperCase().trim();
+        attemptedWord = `${randomWord().toUpperCase().trim()}${moment().format('DD')}`;
         logger('Trying this word: ', attemptedWord);
         const codeExistsTest = await dynamo.fetchSingleRow(config.get('tables.activeCodes'), { countryCode, referralCode: attemptedWord }, ['referralCode']);
         unusedWordFound = opsUtil.isObjectEmpty(codeExistsTest);
@@ -167,6 +167,7 @@ module.exports.create = async (event) => {
         logger('Row being inserted: ', rowToInsert);
         
         const insertionResult = await dynamo.insertNewRow(config.get('tables.activeCodes'), ['referralCode'], rowToInsert);
+        logger('Insertion result: ', insertionResult);
 
         if (insertionResult && insertionResult.result === 'SUCCESS') {
             if (params.codeType === 'USER') {
