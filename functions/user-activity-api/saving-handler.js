@@ -203,10 +203,7 @@ module.exports.initiatePendingSave = async (event) => {
 module.exports.completeSavingPaymentFlow = async (event) => {
   try {
     if (warmupCheck(event)) {
-      await Promise.all([
-        publisher.obtainTemplate(`payment/${config.get('templates.payment.success')}`), 
-        payment.warmUpPayment({ type: 'TRIGGER_CHECK' })
-      ]);
+      await publisher.obtainTemplate(`payment/${config.get('templates.payment.success')}`);
       return warmupResponse;
     }
 

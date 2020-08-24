@@ -12,6 +12,8 @@ resource "aws_lambda_function" "boost_event_process" {
   runtime                        = "nodejs12.x"
   timeout                        = 30
   tags                           = {"environment"  = "${terraform.workspace}"}
+
+  reserved_concurrent_executions = 5
   
   s3_bucket = "pluto.lambda.${terraform.workspace}"
   s3_key = "boost_api/${var.deploy_code_commit_hash}.zip"

@@ -245,9 +245,9 @@ const processBoostWithTimeSequenceCondition = async (boost, userAccountMap) => {
         const eventContext = { eventHistory: eventHistoryByAccount};
         const syntheticEvent = { eventType: 'SEQUENCE_CHECK', eventContext };
         
-        // redemption handler assumes everyone passed to it should be redeemed (should refactor at some point)
-        const accountMap = accountsWithRedemptions.reduce((obj, { accountId }) => ({ ...obj, [accountId]: userAccountMap[accountId] }), {});
-        const affectedAccountsDict = { [boostId]: accountMap }; // see not above about excess complexity to allow too-early parallelism
+        const accountMap = accountsWithRedemptions.
+            reduce((obj, { accountId }) => ({ ...obj, [accountId]: { ...userAccountMap[accountId], newStatus: 'REDEEMED' } }), {});
+        const affectedAccountsDict = { [boostId]: accountMap }; // see note above about excess complexity to allow too-early parallelism
         const redemptionCall = { redemptionBoosts: [boost], affectedAccountsDict, event: syntheticEvent };
         logger('Redeeming boosts with call: ', redemptionCall);
         const redemptionResult = await redemptionHandler.redeemOrRevokeBoosts(redemptionCall);

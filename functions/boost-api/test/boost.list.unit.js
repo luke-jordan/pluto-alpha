@@ -203,10 +203,11 @@ describe('*** UNIT TEST BOOST DETAILS (CHANGED AND SPECIFIED) ***', () => {
         
         expect(resultBody).to.deep.equal([{ ...mockBoost, statusChangeLogs: [] }, expiredBoost]);
         
-        const excludedForActive = ['CREATED', 'OFFERED', 'EXPIRED', 'FAILED'];
-        const excludedForExpired = ['CREATED', 'OFFERED', 'PENDING', 'UNLOCKED', 'REDEEMED'];
-        expect(fetchMultiBoostsStub).to.have.been.calledWith(testAccountId, { changedSinceTime: sinon.match.any, excludedStatus: excludedForActive });
-        expect(fetchMultiBoostsStub).to.have.been.calledWith(testAccountId, { changedSinceTime: sinon.match.any, excludedStatus: excludedForExpired });
+        const excludedForPositive = ['CREATED', 'OFFERED', 'EXPIRED', 'FAILED'];
+        const excludedForNegative = ['CREATED', 'OFFERED', 'PENDING', 'UNLOCKED', 'REDEEMED', 'CONSOLED'];
+        
+        expect(fetchMultiBoostsStub).to.have.been.calledWith(testAccountId, { changedSinceTime: sinon.match.any, excludedStatus: excludedForPositive });
+        expect(fetchMultiBoostsStub).to.have.been.calledWith(testAccountId, { changedSinceTime: sinon.match.any, excludedStatus: excludedForNegative });
 
         expect(findAccountsStub).to.have.been.calledOnceWithExactly(testUserId);
         expect(fetchBoostLogsStub).to.have.been.calledTwice;

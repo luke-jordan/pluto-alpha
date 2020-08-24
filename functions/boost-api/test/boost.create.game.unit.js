@@ -125,7 +125,8 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
 
     const testStatusConditions = {
         UNLOCKED: ['save_event_greater_than #{100000:HUNDREDTH_CENT:USD}'],
-        REDEEMED: ['number_taps_greater_than #{20::20000}']
+        REDEEMED: ['number_taps_greater_than #{20::20000}'],
+        FAILED: ['number_taps_less_than #{20::20000}']
     };
 
     const testBodyOfEvent = {
@@ -244,9 +245,10 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         expect(publishMultiStub).to.have.been.calledTwice; // for both creation and offering
     });
 
-    it('Happy path creates a game boost, with default status unlocked', async () => {
+    it('Happy path creates a game boost, with default status unlocked, and allowing repeat play', async () => {
         const alreadyUnlockedBoost = { ...testBodyOfEvent };
         alreadyUnlockedBoost.initialStatus = 'UNLOCKED';
+        alreadyUnlockedBoost.gameParams = { ...testBodyOfEvent.gameParams, allowRepeatPlay: true };
     
         const mockResultFromRds = {
             boostId: testBoostId,
@@ -272,6 +274,7 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         // then set up invocation checks
         const expectedBoost = { ...mockBoostToFromPersistence };
         expectedBoost.defaultStatus = 'UNLOCKED';
+        expectedBoost.gameParams = { ...mockBoostToFromPersistence.gameParams, allowRepeatPlay: true };
         expectedBoost.statusConditions = { 
             REDEEMED: ['number_taps_greater_than #{20::20000}']
         };
@@ -323,15 +326,21 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         expect(publishMultiStub).to.have.been.calledTwice;
     });
 
-    it('Happy path creates a game boost, and sets up conditions for tournament', async () => {
+    it('Happy path creates a game boost, and sets up conditions for tournament, including consolation prize', async () => {
         const tournParams = {
             gameType: 'CHASE_ARROW',
             timeLimitSeconds: 20,
             numberWinners: 20,
-            entryCondition: 'save_event_greater_than #{100000:HUNDREDTH_CENT:USD}'
+            entryCondition: 'save_event_greater_than #{100000:HUNDREDTH_CENT:USD}',
+            hasConsolationPrize: true
         };
 
-        const tournamentBoost = { ...testBodyOfEvent, gameParams: tournParams };
+        const consolationPrize = {
+            type: 'RANDOM',
+            amount: { amount: 100, unit: 'WHOLE_CENT', currency: 'USD' }
+        };
+
+        const tournamentBoost = { ...testBodyOfEvent, gameParams: tournParams, rewardParameters: { consolationPrize } };
     
         const mockResultFromRds = {
             boostId: testBoostId,
@@ -359,8 +368,10 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         expectedBoost.statusConditions = { 
             UNLOCKED: ['save_event_greater_than #{100000:HUNDREDTH_CENT:USD}'],
             PENDING: ['number_taps_greater_than #{0::20000}'],
-            REDEEMED: ['number_taps_in_first_N #{20::20000}']
+            REDEEMED: ['number_taps_in_first_N #{20::20000}'], // should not have FAILED
+            CONSOLED: ['status_at_expiry #{PENDING}']
         };
+        expectedBoost.rewardParameters = { consolationPrize };
         
         expect(insertBoostStub).to.have.been.calledOnceWithExactly(expectedBoost);
 
@@ -375,7 +386,8 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         const eventGameParams = {
             gameType: 'CHASE_ARROW',
             timeLimitSeconds: 10,
-            winningThreshold: 50
+            winningThreshold: 50,
+            allowRepeatPlay: false
         };
 
         const mockMsgTrigger = { triggerEvent: ['USER_CREATED_ACCOUNT'] };
@@ -420,7 +432,8 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         const expectedBoost = { ...mockBoostToFromPersistence, defaultStatus: null, gameParams: eventGameParams };
         expectedBoost.statusConditions = { 
             UNLOCKED: ['event_occurs #{USER_CREATED_ACCOUNT}'],
-            REDEEMED: ['number_taps_greater_than #{50::10000}']
+            REDEEMED: ['number_taps_greater_than #{50::10000}'],
+            FAILED: ['number_taps_less_than #{50::10000}']
         };
         
         expect(insertBoostStub).to.have.been.calledOnceWithExactly(expectedBoost);

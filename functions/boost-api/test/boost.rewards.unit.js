@@ -46,17 +46,34 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
 
     beforeEach(() => helper.resetStubs(lamdbaInvokeStub, publishStub, publishMultiStub));
 
-    it('Handles random rewards', async () => {
+    it('Handles random rewards, including units', async () => {
         const testUserId = uuid();
         const testAccountId = uuid();
-        const testCalculatedAmount = 55000;
 
         const testRewardParameters = {
             rewardType: 'RANDOM',
             distribution: 'UNIFORM',
-            realizedRewardModuloZeroTarget: 5000, // HUNDREDTH_CENT (matches boostUnit),
-            minBoostAmountPerUser: { amount: '1000', unit: 'HUNDREDTH_CENT', currency: 'USD'}
+            realizedRewardModuloZeroTarget: 1, // matches boost (this is default)
+            minRewardAmountPerUser: { amount: '1', unit: 'WHOLE_CURRENCY', currency: 'USD'}
         };
+
+        const mockBoost = {
+            boostId: testBoostId,
+            boostAmount: 10,
+            boostUnit: 'WHOLE_CURRENCY',
+            boostCurrency: 'USD',
+            fromFloatId: testFloatId,
+            fromBonusPoolId: testBonusPoolId,
+            rewardParameters: testRewardParameters,
+            messageInstructions: [],
+            flags: []    
+        };
+
+        sinon.restore(); // restores Math.random() stubbed in another file. after and afterEach didn't cut it.
+        
+        const mathRandomStub = sinon.stub(Math, 'random');
+        mathRandomStub.returns(0.55);
+        const testCalculatedAmount = Math.round(0.55 * 10); // random reward snaps to nearest 1 of boost unit to avoid weird looking awards
 
         const expectedAllocationInvocation = helper.wrapLambdaInvoc('float_transfer', false, {
             instructions: [{
@@ -67,7 +84,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
                 transactionType: 'BOOST_REDEMPTION',
                 relatedEntityType: 'BOOST_REDEMPTION',
                 currency: 'USD',
-                unit: 'HUNDREDTH_CENT',
+                unit: 'WHOLE_CURRENCY',
                 settlementStatus: 'SETTLED',
                 allocType: 'BOOST_REDEMPTION',
                 allocState: 'SETTLED',
@@ -86,29 +103,13 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             }
         };
 
-        sinon.restore(); // restores Math.random() stubbed in another file. after and afterEach didn't cut it.
-        const mathRandomStub = sinon.stub(Math, 'random');
-        mathRandomStub.returns(0.55);
-
         lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse(mockAllocationResult) });
         momentStub.returns(moment());
         publishStub.resolves({ result: 'SUCCESS' });
 
-        const mockBoost = {
-            boostId: testBoostId,
-            boostAmount: 100000,
-            boostUnit: 'HUNDREDTH_CENT',
-            boostCurrency: 'USD',
-            fromFloatId: testFloatId,
-            fromBonusPoolId: testBonusPoolId,
-            rewardParameters: testRewardParameters,
-            messageInstructions: [],
-            flags: []    
-        };
-
         const mockAccountMap = {
             [testBoostId]: {
-                [testAccountId]: { userId: testUserId, status: 'OFFERED' }
+                [testAccountId]: { userId: testUserId, newStatus: 'REDEEMED' }
             }
         };
 
@@ -126,7 +127,8 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             [testBoostId]: {
                 ...mockAllocationResult[testBoostId], 
                 boostAmount: testCalculatedAmount, 
-                amountFromBonus: testCalculatedAmount
+                amountFromBonus: testCalculatedAmount,
+                unit: 'WHOLE_CURRENCY'
             }
         };
         expect(resultOfRedemption).to.deep.equal(expectedResult);
@@ -221,7 +223,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
 
         const mockAccountMap = {
             [testBoostId]: {
-                [testAccountId]: { userId: testUserId, status: 'OFFERED' }
+                [testAccountId]: { userId: testUserId, newStatus: 'REDEEMED' }
             }
         };
 
@@ -247,7 +249,8 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             [testBoostId]: {
                 ...mockAllocationResult[testBoostId],
                 amountFromBonus: testBonusPoolAmount,
-                boostAmount: testCalculatedAmount
+                boostAmount: testCalculatedAmount,
+                unit: 'HUNDREDTH_CENT'
             }
         };
 

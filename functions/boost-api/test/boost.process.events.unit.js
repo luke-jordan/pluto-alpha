@@ -103,10 +103,11 @@ describe('*** UNIT TEST FRIEND BOOST ***', () => {
         });
 
         // likewise
+        const mockRedemptionMap = { [mockAccountId]: { userId: mockUserId, status: 'OFFERED', newStatus: 'REDEEMED' } }; 
         const expectedRedemptionCall = {
             redemptionBoosts: [mockFriendBoost], 
             revocationBoosts: [], 
-            affectedAccountsDict: { [mockBoostId]: mockAccountMap }, 
+            affectedAccountsDict: { [mockBoostId]: mockRedemptionMap }, 
             event: { ...testEvent, accountId: mockAccountId }
         };
 

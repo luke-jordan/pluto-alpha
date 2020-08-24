@@ -560,7 +560,7 @@ describe('UNIT TEST WITHDRAWAL BOOST', () => {
 
         const expectedRedemptionCall = { 
             redemptionBoosts: [mockBoostToRedeem], 
-            affectedAccountsDict: { [testBoostId]: { 'account-1': { userId: mockUserId, status: 'OFFERED' } } },
+            affectedAccountsDict: { [testBoostId]: { 'account-1': { userId: mockUserId, status: 'OFFERED', newStatus: 'REDEEMED' } } },
             event: expectedEventForRedemption
         };
         expect(redeemBoostStub).to.have.been.calledOnceWithExactly(expectedRedemptionCall);
