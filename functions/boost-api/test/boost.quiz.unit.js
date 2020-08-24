@@ -21,7 +21,7 @@ const findUserIdsStub = sinon.stub();
 const publishMultiStub = sinon.stub();
 const momentStub = sinon.stub();
 
-// quiz reponse stubs
+// quiz response stubs
 const fetchBoostStub = sinon.stub();
 const fetchAccountStatusStub = sinon.stub();
 const updateBoostRedeemedStub = sinon.stub();
@@ -118,9 +118,11 @@ describe('*** UNIT TEST CREATE BOOST QUIZ ***', async () => {
         boostAudienceType: 'GENERAL',
         messageInstructionIds: {},
         gameParams,
-        statusConditions: { 
-            REDEEMED: [], // statusConditions left out as they are extensively tested in boost-create tests
-            UNLOCKED: ['save_event_greater_than #{100000:HUNDREDTH_CENT:USD}']
+        statusConditions: {
+            OFFERED: ['message_instruction_created'],
+            UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
+            REDEEMED: ['percent_destroyed_above #{50::30000}'],
+            FAILED: ['number_taps_less_than #{10::30000}']
         }
     };
 
@@ -150,7 +152,12 @@ describe('*** UNIT TEST CREATE BOOST QUIZ ***', async () => {
             boostAudienceType: 'GENERAL',
             audienceId: testAudienceId,
             messagesToCreate: [messageReqBody],
-            gameParams
+            gameParams,
+            statusConditions: {
+                OFFERED: ['message_instruction_created'],
+                UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
+                REDEEMED: ['percent_destroyed_above #{50::30000}']
+            }
         };
 
         const mockResultFromRds = {
@@ -193,16 +200,18 @@ describe('*** UNIT TEST CREATE BOOST QUIZ ***', async () => {
         expect(insertBoostStub).to.have.been.calledOnceWithExactly(quizBoostToRds);
         
         const msgInstructionPayload = {
-            audienceId: testAudienceId,
-            audienceType: 'GENERAL',
-            boostStatus: 'ALL',
             creatingUserId: testCreatingUserId,
+            boostStatus: 'ALL',
+            audienceType: 'GENERAL',
+            presentationType: 'ONCE_OFF',
+            audienceId: testAudienceId,
             endTime: testEndTime.format(),
             messagePriority: 100,
-            presentationType: 'ONCE_OFF',
-            templates: { sequence: [] } // left out, tested in boost-create
+            templates: { sequence: [] }
         };
+
         const msgInstructionInvocation = testHelper.wrapLambdaInvoc('message_instruct_create', false, msgInstructionPayload);
+
         expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(msgInstructionInvocation);
 
         const msgInstructionIdDict = [{ accountId: 'ALL', status: 'ALL', msgInstructionId: testMsgInstructId }];
@@ -242,7 +251,7 @@ describe('*** UNIT TEST QUIZ REPONSE HANDLING ***', () => {
         const boostAsRelevant = {
             boostId: testBoostId,
             boostType: 'GAME',
-            boostCategory: 'TAP_SCREEN',
+            boostCategory: 'QUIZ',
             boostCurrency: 'USD',
             boostUnit: 'HUNDREDTH_CENT',
             boostAmount: 50000,
@@ -253,7 +262,7 @@ describe('*** UNIT TEST QUIZ REPONSE HANDLING ***', () => {
             statusConditions: {
                 OFFERED: ['message_instruction_created'],
                 UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
-                REDEEMED: ['percent_destroyed_above #{0.5::30000}']
+                REDEEMED: ['percent_destroyed_above #{50::30000}']
             }
         };
 
@@ -295,13 +304,16 @@ describe('*** UNIT TEST QUIZ REPONSE HANDLING ***', () => {
             event: { accountId: testAccountId, eventType: 'USER_GAME_COMPLETION' },
             redemptionBoosts: [boostAsRelevant],
             affectedAccountsDict: {
-                [testBoostId]: { [testAccountId]: { userId: testUserId }}
+                [testBoostId]: { [testAccountId]: {
+                    newStatus: 'REDEEMED',
+                    userId: testUserId
+                }}
             }
         };
         expect(redeemOrRevokeStub).to.have.been.calledOnceWithExactly(redemptionArgs);
         
         const expectedLogContext = { 
-            submittedParams: { ...testEvent, percentDestroyed: '0.67' }, 
+            submittedParams: { ...testEvent, percentDestroyed: 67 },
             processType: 'USER', 
             newStatus: 'REDEEMED', 
             boostAmount: 50000 
@@ -315,7 +327,8 @@ describe('*** UNIT TEST QUIZ REPONSE HANDLING ***', () => {
             logContext: expectedLogContext
         };
 
-        const expectedGameLog = { boostId: testBoostId, accountId: testAccountId, logType: 'GAME_RESPONSE', logContext: { timeTakenMillis: 15000 }};
+        const logContext = { percentDestroyed: 67, timeTakenMillis: 15000 };
+        const expectedGameLog = { boostId: testBoostId, accountId: testAccountId, logType: 'GAME_RESPONSE', logContext };
 
         expect(updateBoostAccountStub).to.have.been.calledOnceWithExactly([expectedUpdateInstruction]);
         expect(insertBoostLogStub).to.have.been.calledOnceWithExactly([expectedGameLog]);

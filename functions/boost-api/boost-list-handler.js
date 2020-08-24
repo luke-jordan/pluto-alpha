@@ -243,7 +243,7 @@ const calculateBoostYield = async (boostId) => {
 };
 
 const fetchQuestionSnippets = async (role, snippetIds) => {
-    const questionSnippets = await persistence.fetchSnippets(snippetIds);
+    const questionSnippets = await persistence.fetchQuestionSnippets(snippetIds);
     logger('Got question snippets: ', questionSnippets);
 
     const transformedSnippets = questionSnippets.map((snippet) => {

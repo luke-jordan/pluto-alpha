@@ -59,6 +59,12 @@ const convertParamsToRedemptionCondition = (gameParams) => {
             }
             break;
         }
+        case 'QUIZ': {
+            if (gameParams.winningThreshold) {
+                conditions.push(`percent_destroyed_above #{${gameParams.winningThreshold}::${timeLimitMillis}}`);
+            }
+            break; 
+        }
         default:
             logger('ERROR! Unimplemented game');
             break;

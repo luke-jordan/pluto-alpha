@@ -445,7 +445,7 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
         expect(queryStub).to.have.been.calledOnceWithExactly(sumQuery, ['REDEEMED', 'boost-id-1', 'boost-id-2']);
     });
 
-    it('Fetches snippets', async () => {
+    it('Fetches question snippets', async () => {
         const questionSnippetFromRds = {
             'title': 'Quiz Snippet 2',
             'body': 'How often can you withdraw from your Jupiter account?',
@@ -461,7 +461,7 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
 
         queryStub.resolves([questionSnippetFromRds]);
 
-        const resultOfFetch = await rds.fetchSnippets(['snippet-id-1']);
+        const resultOfFetch = await rds.fetchQuestionSnippets(['snippet-id-1']);
         expect(resultOfFetch).to.deep.equal([camelizeKeys(questionSnippetFromRds)]);
 
         const selectQuery = 'select title, body, response_options from snippet_data.snippet where snippet_id in ($1)';

@@ -126,11 +126,11 @@ module.exports.processUserBoostResponse = async (event) => {
         }
 
         let resultOfQuiz = {};
-        if (boost.boostType === 'GAME' && boost.gameParams.gameType === 'QUIZ') {
+        if (boost.boostType === 'GAME' && boost.boostCategory === 'QUIZ') {
             resultOfQuiz = await calculateUserQuizScore(boost.gameParams, params.userResponses);
-            
+            logger('Result of quiz: ', resultOfQuiz);
             const { numberCorrectAnswers, numberQuestions } = resultOfQuiz;
-            params.percentDestroyed = Number(numberCorrectAnswers / numberQuestions).toFixed(2);
+            params.percentDestroyed = Number((numberCorrectAnswers / numberQuestions).toFixed(2)) * 100;
         }
 
         const statusEvent = { eventType, eventContext: params };

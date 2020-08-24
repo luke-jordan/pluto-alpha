@@ -33,7 +33,7 @@ const handler = proxyquire('../boost-list-handler', {
         'sumBoostAndSavedAmounts': sumAmountsStub,
         'fetchBoostDetails': fetchBoostDetailsStub,
         'fetchBoostScoreLogs': fetchTournScoresStub,
-        'fetchSnippets': fetchSnippetsStub,
+        'fetchQuestionSnippets': fetchSnippetsStub,
         '@noCallThru': true
     },
     'ioredis': class {
