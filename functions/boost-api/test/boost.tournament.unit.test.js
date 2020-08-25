@@ -187,7 +187,7 @@ describe('*** UNIT TEST BOOST TOURNAMENT END HANDLING', () => {
 
         expect(publishMultiUserStub).to.have.been.calledTwice;
         const publishOptions = { context: { boostId: testBoostId }};
-        expect(publishMultiUserStub).to.have.been.calledWithExactly(['some-user-id', 'some-user-id2'], 'BOOST_TOURNAMENT_WON', publishOptions);
+        expect(publishMultiUserStub).to.have.been.calledWithExactly(['some-user-id2', 'some-user-id'], 'BOOST_TOURNAMENT_WON', publishOptions);
         expect(publishMultiUserStub).to.have.been.calledWithExactly(['some-user-id3', 'some-user-id4'], 'BOOST_EXPIRED', publishOptions);
     });
 
@@ -268,8 +268,8 @@ describe('*** UNIT TEST BOOST TOURNAMENT END HANDLING', () => {
 
         expect(insertBoostLogStub).to.have.been.calledWithExactly(expectedLogs);
 
-        // if we reach here then remainder is covered above
-        expect(publishMultiUserStub).to.have.been.calledTwice;        
+        expect(publishMultiUserStub).to.have.been.calledTwice;
+        expect(publishMultiUserStub).to.have.been.calledWith(['some-user-id2'], 'BOOST_TOURNAMENT_WON', { context: { boostId: testBoostId } });        
     });
 
     // note : will also have to do this for random boosts
