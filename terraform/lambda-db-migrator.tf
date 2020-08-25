@@ -108,29 +108,6 @@ resource "aws_iam_role_policy_attachment" "db_migration_get_secret" {
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
 
-resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_db_migration" {
-  log_group_name = "${aws_cloudwatch_log_group.db_migration.name}"
-  metric_transformation {
-    name = "${var.db_migration_lambda_function_name}_fatal_api_alarm"
-    namespace = "lambda_errors"
-    value = "1"
-  }
-  name = "${var.db_migration_lambda_function_name}_fatal_api_alarm"
-  pattern = "FATAL_ERROR"
-}
-
-resource "aws_cloudwatch_metric_alarm" "fatal_metric_alarm_db_migration" {
-  alarm_name = "${var.db_migration_lambda_function_name}_fatal_api_alarm"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods = 1
-  metric_name = "${aws_cloudwatch_log_metric_filter.fatal_metric_filter_db_migration.name}"
-  namespace = "lambda_errors"
-  period = 60
-  threshold = 0
-  statistic = "Sum"
-  alarm_actions = ["${aws_sns_topic.fatal_errors_topic.arn}"]
-}
-
 resource "aws_cloudwatch_log_metric_filter" "security_metric_filter_db_migration" {
   log_group_name = "${aws_cloudwatch_log_group.db_migration.name}"
   metric_transformation {

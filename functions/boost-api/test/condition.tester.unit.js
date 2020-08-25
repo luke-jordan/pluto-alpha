@@ -293,6 +293,28 @@ describe('*** BALANCE MILESTONE CONDITION ***', () => {
         expect(tester.testConditionsForStatus(sampleEvent, [condition])).to.be.true;        
     });
 
+    it('Still awards even if event contained another boost', () => {
+        const condition = 'balance_crossed_abs_target #{600::WHOLE_CURRENCY::USD}'; // parameter is target (i.e., _any_ crossing will work)
+
+        const sampleEvent = {
+            accountId: uuid(),
+            eventType: 'SAVING_PAYMENT_SUCCESSFUL',
+            eventContext: {
+                transactionId: uuid(),
+                savedAmount: '5::WHOLE_CURRENCY::EUR',
+                firstSave: false,
+                saveCount: 5,
+
+                preSaveBalance: '5950001::HUNDREDTH_CENT::EUR',
+                postSaveBalance: '6000001::HUNDREDTH_CENT::EUR',
+
+                transactionTags: ['BOOST::other-boost']
+            }
+        };
+
+        expect(tester.testConditionsForStatus(sampleEvent, [condition])).to.be.true;
+    });
+
     it('Does not award if balance was already above target amount', () => {
         const condition = 'balance_crossed_abs_target #{1000::WHOLE_CURRENCY::EUR}'; // parameter is target (i.e., _any_ crossing will work)
 

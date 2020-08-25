@@ -26,9 +26,9 @@ resource "aws_lambda_function" "save_initiate" {
                 "region": "${var.aws_default_region[terraform.workspace]}"
               },
               "db": {
-                "host": "${local.database_config.host}",
-                "database": "${local.database_config.database}",
-                "port" :"${local.database_config.port}"
+                "host": local.database_config.host,
+                "database": local.database_config.database,
+                "port" : local.database_config.port
               },
               "secrets": {
                 "enabled": true,

@@ -1,6 +1,5 @@
 'use strict';
 
-const uuid = require('uuid');
 const config = require('config');
 const sinon = require('sinon');
 const proxyquire = require('proxyquire');
@@ -19,6 +18,7 @@ const expireBoostsStub = sinon.stub();
 const checkAllFloatsStub = sinon.stub();
 
 const sendSystemEmailStub = sinon.stub();
+const publishUserEventStub = sinon.stub();
 const publishMultiUserEventStub = sinon.stub();
 const sendEventToQueueStub = sinon.stub();
 
@@ -62,6 +62,7 @@ const handler = proxyquire('../scheduled-job', {
     'moment': momentStub,
     'publish-common': {
         sendSystemEmail: sendSystemEmailStub,
+        publishUserEvent: publishUserEventStub,
         publishMultiUserEvent: publishMultiUserEventStub,
         sendToQueue: sendEventToQueueStub,
         '@noCallThru': true
@@ -73,11 +74,13 @@ const handler = proxyquire('../scheduled-job', {
 });
 
 describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
-    const testClientId = uuid();
-    const testFloatId = uuid();
-    const testAmount = 100;
+    const testClientId = 'some-client-somewhere';
+    const testFloatId = 'their-main-float';
+
+    const testAmount = 100 * 100 * 100;
     const testUnit = 'HUNDREDTH_CENT';
     const testCurrency = 'ZAR';
+    
     const testAccrualRateAnnualBps = 750;
     
     const testTime = moment();
@@ -104,13 +107,11 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
         checkAllFloatsStub, fetchUserIdsForAccountsStub, fetchPendingTransactionsForAllUsersStub
     ));
 
-    it('should run regular job - accrue float successfully', async () => {
-        const testEvent = {
-           specificOperations: ['ACRRUE_FLOAT']
-        };
+    it('should run regular job - accrue float successfully and publish event', async () => {
+        const testEvent = { specificOperations: ['ACRRUE_FLOAT'] };
         const expectedResult = [testEvent.specificOperations.length];
 
-        const testLastFloatAccrualTime = moment();
+        const testLastFloatAccrualTime = moment().subtract(1, 'day');
         const testMillisSinceLastCalc = testTimeValueOf - testLastFloatAccrualTime.valueOf();
         const testBasisPointDivisor = 100 * 100; // i.e., hundredths of a percent
         const testDailyAccrualRateNominalNet = new DecimalLight(testAccrualRateAnnualBps).dividedBy(testBasisPointDivisor).dividedBy(DAYS_IN_A_YEAR);
@@ -133,10 +134,10 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
             backingEntityIdentifier: `SYSTEM_CALC_DAILY_${testTimeValueOf}`,
             backingEntityType: 'ACCRUAL_EVENT',
             calculationBasis: {
-                'floatAmountHunCent': testAmount,
-                'accrualRateAnnualBps': testAccrualRateAnnualBps,
-                'millisSinceLastCalc': testMillisSinceLastCalc,
-                'accrualRateApplied': testAccrualRateToApply
+                floatAmountHunCent: testAmount,
+                accrualRateAnnualBps: testAccrualRateAnnualBps,
+                millisSinceLastCalc: testMillisSinceLastCalc,
+                accrualRateApplied: testAccrualRateToApply
             }
         };
 
@@ -144,14 +145,14 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
 
         const testAccrualInvocationResults = {
            entityAllocations: {
-               BONUS_FEE: '',
-               CLIENT_FEE: '',
-               BONUS_SHARE: '',
-               CLIENT_SHARE: ''
+               BONUS_FEE: { amount: 100 }, // note : dummy numbers just for pass through; calcs done in accrual handler
+               CLIENT_FEE: { amount: 100 },
+               BONUS_SHARE: { amount: 50 },
+               CLIENT_SHARE: { amount: 50 }
            },
            userAllocationTransactions: {
                allocationRecords: {
-                   accountTxIds: []
+                   accountTxIds: ['some-tx', 'some-other-tx']
                }
            }
         };
@@ -169,11 +170,58 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
         expect(result).to.exist;
         expect(result).to.have.property('statusCode', 200);
         expect(result.body).to.deep.equal(expectedResult);
+
         expect(listClientFloatsStub).to.have.been.calledOnce;
         expect(getFloatBalanceAndFlowsStub).to.have.been.calledOnce;
         expect(getLastFloatAccrualTimeStub).to.have.been.calledOnce;
+        
         expect(momentStub).to.have.been.calledOnce;
+       
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(argsForLambdaExecutingAccrualRate);
+
+        const expectedAccrualData = {
+            clientId: testClientId,
+            floatId: testFloatId,
+            floatAmount: testAmount,
+            calculationUnit: 'HUNDREDTH_CENT',
+            calculationCurrency: 'ZAR',
+            baseAccrualRate: testAccrualRateAnnualBps,
+            dailyRate: testAccrualRateToApply,
+            accrualAmount: testAccrualPayload.accrualAmount,
+            bonusFee: { amount: 100 }, // will have unit + currency too
+            companyFee: { amount: 100 },
+            bonusShare: { amount: 50 },
+            companyShare: { amount: 50 },
+            numberUserAllocations: 2,
+            bonusExcessAllocation: false
+        };
+
+        const expectedEventOptions = {
+            initiator: 'scheduled_daily_system_job',
+            context: expectedAccrualData
+        };
+
+        expect(publishUserEventStub).to.have.been.calledOnceWithExactly(`${testClientId}::${testFloatId}`, 'FLOAT_ACCRUAL', expectedEventOptions);
+
+        const bpsToPercentAndTrim = (rate) => parseFloat(rate * 100).toFixed(4);
+
+        const expectedEmailVariables = {
+            accrualAmount: `ZAR ${(testAccrualPayload.accrualAmount / 10000).toFixed(4)}`,
+            clientId: testClientId,
+            floatId: testFloatId,
+            floatAmount: 'ZAR 100.0000',
+            baseAccrualRate: `${testAccrualRateAnnualBps} bps`,
+            dailyRate: `${bpsToPercentAndTrim(testAccrualRateToApply)} %`,
+            bonusAmount: 'ZAR 0.0100',
+            companyAmount: 'ZAR 0.0100',
+            bonusShare: 'ZAR 0.0050',
+            companyShare: 'ZAR 0.0050',
+            numberUserAllocations: 2,
+            bonusAllocation: JSON.stringify('None')
+        };
+
+        const { templateVariables } = sendSystemEmailStub.getCall(0).args[0];
+        expect(templateVariables).to.deep.equal(expectedEmailVariables);
     });
 
     it('should run regular job - expire hanging successfully', async () => {

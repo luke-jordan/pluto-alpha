@@ -232,7 +232,8 @@ module.exports.testCondition = (event, statusCondition) => {
 
     const transactionBoostTags = extractTaggedBoosts(eventContext);
     const isTxForOtherBoost = transactionBoostTags.length > 0 && !transactionBoostTags.includes(boostId);
-    if (isTxForOtherBoost) {
+    // if a save was made by tapping "save" on button for another boost, but user still crossed balance, they should be let through
+    if (isTxForOtherBoost && !conditionType.startsWith('balance')) {
         logger('Transaction had tags: ', eventContext.transactionTags, ' and this boost ID: ', boostId, ' so must be for another');
         return false;
     }
