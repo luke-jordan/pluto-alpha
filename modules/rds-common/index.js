@@ -36,8 +36,8 @@ let retrievedUser = null;
 let retrievedPass = null;
 let secretVoided = false;
 
+const DEFAULT_POOL_SIZE = 4; // not standard 10, because one of these will be created per lambda invoke, and those max out much quicker than pools, at present 
 const MAX_RETRY_ATTEMPTS = 4;
-
 const MAX_WAIT_PERIOD = 3000;
 const DEFAULT_SECRET_WAIT_INTERVAL = 100;
 
@@ -150,7 +150,8 @@ class RdsConnection {
                 port: self.dbConfig.port,
                 database: self.dbConfig.database,
                 user: userToUse,
-                password: pwordToUse
+                password: pwordToUse,
+                max: self.dbConfig.poolSize || DEFAULT_POOL_SIZE
             });
             
             logger('Set up pool, ready to initiate connections');

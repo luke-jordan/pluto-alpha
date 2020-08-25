@@ -190,7 +190,6 @@ module.exports.extractUserDetails = (event) => {
 };
 
 const normalizeExpectedBody = (event) => {
-    // logger('Event: ', event);
     let params = { };
     if (!event.body && !event.queryStringParameters) {
         params = typeof event === 'string' ? JSON.parse(event) : event;
@@ -219,7 +218,7 @@ module.exports.isDirectInvokeAdminOrSelf = (event, userIdKey = 'systemWideUserId
     }
 
     const userDetails = exports.extractUserDetails(event);
-    // logger('User details for call: ', userDetails);
+
     if (!userDetails) {
         return false;
     }
@@ -232,7 +231,6 @@ module.exports.isDirectInvokeAdminOrSelf = (event, userIdKey = 'systemWideUserId
         return false;
     }
 
-    // todo : probably want to add in uuid validation on id
     return Reflect.has(userDetails, 'systemWideUserId');
 };
 
