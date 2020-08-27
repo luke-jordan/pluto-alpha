@@ -17,16 +17,11 @@ const proxyquire = require('proxyquire');
 
 const testHelper = require('./referral.test.helper');
 
-const queryStub = sinon.stub();
 const fetchRowStub = sinon.stub();
 
 const lambdaInvokeStub = sinon.stub();
 
-class MockRdsConnection {
-    constructor () {
-        this.selectQuery = queryStub;
-    }
-}
+const momentStub = sinon.stub();
 
 class MockLambdaClient {
     constructor () {
@@ -35,14 +30,14 @@ class MockLambdaClient {
 }
 
 const handler = proxyquire('../referral-use-handler', {
-    'rds-common': MockRdsConnection,
     'dynamo-common': {
         fetchSingleRow: fetchRowStub,
         '@noCallThru': true
     },
     'aws-sdk': {
         'Lambda': MockLambdaClient  
-    }
+    },
+    'moment': momentStub
 });
 
 const testBetaCode = 'ABRACADABRA';
@@ -132,54 +127,116 @@ describe('*** UNIT TESTING VERIFY REFERRAL CODE ***', () => {
 });
 
 describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
-    const testReferringAccountId = uuid();
-    const testReferredAccountId = uuid();
     const testReferringUserId = uuid();
     const testReferredUserId = uuid();
 
-    beforeEach(() => testHelper.resetStubs(fetchRowStub, queryStub, lambdaInvokeStub));
+    const testRevokeLimit = moment().subtract(30, 'days').valueOf();
+    const testEndTime = moment();
+
+    beforeEach(() => testHelper.resetStubs(fetchRowStub, lambdaInvokeStub, momentStub));
     
     it('Redeems referral code', async () => {
-        const testReferralCodeDetails = {
-            context: { boostAmountOffered: '100000::HUNDREDTH_CENT::USD' },
-            creatingUserId: testReferringUserId,
-            codeType: 'USER'
+        const testBoostSource = {
+            bonusPoolId: 'primary_bonus_pool',
+            clientId: 'some_client_id',
+            floatId: 'primary_cash'
         };
 
-        queryStub.onFirstCall().resolves([{ 'owner_user_id': testReferredUserId }]);
-        queryStub.onSecondCall().resolves([{ 'account_id': testReferringAccountId }]);
+        const testReferralCodeDetails = {
+            creatingUserId: testReferringUserId,
+            codeType: 'USER',
+            context: {
+                boostAmountOffered: '100000::HUNDREDTH_CENT::USD',
+                boostSource: testBoostSource
+            }
+        };
+
+        momentStub.returns({ add: () => testEndTime, subtract: () => testRevokeLimit });
 
         fetchRowStub.onFirstCall().resolves({ countryCode: 'USA' });
         fetchRowStub.onSecondCall().resolves(testReferralCodeDetails);
 
         lambdaInvokeStub.returns({ promise: () => ({ statusCode: 200 })});
 
-        const testEvent = { referralCodeUsed: 'IGOTREFERRED', accountIdOfReferred: testReferredAccountId };
+        const testEvent = { referralCodeUsed: 'IGOTREFERRED', referredUserId: testReferredUserId };
 
         const resultOfCode = await handler.useReferralCode(testEvent);
         expect(resultOfCode).to.exist;
 
         const expectedResult = {
             statusCode: 200,
-            body: JSON.stringify({
-                resultOfTrigger: { statusCode: 200 }
-            })
+            body: JSON.stringify({ resultOfTrigger: { statusCode: 200 }})
         };
 
         expect(resultOfCode).to.deep.equal(expectedResult);
-
-        const userIdQuery = `select owner_user_id from account_data.core_account_ledger where account_id = $1`;
-        const accountIdQuery = 'select account_id from account_data.core_account_ledger where ' +
-            'owner_user_id = $1 order by creation_time desc limit 1';
-
-        expect(queryStub).to.have.been.calledTwice;
-        expect(queryStub).to.have.been.calledWithExactly(userIdQuery, [testReferredAccountId]);
-        expect(queryStub).to.have.been.calledWithExactly(accountIdQuery, [testReferringUserId]);
 
         expect(fetchRowStub).to.have.been.calledTwice;
         expect(fetchRowStub).to.have.been.calledWithExactly('UserProfileTable', { systemWideUserId: testReferredUserId }, ['country_code']);
         expect(fetchRowStub).to.have.been.calledWithExactly('ActiveReferralCodes', { referralCode: 'IGOTREFERRED', countryCode: 'USA' });
 
-        expect(lambdaInvokeStub).to.have.been.calledOnce;
+        const expectedAudienceSelection = {
+            table: 'account_data.core_account_ledger',
+            conditions: [{ op: 'in', prop: 'systemWideUserId', value: [testReferredUserId, testReferringUserId] }]
+        };
+
+        const expectedMsgInstructions = [
+            { systemWideUserId: testReferredUserId, msgInstructionFlag: 'REFERRAL::REDEEMED::REFERRED' },
+            { systemWideUserId: testReferringUserId, msgInstructionFlag: 'REFERRAL::REDEEMED::REFERRER' }
+        ];
+
+        const expectedBoostPayload = {
+            creatingUserId: testReferredUserId,
+            label: `User referral code`,
+            boostTypeCategory: 'REFERRAL::USER_CODE_USED',
+            boostAmountOffered: '100000::HUNDREDTH_CENT::USD',
+            boostBudget: 200000,
+            boostSource: testBoostSource,
+            endTimeMillis: testEndTime.valueOf(),
+            boostAudience: 'INDIVIDUAL',
+            boostAudienceSelection: expectedAudienceSelection,
+            initialStatus: 'PENDING',
+            statusConditions: {
+                'REDEEMED': [`save_completed_by #{${testReferredUserId}}`, `first_save_by #{${testReferredUserId}}`],
+                'REVOKED': ['balance_below #{10::WHOLE_CURRENCY::ZAR}', `withdrawal_before #{${testRevokeLimit}}`]
+            },
+            messageInstructionFlags: { 'REDEEMED': expectedMsgInstructions }
+        };
+
+        const expectedBoostInvocation = {
+            FunctionName: 'boost_create',
+            InvocationType: 'Event',
+            Payload: JSON.stringify(expectedBoostPayload)
+        };
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(expectedBoostInvocation);
+    });
+
+    it('Does not redeem where conditions not met', async () => {
+        const testEvent = { referralCodeUsed: 'IAMREFERRED', referredUserId: testReferredUserId };
+
+        // On invalid event
+        await expect(handler.useReferralCode({ httpMethod: 'POST' })).to.eventually.deep.equal({ statusCode: 403 });
+
+        fetchRowStub.onFirstCall().resolves({ countryCode: 'USA' });
+        fetchRowStub.onSecondCall().resolves();
+
+        // On referral code details not found
+        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal({ statusCode: 403 });
+        fetchRowStub.reset();
+
+        const testReferralCodeDetails = { creatingUserId: testReferringUserId, codeType: 'USER' };
+
+        fetchRowStub.onFirstCall().resolves({ countryCode: 'USA' });
+        fetchRowStub.onSecondCall().resolves(testReferralCodeDetails);
+
+        // On missing referral code context
+        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal({ statusCode: 403 });
+        fetchRowStub.reset();
+
+        testReferralCodeDetails.context = { };
+        fetchRowStub.onFirstCall().resolves({ countryCode: 'USA' });
+        fetchRowStub.onSecondCall().resolves(testReferralCodeDetails);
+
+        // On zero redemption
+        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal({ statusCode: 200 });
     });
 });

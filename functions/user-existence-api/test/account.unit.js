@@ -194,10 +194,8 @@ describe('createAccountMethod and wrapper', () => {
         expect(response.persistedTimeMillis).to.equal(expectedMillis);
         
         expect(countRefStemStub).to.have.been.calledOnceWithExactly('LJORDAN');
-        expect(getAccountIdForUserStub).to.have.been.calledTwice;
-        expect(getAccountIdForUserStub).to.have.been.calledWithExactly(testUserId);
-        expect(getAccountIdForUserStub).to.have.been.calledWithExactly(testReferringUserId);
-        expect(lambdaInvokeStub).to.have.been.calledOnce;
+        expect(getAccountIdForUserStub).to.have.been.calledOnceWithExactly(testUserId);
+        expect(lambdaInvokeStub).to.have.not.been.called;
         
         testInsertArgs();
     });
@@ -216,9 +214,7 @@ describe('createAccountMethod and wrapper', () => {
         expect(response.persistedTimeMillis).to.equal(expectedMillis);
 
         expect(countRefStemStub).to.have.been.calledOnceWithExactly('LJORDAN');
-        expect(getAccountIdForUserStub).to.have.been.calledTwice;
-        expect(getAccountIdForUserStub).to.have.been.calledWith(testUserId);
-        expect(getAccountIdForUserStub).to.have.been.calledWith(testReferringUserId);
+        expect(getAccountIdForUserStub).to.have.been.calledOnceWithExactly(testUserId);
         expect(lambdaInvokeStub).to.have.not.been.called;
         
         testInsertArgs();
@@ -239,7 +235,7 @@ describe('createAccountMethod and wrapper', () => {
 
         expect(countRefStemStub).to.have.been.calledOnceWithExactly('LJORDAN');
         expect(getAccountIdForUserStub).to.have.been.calledOnceWith(testUserId);
-        expect(lambdaInvokeStub).to.have.been.calledOnce;
+        expect(lambdaInvokeStub).to.have.not.been.called;
         
         testInsertArgs();
     });
@@ -280,7 +276,7 @@ describe('createAccountMethod and wrapper', () => {
         
         expect(countRefStemStub).to.have.been.calledOnceWithExactly('OCOETZE');
         expect(getAccountIdForUserStub).to.have.been.calledOnceWithExactly(testUserId);
-        expect(lambdaInvokeStub).to.have.been.calledOnce;
+        expect(lambdaInvokeStub).to.have.not.been.called;
         
         testInsertArgs('OCOETZE2X');
     });

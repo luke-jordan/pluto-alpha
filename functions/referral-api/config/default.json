@@ -3,13 +3,6 @@
         "region": "eu-west-1",
         "apiVersion": "2012-08-10"
     },
-    "db": {
-        "user": "referral_api_worker",
-        "host": "localhost",
-        "database": "jupiter",
-        "password": "pwd_for_referral_api",
-        "port" :"5430"
-    },
     "tables": {
         "accountTable": "account_data.core_account_ledger",
 
