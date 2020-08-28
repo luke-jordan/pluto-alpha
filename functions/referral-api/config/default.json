@@ -11,7 +11,7 @@
         "userProfile": "UserProfileTable",
         "clientFloatTable": "ClientFloatTable"
     },
-    "referral": {
+    "revocationDefaults": {
         "expiryTimeDays": 7,
         "withdrawalTime": 30,
         "balanceBelow": "10::WHOLE_CURRENCY::ZAR"  

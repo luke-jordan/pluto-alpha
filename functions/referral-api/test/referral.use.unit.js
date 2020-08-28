@@ -46,12 +46,13 @@ const testCodeCases = 'Abracadabra  ';
 const activeCodeTable = config.get('tables.activeCodes');
 const clientFloatTable = config.get('tables.clientFloatTable');
 
+const relevantColumns = ['referralCode', 'codeType', 'expiryTimeMillis', 'context', 'clientId', 'floatId'];
+
 describe('*** UNIT TESTING VERIFY REFERRAL CODE ***', () => {
 
     const nonExistentCode = 'LETMEIN';
     const testCountryCode = 'RWA';
 
-    const desiredCols = ['referralCode', 'codeType', 'expiryTimeMillis', 'context', 'clientId', 'floatId'];
     const returnedCodeDetails = {
         referralCode: testBetaCode,
         countryCode: testCountryCode,
@@ -81,23 +82,23 @@ describe('*** UNIT TESTING VERIFY REFERRAL CODE ***', () => {
     });
 
     it('Happy path referral code verification, when it exists, normal body', async () => {
-        fetchRowStub.withArgs(activeCodeTable, { countryCode: testCountryCode, referralCode: testBetaCode }, sinon.match(desiredCols)).resolves(returnedCodeDetails);
+        fetchRowStub.withArgs(activeCodeTable, { countryCode: testCountryCode, referralCode: testBetaCode }, sinon.match(relevantColumns)).resolves(returnedCodeDetails);
         const resultOfVerification = await handler.verify({ referralCode: testBetaCode, countryCode: testCountryCode });
         const verificationBody = testHelper.standardOkayChecks(resultOfVerification);
         expect(verificationBody).to.deep.equal({ result: 'CODE_IS_ACTIVE', codeDetails: returnedCodeDetails });
     });
 
     it('Happy path referral code verification, case insensitive', async () => {
-        fetchRowStub.withArgs(activeCodeTable, { countryCode: testCountryCode, referralCode: testBetaCode }, sinon.match(desiredCols)).resolves(returnedCodeDetails);
+        fetchRowStub.withArgs(activeCodeTable, { countryCode: testCountryCode, referralCode: testBetaCode }, sinon.match(relevantColumns)).resolves(returnedCodeDetails);
         const resultOfVerification = await handler.verify({ referralCode: testCodeCases, countryCode: testCountryCode });
         const verificationBody = testHelper.standardOkayChecks(resultOfVerification);
         expect(verificationBody).to.deep.equal({ result: 'CODE_IS_ACTIVE', codeDetails: returnedCodeDetails });
-        expect(fetchRowStub).to.have.been.calledWithExactly(activeCodeTable, { referralCode: testBetaCode, countryCode: testCountryCode }, sinon.match(desiredCols));
+        expect(fetchRowStub).to.have.been.calledWithExactly(activeCodeTable, { referralCode: testBetaCode, countryCode: testCountryCode }, sinon.match(relevantColumns));
     });
 
     it('Happy path get float details as well', async () => {
         const mockReferralDefaults = { shareLink: 'https://jupitersave.com/other' };
-        fetchRowStub.withArgs(activeCodeTable, { countryCode: testCountryCode, referralCode: testBetaCode }, sinon.match(desiredCols)).resolves(returnedCodeDetails);
+        fetchRowStub.withArgs(activeCodeTable, { countryCode: testCountryCode, referralCode: testBetaCode }, sinon.match(relevantColumns)).resolves(returnedCodeDetails);
         fetchRowStub.withArgs(clientFloatTable, { clientId: 'someClient', floatId: 'someFloat' }, ['user_referral_defaults'])
             .resolves({ userReferralDefaults: mockReferralDefaults });
         const resultOfFetch = await handler.verify({ referralCode: testCodeCases, countryCode: testCountryCode, includeFloatDefaults: true });
@@ -106,19 +107,19 @@ describe('*** UNIT TESTING VERIFY REFERRAL CODE ***', () => {
         const expectedDetails = { ...returnedCodeDetails, floatDefaults: mockReferralDefaults };
         expect(verificationBody).to.deep.equal({ result: 'CODE_IS_ACTIVE', codeDetails: expectedDetails });
         expect(fetchRowStub).to.have.been.calledTwice;
-        expect(fetchRowStub).to.have.been.calledWithExactly(activeCodeTable, { referralCode: testBetaCode, countryCode: testCountryCode }, sinon.match(desiredCols));
+        expect(fetchRowStub).to.have.been.calledWithExactly(activeCodeTable, { referralCode: testBetaCode, countryCode: testCountryCode }, sinon.match(relevantColumns));
         expect(fetchRowStub).to.have.been.calledWithExactly(clientFloatTable, { clientId: 'someClient', floatId: 'someFloat' }, ['user_referral_defaults']);
     });
 
     it('Happy path referral code does not exist / is not active', async () => {
-        fetchRowStub.withArgs(activeCodeTable, { countryCode: testCountryCode, referralCode: nonExistentCode }, desiredCols).resolves({ });
+        fetchRowStub.withArgs(activeCodeTable, { countryCode: testCountryCode, referralCode: nonExistentCode }, relevantColumns).resolves({ });
         const resultOfVerification = await handler.verify({ referralCode: nonExistentCode, countryCode: testCountryCode });
         const verificationBody = testHelper.expectedErrorChecks(resultOfVerification, status['Not Found']);
         expect(verificationBody).to.deep.equal({ result: 'CODE_NOT_FOUND' });
     });
 
     it('Referral code verification swallows errors appropriately', async () => {
-        fetchRowStub.withArgs(activeCodeTable, { countryCode: testCountryCode, referralCode: 'THISISBAD' }, desiredCols).rejects(new Error('Got that wrong!'));
+        fetchRowStub.withArgs(activeCodeTable, { countryCode: testCountryCode, referralCode: 'THISISBAD' }, relevantColumns).rejects(new Error('Got that wrong!'));
         const errorThrow = await handler.verify({ referralCode: 'thisIsBad', countryCode: testCountryCode });
         expect(errorThrow).to.exist;
         expect(errorThrow).to.deep.equal({ statusCode: 500, body: JSON.stringify('Got that wrong!') });
@@ -172,11 +173,12 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
 
         expect(fetchRowStub).to.have.been.calledTwice;
         expect(fetchRowStub).to.have.been.calledWithExactly('UserProfileTable', { systemWideUserId: testReferredUserId }, ['country_code']);
-        expect(fetchRowStub).to.have.been.calledWithExactly('ActiveReferralCodes', { referralCode: 'IGOTREFERRED', countryCode: 'USA' });
+        expect(fetchRowStub).to.have.been.calledWithExactly('ActiveReferralCodes', { referralCode: 'IGOTREFERRED', countryCode: 'USA' }, relevantColumns);
 
         const expectedAudienceSelection = {
-            table: 'account_data.core_account_ledger',
-            conditions: [{ op: 'in', prop: 'systemWideUserId', value: [testReferredUserId, testReferringUserId] }]
+            conditions: [
+                { op: 'in', prop: 'systemWideUserId', value: [testReferredUserId, testReferringUserId] }
+            ]
         };
 
         const expectedMsgInstructions = [

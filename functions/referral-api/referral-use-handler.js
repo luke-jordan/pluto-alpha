@@ -18,6 +18,27 @@ const handleErrorAndReturn = (e) => {
     return { statusCode: 500, body: JSON.stringify(e.message) };
 };
 
+const standardReferralCodeColumns = ['referralCode', 'codeType', 'expiryTimeMillis', 'context', 'clientId', 'floatId'];
+
+const fetchReferralCodeDetails = async (rawReferralCode, countryCode, relevantColumns) => {
+    if (!rawReferralCode || typeof rawReferralCode !== 'string') {
+        return null;
+    }
+
+    const referralCode = rawReferralCode.toUpperCase().trim();
+    logger('Verifying transformed referral code: ', referralCode);
+    
+    const colsToReturn = relevantColumns ? relevantColumns : standardReferralCodeColumns;
+    const referralCodeDetails = await dynamo.fetchSingleRow(config.get('tables.activeCodes'), { referralCode, countryCode }, colsToReturn);
+    logger('Found referral code in table: ', referralCodeDetails);
+    
+    if (opsUtil.isObjectEmpty(referralCodeDetails)) {
+        return null;
+    }
+
+    return referralCodeDetails;
+};
+
 /**
  * This function verifies a referral code.
  * @param {object} event An event object containing the referral code to be evaluated.
@@ -40,15 +61,14 @@ module.exports.verify = async (event) => {
         }
         
         const referralCode = params.referralCode.toUpperCase().trim();
-        const codeKey = { referralCode, countryCode: params.countryCode };
         
-        const colsToReturn = ['referralCode', 'codeType', 'expiryTimeMillis', 'context', 'clientId', 'floatId'];
+        const colsToReturn = standardReferralCodeColumns;
         if (params.includeCreatingUserId && !Reflect.has(event, 'httpMethod')) {
             colsToReturn.push('creatingUserId');
         }
 
-        const tableLookUpResult = await dynamo.fetchSingleRow(config.get('tables.activeCodes'), codeKey, colsToReturn);
-        
+        const tableLookUpResult = await fetchReferralCodeDetails(referralCode, params.countryCode, colsToReturn);
+
         logger('Table lookup result: ', tableLookUpResult);
         if (opsUtil.isObjectEmpty(tableLookUpResult)) {
             return { statusCode: status['Not Found'], body: JSON.stringify({ result: 'CODE_NOT_FOUND' })};
@@ -68,20 +88,15 @@ module.exports.verify = async (event) => {
     }
 };
 
-const getReferralRevocationConditions = (referralContext) => {
-    const referralRevokeDays = Reflect.has(referralContext, 'daysForRevocation') ? parseInt(referralContext.daysForRevocation, 10) 
-        : parseInt(config.get('referral.withdrawalTime'), 10);
+const getReferralRevocationConditions = ({ daysForRevocation, balanceLimitForRevocation }) => {
+    const referralRevokeDays = daysForRevocation ? daysForRevocation : config.get('revocationDefaults.withdrawalTime');
     const referralRevokeLimit = moment().subtract(referralRevokeDays, 'days').valueOf();
-    const balanceLimit = Reflect.has(referralContext, 'balanceLimitForRevocation') ? referralContext.balanceLimitForRevocation 
-        : config.get('referral.balanceBelow');
+    const balanceLimit = balanceLimitForRevocation ? balanceLimitForRevocation : config.get('revocationDefaults.balanceBelow');
     return { referralRevokeLimit, balanceLimit };
 };
 
 // note : psql handles uuids without quotes (and that will throw an error without a uuid cast)
-const createAudienceConditions = (boostUserIds) => ({
-    table: config.get('tables.accountTable'),
-    conditions: [{ op: 'in', prop: 'systemWideUserId', value: boostUserIds }]
-});
+const createAudienceConditions = (boostUserIds) => ({ conditions: [{ op: 'in', prop: 'systemWideUserId', value: boostUserIds }]});
 
 const safeReferralAmountExtract = (referralContext, key = 'boostAmountOffered') => {
     if (!referralContext || typeof referralContext[key] !== 'string') {
@@ -109,24 +124,6 @@ const referralHasZeroRedemption = (referralContext) => {
         logger('Boost amount offered must be malformed: ', err);
         return true;
     }
-};
-
-const fetchReferralCodeDetails = async (rawReferralCode, countryCode) => {
-    if (!rawReferralCode || typeof rawReferralCode !== 'string') {
-        return null;
-    }
-
-    const referralCode = rawReferralCode.toUpperCase().trim();
-    logger('Verifying transformed referral code: ', referralCode);
-    
-    const referralCodeDetails = await dynamo.fetchSingleRow(config.get('tables.activeCodes'), { referralCode, countryCode });
-    logger('Found referral code in table: ', referralCodeDetails);
-    
-    if (opsUtil.isObjectEmpty(referralCodeDetails)) {
-        return null;
-    }
-
-    return referralCodeDetails;
 };
 
 const fetchUserProfile = async (systemWideUserId) => {
@@ -185,14 +182,13 @@ module.exports.useReferralCode = async (event) => {
         
         if (referralType === 'USER') {
             const referringUserId = referralCodeDetails.creatingUserId;
-            // todo: referring user validation
             redemptionMsgInstructions.push({ systemWideUserId: referringUserId, msgInstructionFlag: 'REFERRAL::REDEEMED::REFERRER' });
             boostUserIds.push(referringUserId);
         }
     
         const boostAudienceSelection = createAudienceConditions(boostUserIds);
         // time within which the new user has to save in order to claim the bonus
-        const bonusExpiryTime = moment().add(config.get('referral.expiryTimeDays'), 'days');
+        const bonusExpiryTime = moment().add(config.get('revocationDefaults.expiryTimeDays'), 'days');
     
         const { balanceLimit, referralRevokeLimit } = getReferralRevocationConditions(referralContext);
     
