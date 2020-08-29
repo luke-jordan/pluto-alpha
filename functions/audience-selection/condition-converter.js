@@ -94,6 +94,15 @@ module.exports.stdProperties = {
         skipClient: true,
         canInvert: true
     },
+    boostRedeemed: {
+        type: 'match', // as above
+        description: 'Redeemed boost',
+        expects: 'entity',
+        entity: 'boost',
+        table: 'boostTable',
+        skipClient: true,
+        canInvert: false, // because not sure what would mean (part of boost but not redeemed, or not part)
+    },
     systemWideUserId: {
         type: 'match',
         description: 'System user ID (system only)',
