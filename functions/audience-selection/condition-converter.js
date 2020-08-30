@@ -101,7 +101,7 @@ module.exports.stdProperties = {
         entity: 'boost',
         table: 'boostTable',
         skipClient: true,
-        canInvert: false, // because not sure what would mean (part of boost but not redeemed, or not part)
+        canInvert: false // because not sure what would mean (part of boost but not redeemed, or not part)
     },
     systemWideUserId: {
         type: 'match',
@@ -231,6 +231,13 @@ module.exports.convertBoostAllButCreated = (condition) => {
         ]}
     ]};
 };
+
+module.exports.convertBoostRedeemed = (condition) => ({
+    conditions: [{ op: 'and', children: [
+        { prop: 'boost_id', op: condition.op, value: condition.value },
+        { prop: 'boost_status', op: 'is', value: 'REDEEMED' }
+    ]}]
+});
 
 // bit of a monster because we need to pick up the non-existent in the boost table (i.e., count = 0), if this is less than
 // hence we, this once, use a subquery directly in a primary convertor, but if needed again, instead implement a flag for

@@ -94,7 +94,7 @@ describe('*** TEST BOOST AND FRIEND SELECTION ***', () => {
 
         expect(executeConditionsStub).to.have.been.calledOnce;
 
-        const persParams = expectedPersParams(mockSelectionJSON.conditions, 'PRIMARY', true);
+        const persParams = expectedPersParams(mockSelectionJSON.conditions, 'PRIMARY', false);
         helper.itemizedSelectionCheck(executeConditionsStub, persParams, expectedSelection);
     });
 
