@@ -83,7 +83,7 @@ const withdrawalCancelledEMail = async (userProfile, transactionDetails, publish
 module.exports.handleWithdrawalEvent = async ({ eventBody, userProfile, publisher, persistence, lambda, sns, redis }) => {
     logger('Withdrawal event triggered! Event body: ', eventBody);
 
-    const { userId, transactionId } = eventBody;
+    const { userId } = eventBody;
     const cachedDetails = await redis.get(`${config.get('cache.keyPrefixes.withdrawal')}::${userId}`);
     const bankAccountDetails = JSON.parse(cachedDetails);
 
@@ -94,10 +94,10 @@ module.exports.handleWithdrawalEvent = async ({ eventBody, userProfile, publishe
     const processingPromises = [];
     processingPromises.push(dispatchHelper.sendEventToBoostProcessing(eventBody, publisher));
 
-    const accountId = eventBody.context.accountId;
+    const { accountId, transactionId } = eventBody.context;
     const [amount, unit, currency] = eventBody.context.withdrawalAmount.split('::');
 
-    const bsheetParams = { accountId, amount: Math.abs(amount), unit, currency, bankDetails: bankAccountDetails, transactionId };
+    const bsheetParams = { accountId, transactionId, amount: Math.abs(amount), unit, currency, bankDetails: bankAccountDetails };
     const bsheetPromise = dispatchHelper.addInvestmentToBSheet({ operation: 'WITHDRAW', parameters: bsheetParams, persistence, publisher });
     processingPromises.push(bsheetPromise);
 

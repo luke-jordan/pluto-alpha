@@ -527,13 +527,13 @@ describe('*** UNIT TEST WITHDRAWAL, FRIENDSHIP, BOOST EVENTS ***', () => {
             eventType: 'WITHDRAWAL_EVENT_CONFIRMED',
             timeInMillis: timeNow,
             accountId: testAccountId,
-            eventContext: { accountId: testAccountId, withdrawalAmount: '100::WHOLE_CURRENCY::USD' }
+            eventContext: { accountId: testAccountId, transactionId: 'transaction-X', withdrawalAmount: '100::WHOLE_CURRENCY::USD' }
         };
 
         fetchBSheetAccStub.resolves('POL1');
         const bsheetPayload = {
             operation: 'WITHDRAW',
-            transactionDetails: { accountNumber: 'POL1', amount: 100, unit: 'WHOLE_CURRENCY', currency: 'USD', bankDetails: expectedBankDetails }
+            transactionDetails: { accountNumber: 'POL1', amount: 100, unit: 'WHOLE_CURRENCY', currency: 'USD', bankDetails: expectedBankDetails, transactionId: 'transaction-X' }
         };
 
         // todo : error handling proper tests
@@ -549,6 +549,7 @@ describe('*** UNIT TEST WITHDRAWAL, FRIENDSHIP, BOOST EVENTS ***', () => {
             timestamp: timeNow,
             context: {
                 accountId: testAccountId,
+                transactionId: 'transaction-X',
                 withdrawalAmount: '100::WHOLE_CURRENCY::USD'
             }
         };

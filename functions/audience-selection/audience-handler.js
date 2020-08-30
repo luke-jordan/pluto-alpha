@@ -70,6 +70,7 @@ const columnConverters = {
 
     boostNotRedeemed: (condition) => converter.convertBoostCreatedOffered(condition),
     boostOffered: (condition) => converter.convertBoostAllButCreated(condition),
+    boostRedeemed: (condition) => converter.convertBoostRedeemed(condition),
     boostCount: (condition) => converter.convertBoostNumber(condition),
 
     numberFriends: (condition) => converter.convertNumberFriends(condition),

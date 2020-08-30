@@ -66,6 +66,38 @@ describe('*** TEST BOOST AND FRIEND SELECTION ***', () => {
         helper.itemizedSelectionCheck(executeConditionsStub, persParams, expectedSelection);
     });
 
+    it('Handles conversion into boost redeemed', async () => {
+        const mockSelectionJSON = {
+            clientId: mockClientId,
+            isDynamic: false,
+            conditions: [
+                { prop: 'boostRedeemed', op: 'is', value: 'this-boost-here', type: 'match' }
+            ]
+        };
+
+        const expectedSelection = {
+            table: 'boost_data.boost_account_status',
+            creatingUserId: mockUserId,
+            conditions: [{ op: 'and', children: [
+                { prop: 'boost_id', op: 'is', value: 'this-boost-here' },
+                { prop: 'boost_status', op: 'is', value: 'REDEEMED' }
+            ]}]
+        };
+
+        const mockAudienceId = 'created-audience-id';
+
+        executeConditionsStub.onFirstCall().resolves({ audienceId: mockAudienceId, audienceCount: 20 });
+
+        const authorizedRequest = helper.wrapAuthorizedRequest(mockSelectionJSON, mockUserId);
+        const wrappedResult = await audienceHandler.handleInboundRequest(authorizedRequest);
+        helper.standardOkayChecks(wrappedResult, { audienceId: mockAudienceId, audienceCount: 20 });
+
+        expect(executeConditionsStub).to.have.been.calledOnce;
+
+        const persParams = expectedPersParams(mockSelectionJSON.conditions, 'PRIMARY', false);
+        helper.itemizedSelectionCheck(executeConditionsStub, persParams, expectedSelection);
+    });
+
     it('Handles exclusion of a boost', async () => {
         const mockInbound = {
             clientId: mockClientId,

@@ -38,7 +38,7 @@ module.exports.addInvestmentToBSheet = async ({ operation, parameters, persisten
         }
         
         const wholeCurrencyAmount = util.convertToUnit(parseInt(amount, 10), unit, 'WHOLE_CURRENCY');
-        const transactionDetails = { accountNumber, amount: wholeCurrencyAmount, unit: 'WHOLE_CURRENCY', currency };
+        const transactionDetails = { transactionId, accountNumber, amount: wholeCurrencyAmount, unit: 'WHOLE_CURRENCY', currency };
 
         if (operation === 'WITHDRAW') {
             transactionDetails.bankDetails = bankDetails;
