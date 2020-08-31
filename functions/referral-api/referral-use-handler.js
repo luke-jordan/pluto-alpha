@@ -39,6 +39,20 @@ const fetchReferralCodeDetails = async (rawReferralCode, countryCode, relevantCo
     return referralCodeDetails;
 };
 
+const fetchUserReferralDefaults = async (clientId, floatId) => {
+    const clientFloatTable = config.get('tables.clientFloatTable');
+    const colsToReturn = ['user_referral_defaults'];
+
+    const tableLookUpResult = await dynamo.fetchSingleRow(clientFloatTable, { clientId, floatId }, colsToReturn);
+    logger('Got user referral defaults: ', tableLookUpResult);
+
+    if (!tableLookUpResult) {
+        return null;
+    }
+
+    return tableLookUpResult.userReferralDefaults;
+};
+
 /**
  * This function verifies a referral code.
  * @param {object} event An event object containing the referral code to be evaluated.
@@ -77,7 +91,7 @@ module.exports.verify = async (event) => {
         const codeDetails = tableLookUpResult;
         if (params.includeFloatDefaults) {
             const { clientId, floatId } = tableLookUpResult;
-            const { userReferralDefaults } = await dynamo.fetchSingleRow(config.get('tables.clientFloatTable'), { clientId, floatId }, ['user_referral_defaults']);
+            const userReferralDefaults = await fetchUserReferralDefaults(clientId, floatId);
             codeDetails.floatDefaults = camelCaseKeys(userReferralDefaults);
         }
         
@@ -95,7 +109,6 @@ const getReferralRevocationConditions = ({ daysForRevocation, balanceLimitForRev
     return { referralRevokeLimit, balanceLimit };
 };
 
-// note : psql handles uuids without quotes (and that will throw an error without a uuid cast)
 const createAudienceConditions = (boostUserIds) => ({ conditions: [{ op: 'in', prop: 'systemWideUserId', value: boostUserIds }]});
 
 const safeReferralAmountExtract = (referralContext, key = 'boostAmountOffered') => {
@@ -140,6 +153,15 @@ const fetchUserProfile = async (systemWideUserId) => {
     return userProfile;
 };
 
+const fetchReferralContext = async (referralCodeDetails) => {
+    if (referralCodeDetails.codeType === 'USER') {
+        const { clientId, floatId } = referralCodeDetails;
+        return fetchUserReferralDefaults(clientId, floatId);
+    }
+
+    return referralCodeDetails.context;
+};
+
 // this handles redeeming a referral code, if it is present and includes an amount
 // the method will create a boost in 'PENDING', triggered when the referred user saves
 module.exports.useReferralCode = async (event) => {
@@ -161,8 +183,8 @@ module.exports.useReferralCode = async (event) => {
             logger('No referral code details provided, exiting');
             return { statusCode: status('Forbidden') };
         }
-    
-        const referralContext = referralCodeDetails.context;
+
+        const referralContext = await fetchReferralContext(referralCodeDetails);
         if (!referralContext) {
             logger('No referral context to give boost amount etc, exiting');
             return { statusCode: status('Forbidden') };
@@ -230,3 +252,13 @@ module.exports.useReferralCode = async (event) => {
         return { statusCode: 500 };
     }
 };
+
+// ** At present, the referralContext, which is used to obtain the referral bonus,is obtained from the referral code itself –
+//    in a far too complex flow, register-handler gets it from the referral code table, then includes it in the payload to account-handler
+
+// ** This can be much simplified, and also made more flexible (double win), by having referral-use-handler 
+//    just look this up from client-float-table, which already has a column, userReferralDefaults, which is what 
+//    populates the referralCode.referralContext, i.e., can just be swapped in and logic kept as present
+
+// So, remove fetching this in register, and in referral verify, do not assume it is present, but fetch it 
+// from client-float (that fetch will just be a standard call to dynamoCommon on a single row, no persistence folder or anything). 

@@ -143,19 +143,23 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
             floatId: 'primary_cash'
         };
 
+        const userReferralDefaults = {
+            boostAmountOffered: '100000::HUNDREDTH_CENT::USD',
+            boostSource: testBoostSource
+        };
+
         const testReferralCodeDetails = {
             creatingUserId: testReferringUserId,
             codeType: 'USER',
-            context: {
-                boostAmountOffered: '100000::HUNDREDTH_CENT::USD',
-                boostSource: testBoostSource
-            }
+            clientId: 'some_client_id',
+            floatId: 'primary_cash'
         };
 
         momentStub.returns({ add: () => testEndTime, subtract: () => testRevokeLimit });
 
         fetchRowStub.onFirstCall().resolves({ countryCode: 'USA' });
         fetchRowStub.onSecondCall().resolves(testReferralCodeDetails);
+        fetchRowStub.onThirdCall().resolves({ userReferralDefaults });
 
         lambdaInvokeStub.returns({ promise: () => ({ statusCode: 200 })});
 
@@ -171,9 +175,12 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
 
         expect(resultOfCode).to.deep.equal(expectedResult);
 
-        expect(fetchRowStub).to.have.been.calledTwice;
+        expect(fetchRowStub).to.have.been.calledThrice;
         expect(fetchRowStub).to.have.been.calledWithExactly('UserProfileTable', { systemWideUserId: testReferredUserId }, ['country_code']);
         expect(fetchRowStub).to.have.been.calledWithExactly('ActiveReferralCodes', { referralCode: 'IGOTREFERRED', countryCode: 'USA' }, relevantColumns);
+
+        const referralDefaultsKey = { clientId: 'some_client_id', floatId: 'primary_cash' };
+        expect(fetchRowStub).to.have.been.calledWithExactly(clientFloatTable, referralDefaultsKey, ['user_referral_defaults']);
 
         const expectedAudienceSelection = {
             conditions: [
@@ -234,9 +241,9 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal({ statusCode: 403 });
         fetchRowStub.reset();
 
-        testReferralCodeDetails.context = { };
         fetchRowStub.onFirstCall().resolves({ countryCode: 'USA' });
         fetchRowStub.onSecondCall().resolves(testReferralCodeDetails);
+        fetchRowStub.onThirdCall().resolves({ userReferralDefaults: { } });
 
         // On zero redemption
         await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal({ statusCode: 200 });
