@@ -94,9 +94,9 @@ module.exports.stdProperties = {
         skipClient: true,
         canInvert: true
     },
-    boostRedeemed: {
+    boostPendingRedeemed: {
         type: 'match', // as above
-        description: 'Redeemed boost',
+        description: 'Redeemed or pending boost',
         expects: 'entity',
         entity: 'boost',
         table: 'boostTable',
@@ -232,10 +232,10 @@ module.exports.convertBoostAllButCreated = (condition) => {
     ]};
 };
 
-module.exports.convertBoostRedeemed = (condition) => ({
+module.exports.convertBoostPendingRedeemed = (condition) => ({
     conditions: [{ op: 'and', children: [
         { prop: 'boost_id', op: condition.op, value: condition.value },
-        { prop: 'boost_status', op: 'is', value: 'REDEEMED' }
+        { prop: 'boost_status', op: 'in', value: ['PENDING', 'REDEEMED'] }
     ]}]
 });
 

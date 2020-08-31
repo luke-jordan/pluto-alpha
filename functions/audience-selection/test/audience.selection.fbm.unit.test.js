@@ -71,7 +71,7 @@ describe('*** TEST BOOST AND FRIEND SELECTION ***', () => {
             clientId: mockClientId,
             isDynamic: false,
             conditions: [
-                { prop: 'boostRedeemed', op: 'is', value: 'this-boost-here', type: 'match' }
+                { prop: 'boostPendingRedeemed', op: 'is', value: 'this-boost-here', type: 'match' }
             ]
         };
 
@@ -80,7 +80,7 @@ describe('*** TEST BOOST AND FRIEND SELECTION ***', () => {
             creatingUserId: mockUserId,
             conditions: [{ op: 'and', children: [
                 { prop: 'boost_id', op: 'is', value: 'this-boost-here' },
-                { prop: 'boost_status', op: 'is', value: 'REDEEMED' }
+                { prop: 'boost_status', op: 'in', value: ['PENDING', 'REDEEMED'] }
             ]}]
         };
 
