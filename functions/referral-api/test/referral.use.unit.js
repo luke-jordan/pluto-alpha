@@ -145,17 +145,25 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
 
         const userReferralDefaults = {
             boostAmountOffered: '100000::HUNDREDTH_CENT::USD',
-            boostSource: testBoostSource
+            boostSource: testBoostSource,
+            redeemConditionType: 'SIMPLE_SAVE',
+            redeemConditionAmount: { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'ZAR' },
+            daysToMaintain: 30
         };
 
         const testReferralCodeDetails = {
             creatingUserId: testReferringUserId,
             codeType: 'USER',
             clientId: 'some_client_id',
-            floatId: 'primary_cash'
+            floatId: 'primary_cash',
+            context: { // This context is ignored in favor of user referral defaults
+                boostAmountOffered: '100::HUNDREDTH_CENT::USD',
+                boostSource: { }
+            }
         };
 
-        momentStub.returns({ add: () => testEndTime, subtract: () => testRevokeLimit });
+        momentStub.onFirstCall().returns({ add: () => testEndTime });
+        momentStub.onSecondCall().returns({ add: () => testRevokeLimit });
 
         fetchRowStub.onFirstCall().resolves({ countryCode: 'USA' });
         fetchRowStub.onSecondCall().resolves(testReferralCodeDetails);
@@ -193,6 +201,13 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
             { systemWideUserId: testReferringUserId, msgInstructionFlag: 'REFERRAL::REDEEMED::REFERRER' }
         ];
 
+        const expectedStatusConditions = {
+            REDEEMED: [
+                `save_completed_by #{${testReferredUserId}}`, `first_save_by #{${testReferredUserId}}`, 'first_save_above #{10000::HUNDREDTH_CENT::ZAR}'
+            ],
+            REVOKED: [`withdrawal_before #{${testRevokeLimit}}`]
+        };
+
         const expectedBoostPayload = {
             creatingUserId: testReferredUserId,
             label: `User referral code`,
@@ -204,10 +219,7 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
             boostAudience: 'INDIVIDUAL',
             boostAudienceSelection: expectedAudienceSelection,
             initialStatus: 'PENDING',
-            statusConditions: {
-                'REDEEMED': [`save_completed_by #{${testReferredUserId}}`, `first_save_by #{${testReferredUserId}}`],
-                'REVOKED': ['balance_below #{10::WHOLE_CURRENCY::ZAR}', `withdrawal_before #{${testRevokeLimit}}`]
-            },
+            statusConditions: expectedStatusConditions,
             messageInstructionFlags: { 'REDEEMED': expectedMsgInstructions }
         };
 

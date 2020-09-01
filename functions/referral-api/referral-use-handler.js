@@ -102,13 +102,6 @@ module.exports.verify = async (event) => {
     }
 };
 
-const getReferralRevocationConditions = ({ daysForRevocation, balanceLimitForRevocation }) => {
-    const referralRevokeDays = daysForRevocation ? daysForRevocation : config.get('revocationDefaults.withdrawalTime');
-    const referralRevokeLimit = moment().subtract(referralRevokeDays, 'days').valueOf();
-    const balanceLimit = balanceLimitForRevocation ? balanceLimitForRevocation : config.get('revocationDefaults.balanceBelow');
-    return { referralRevokeLimit, balanceLimit };
-};
-
 const createAudienceConditions = (boostUserIds) => ({ conditions: [{ op: 'in', prop: 'systemWideUserId', value: boostUserIds }]});
 
 const safeReferralAmountExtract = (referralContext, key = 'boostAmountOffered') => {
@@ -162,6 +155,29 @@ const fetchReferralContext = async (referralCodeDetails) => {
     return referralCodeDetails.context;
 };
 
+const assembleStatusConditions = (referredUserId, referralContext) => {
+    const { redeemConditionType, redeemConditionAmount, daysToMaintain } = referralContext;
+    
+    const referralRevokeDays = daysToMaintain ? daysToMaintain : config.get('revocationDefaults.withdrawalTime');
+    const referralRevokeLimit = moment().add(referralRevokeDays, 'days').valueOf();
+
+    const statusConditions = {
+        REDEEMED: [`save_completed_by #{${referredUserId}}`],
+        REVOKED: [`withdrawal_before #{${referralRevokeLimit}}`]
+    };
+
+    const { amount, unit, currency } = redeemConditionAmount;
+    if (redeemConditionType === 'SIMPLE_SAVE') {
+        statusConditions.REDEEMED.push(`first_save_by #{${referredUserId}}`, `first_save_above #{${amount}::${unit}::${currency}}`);
+    }
+
+    if (redeemConditionType === 'TARGET_BALANCE') {
+        statusConditions.REDEEMED.push(`balance_crossed_abs_target #{${amount}::${unit}::${currency}}`);
+    }
+
+    return statusConditions;
+};
+
 // this handles redeeming a referral code, if it is present and includes an amount
 // the method will create a boost in 'PENDING', triggered when the referred user saves
 module.exports.useReferralCode = async (event) => {
@@ -172,7 +188,7 @@ module.exports.useReferralCode = async (event) => {
     
         const { referralCodeUsed, referredUserId } = opsUtil.extractParamsFromEvent(event);
         logger('Got referral code: ', referralCodeUsed, 'And referred user id: ', referredUserId);
-    
+
         const userProfile = await fetchUserProfile(referredUserId);
         logger('Got referred user profile ', userProfile);
     
@@ -212,7 +228,8 @@ module.exports.useReferralCode = async (event) => {
         // time within which the new user has to save in order to claim the bonus
         const bonusExpiryTime = moment().add(config.get('revocationDefaults.expiryTimeDays'), 'days');
     
-        const { balanceLimit, referralRevokeLimit } = getReferralRevocationConditions(referralContext);
+        const statusConditions = assembleStatusConditions(referredUserId, referralContext);
+        logger('Assembled status conditions: ', statusConditions);
     
         // note : we may at some point want a "system" flag on creating user ID instead of the account opener, but for
         // now this will allow sufficient tracking, and a simple migration will fix it in the future
@@ -227,10 +244,7 @@ module.exports.useReferralCode = async (event) => {
             boostAudience: 'INDIVIDUAL',
             boostAudienceSelection,
             initialStatus: 'PENDING',
-            statusConditions: {
-                'REDEEMED': [`save_completed_by #{${referredUserId}}`, `first_save_by #{${referredUserId}}`],
-                'REVOKED': [`balance_below #{${balanceLimit}}`, `withdrawal_before #{${referralRevokeLimit}}`]
-            },
+            statusConditions,
             messageInstructionFlags: {
                 'REDEEMED': redemptionMsgInstructions
             }
