@@ -697,3 +697,11 @@ module.exports.findMsgInstructionByFlag = async (msgInstructionFlag) => {
 
     return null;
 };
+
+module.exports.fetchQuestionSnippets = async (snippetIds) => {
+    const selectQuery = `select title, body, response_options from ${config.get('tables.snippetTable')} ` + 
+        `where snippet_id in (${extractArrayIndices(snippetIds)})`;
+    const resultOfFetch = await rdsConnection.selectQuery(selectQuery, snippetIds);
+    logger('Result of snippet fetch: ', resultOfFetch);
+    return resultOfFetch.map((result) => camelizeKeys(result));
+};

@@ -23,7 +23,7 @@ const STANDARD_GAME_ACTIONS = {
 };
 
 const STANDARD_BOOST_TYPES = {
-    'GAME': ['CHASE_ARROW', 'TAP_SCREEN', 'DESTROY_IMAGE', 'MATCH_TILES'],
+    'GAME': ['CHASE_ARROW', 'TAP_SCREEN', 'DESTROY_IMAGE', 'MATCH_TILES', 'QUIZ'],
     'SIMPLE': ['SIMPLE_SAVE', 'ROUND_UP', 'TARGET_BALANCE'],
     'REFERRAL': ['USER_CODE_USED'],
     'SOCIAL': ['FRIENDS_ADDED', 'NUMBER_FRIENDS'],
@@ -58,6 +58,12 @@ const convertParamsToRedemptionCondition = (gameParams) => {
                 conditions.push(`percent_destroyed_in_first_N #{${gameParams.numberWinners}::${timeLimitMillis}}`);
             }
             break;
+        }
+        case 'QUIZ': {
+            if (gameParams.winningThreshold) {
+                conditions.push(`percent_destroyed_above #{${gameParams.winningThreshold}::${timeLimitMillis}}`);
+            }
+            break; 
         }
         default:
             logger('ERROR! Unimplemented game');

@@ -61,6 +61,25 @@ const generateUpdateInstruction = ({ boostId, statusResult, accountId, boostAmou
     };
 };
 
+const calculateUserQuizScore = async (gameParams, userResponses) => {
+    const questionSnippetIds = gameParams.questionSnippetIds;
+    const questionSnippets = await persistence.fetchQuestionSnippets(questionSnippetIds);
+    logger('Got question snippets: ', questionSnippets);
+
+    const correctAnswers = userResponses.filter((userResponse) => {
+        const { snippetId, userAnswerText } = userResponse;
+        const questionSnippet = questionSnippets.filter((snippet) => snippet.snippetId === snippetId);
+        return userAnswerText === questionSnippet[0].responseOptions.correctAnswerText;
+    });
+
+    logger(`User quiz score is: ${correctAnswers.length}/${questionSnippetIds.length}`);
+
+    return {
+        correctAnswers: questionSnippets.map((snippet) => snippet.responseOptions.correctAnswerText),
+        numberCorrectAnswers: correctAnswers.length,
+        numberQuestions: questionSnippetIds.length
+    };
+};
 
 /**
  * @param {object} event The event from API GW. Contains a body with the parameters:
@@ -104,6 +123,14 @@ module.exports.processUserBoostResponse = async (event) => {
 
         if (!allowableStatus.includes(currentStatus)) {
             return { statusCode: statusCodes('Bad Request'), body: JSON.stringify({ message: 'Boost is not open and repeat play not allowed', status: currentStatus }) };
+        }
+
+        let resultOfQuiz = {};
+        if (boost.boostType === 'GAME' && boost.boostCategory === 'QUIZ') {
+            resultOfQuiz = await calculateUserQuizScore(boost.gameParams, params.userResponses);
+            logger('Result of quiz: ', resultOfQuiz);
+            const { numberCorrectAnswers, numberQuestions } = resultOfQuiz;
+            params.percentDestroyed = Number((numberCorrectAnswers / numberQuestions).toFixed(2)) * 100;
         }
 
         const statusEvent = { eventType, eventContext: params };
@@ -153,6 +180,10 @@ module.exports.processUserBoostResponse = async (event) => {
 
         if (statusResult.includes('PENDING')) {
             await expireFinishedTournaments(boost);
+        }
+
+        if (resultOfQuiz && Object.keys(resultOfQuiz).length > 0) {
+            resultBody.resultOfQuiz = resultOfQuiz;
         }
 
         return {

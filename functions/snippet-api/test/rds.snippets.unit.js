@@ -152,7 +152,8 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
         };
 
         const selectQuery = `select * from snippet_data.snippet where active = $1 and snippet_id not in ` +
-            `(select snippet_id from snippet_data.snippet_user_join_table where user_id = $2 and snippet_status = $3)`;
+            `(select snippet_id from snippet_data.snippet_user_join_table where user_id = $2 and snippet_status = $3) ` +
+            `and response_options = null`;
 
         queryStub.resolves([mockSnippetFromPersistence, mockSnippetFromPersistence]);
 
@@ -160,6 +161,50 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
 
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal([expectedSnippet, expectedSnippet]);
+        expect(queryStub).to.have.been.calledWithExactly(selectQuery, [true, testSystemId, 'VIEWED']);
+    });
+
+    it('Fetches uncreated question snippets', async () => {
+        const mockQuestionSnippet = { ...mockSnippetFromRds };
+
+        mockQuestionSnippet['body'] = 'How often can you save?';
+        mockQuestionSnippet['response_options'] = {
+            responseTexts: [
+                'As often as you like',
+                'Not more than once a month',
+                'Once every leap year'
+            ],
+            correctAnswerText: 'As often as you like'
+        };
+
+        const selectQuery = `select * from snippet_data.snippet where active = $1 and snippet_id not in ` +
+            `(select snippet_id from snippet_data.snippet_user_join_table where user_id = $2 and snippet_status = $3) ` +
+            `and response_options not null`;
+
+        queryStub.resolves([mockQuestionSnippet]);
+
+        const resultOfFetch = await rds.fetchUncreatedSnippets(testSystemId, true);
+
+        const expectedSnippet = {
+            snippetId: testSnippetId,
+            title: 'Jupiter Snippet #21',
+            body: 'How often can you save?',
+            active: true,
+            fetchCount: 0,
+            viewCount: 0,
+            snippetStatus: 'UNCREATED',
+            snippetPriority: 2,
+            responseOptions: {
+                responseTexts: [
+                    'As often as you like',
+                    'Not more than once a month',
+                    'Once every leap year'
+                ]
+            }
+        };
+
+        expect(resultOfFetch).to.exist;
+        expect(resultOfFetch).to.deep.equal([expectedSnippet]);
         expect(queryStub).to.have.been.calledWithExactly(selectQuery, [true, testSystemId, 'VIEWED']);
     });
 
@@ -179,7 +224,7 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
 
         const selectQuery = `select * from snippet_data.snippet_user_join_table inner join snippet_data.snippet ` +
             `on snippet_data.snippet_user_join_table.snippet_id = snippet_data.snippet.snippet_id ` +
-            `where user_id = $1 and active = $2`;           
+            `where user_id = $1 and active = $2 and response_options = null`;
         
         queryStub.resolves([snippetFromRds, snippetFromRds]);
 
@@ -187,6 +232,50 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
 
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal([expectedSnippet, expectedSnippet]);
+        expect(queryStub).to.have.been.calledWithExactly(selectQuery, [testSystemId, true]);
+    });
+
+    it('Fetches and filters created question snippets', async () => {
+        const mockQuestionSnippet = { ...mockSnippetFromRds };
+
+        mockQuestionSnippet['body'] = 'How often can you withdraw?';
+        mockQuestionSnippet['response_options'] = {
+            responseTexts: [
+                'On the night of a blood moon',
+                'Every cloudless evening',
+                'Whenever you like'
+            ],
+            correctAnswerText: 'Whenever you like'
+        };
+
+        const selectQuery = `select * from snippet_data.snippet_user_join_table inner join snippet_data.snippet ` +
+            `on snippet_data.snippet_user_join_table.snippet_id = snippet_data.snippet.snippet_id ` +
+            `where user_id = $1 and active = $2 and response_options not null`;           
+        
+        queryStub.resolves([mockQuestionSnippet]);
+
+        const resultOfFetch = await rds.fetchCreatedSnippets(testSystemId, true);
+
+        const expectedSnippet = {
+            snippetId: testSnippetId,
+            title: 'Jupiter Snippet #21',
+            body: 'How often can you withdraw?',
+            active: true,
+            fetchCount: 0,
+            viewCount: 0,
+            snippetStatus: 'UNCREATED',
+            snippetPriority: 2,
+            responseOptions: {
+                responseTexts: [
+                    'On the night of a blood moon',
+                    'Every cloudless evening',
+                    'Whenever you like'
+                ]
+            }
+        };
+
+        expect(resultOfFetch).to.exist;
+        expect(resultOfFetch).to.deep.equal([expectedSnippet]);
         expect(queryStub).to.have.been.calledWithExactly(selectQuery, [testSystemId, true]);
     });
 
