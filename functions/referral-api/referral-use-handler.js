@@ -168,7 +168,7 @@ const assembleStatusConditions = (referredUserId, referralContext) => {
 
     const { amount, unit, currency } = redeemConditionAmount;
     if (redeemConditionType === 'SIMPLE_SAVE') {
-        statusConditions.REDEEMED.push(`first_save_by #{${referredUserId}}`, `first_save_above #{${amount}::${unit}::${currency}}`);
+        statusConditions.REDEEMED.push(`first_save_above #{${amount}::${unit}::${currency}}`);
     }
 
     if (redeemConditionType === 'TARGET_BALANCE') {
@@ -197,13 +197,13 @@ module.exports.useReferralCode = async (event) => {
     
         if (!referralCodeDetails || Object.keys(referralCodeDetails).length === 0) {
             logger('No referral code details provided, exiting');
-            return { statusCode: status('Forbidden') };
+            return { statusCode: status('Bad Request') };
         }
 
         const referralContext = await fetchReferralContext(referralCodeDetails);
         if (!referralContext) {
             logger('No referral context to give boost amount etc, exiting');
-            return { statusCode: status('Forbidden') };
+            return { statusCode: status('Bad Request') };
         }
     
         if (referralHasZeroRedemption(referralContext)) {
