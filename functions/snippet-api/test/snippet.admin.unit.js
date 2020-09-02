@@ -92,7 +92,7 @@ describe('*** UNIT TEST ADMIN SNIPPET WRITE FUNCTIONS ***', () => {
 
         const eventBody = {
             title: 'How often can you save?',
-            body: 'How often can you save?',
+            body: 'Within the Jupiter App, how often are you able to save?', // actual description
             countryCode: 'ZAF',
             responseOptions
         };
@@ -106,7 +106,7 @@ describe('*** UNIT TEST ADMIN SNIPPET WRITE FUNCTIONS ***', () => {
         const expectedSnippet = {
             createdBy: testAdminId,
             title: 'How often can you save?',
-            body: 'How often can you save?',
+            body: 'Within the Jupiter App, how often are you able to save?',
             countryCode: 'ZAF',
             active: true,
             snippetPriority: 1,

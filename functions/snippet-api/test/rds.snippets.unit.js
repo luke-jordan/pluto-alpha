@@ -153,7 +153,7 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
 
         const selectQuery = `select * from snippet_data.snippet where active = $1 and snippet_id not in ` +
             `(select snippet_id from snippet_data.snippet_user_join_table where user_id = $2 and snippet_status = $3) ` +
-            `and response_options = null`;
+            `and response_options is null`;
 
         queryStub.resolves([mockSnippetFromPersistence, mockSnippetFromPersistence]);
 
@@ -179,7 +179,7 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
 
         const selectQuery = `select * from snippet_data.snippet where active = $1 and snippet_id not in ` +
             `(select snippet_id from snippet_data.snippet_user_join_table where user_id = $2 and snippet_status = $3) ` +
-            `and response_options not null`;
+            `and response_options is not null`;
 
         queryStub.resolves([mockQuestionSnippet]);
 
@@ -224,7 +224,7 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
 
         const selectQuery = `select * from snippet_data.snippet_user_join_table inner join snippet_data.snippet ` +
             `on snippet_data.snippet_user_join_table.snippet_id = snippet_data.snippet.snippet_id ` +
-            `where user_id = $1 and active = $2 and response_options = null`;
+            `where user_id = $1 and active = $2 and response_options is null`;
         
         queryStub.resolves([snippetFromRds, snippetFromRds]);
 
@@ -250,7 +250,7 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
 
         const selectQuery = `select * from snippet_data.snippet_user_join_table inner join snippet_data.snippet ` +
             `on snippet_data.snippet_user_join_table.snippet_id = snippet_data.snippet.snippet_id ` +
-            `where user_id = $1 and active = $2 and response_options not null`;           
+            `where user_id = $1 and active = $2 and response_options is not null`;           
         
         queryStub.resolves([mockQuestionSnippet]);
 

@@ -130,7 +130,7 @@ module.exports.fetchUncreatedSnippets = async (systemWideUserId, includeQuestion
     let selectQuery = `select * from ${snippetTable} where active = $1 and snippet_id not in ` +
         `(select snippet_id from ${snippetJoinTable} where user_id = $2 and snippet_status = $3)`;
 
-    const responseOptionsClause = includeQuestionSnippets ? ' and response_options not null' : ' and response_options = null';
+    const responseOptionsClause = includeQuestionSnippets ? ' and response_options is not null' : ' and response_options is null';
     selectQuery += responseOptionsClause;
   
     logger('Fetching unread snippets with query:', selectQuery);
@@ -149,7 +149,7 @@ module.exports.fetchCreatedSnippets = async (systemWideUserId, includeQuestionSn
         `where user_id = $1 and active = $2`;
 
     const responseOptionsClause = includeQuestionSnippets 
-        ? ' and response_options not null' : ' and response_options = null';
+        ? ' and response_options is not null' : ' and response_options is null';
 
     selectQuery += responseOptionsClause;
     logger('Fetching unread snippets with query:', selectQuery);
