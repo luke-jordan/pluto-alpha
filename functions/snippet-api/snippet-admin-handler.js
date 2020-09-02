@@ -120,6 +120,10 @@ module.exports.createSnippet = async (event) => {
             previewMode: typeof params.previewMode === 'boolean' ? params.previewMode : true
         };
 
+        if (!opsUtil.isObjectEmpty(params.responseOptions)) {
+            snippet.responseOptions = params.responseOptions;
+        }
+
         const creationResult = await persistence.addSnippet(snippet);
         logger('Result of snippet creation:', creationResult);
         

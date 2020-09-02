@@ -74,7 +74,51 @@ describe('*** UNIT TEST ADMIN SNIPPET WRITE FUNCTIONS ***', () => {
         expect(addSnippetStub).to.have.been.calledOnceWithExactly(expectedSnippet);
     });
 
-    it('Happy path, pdates a snippet properly', async () => {
+    it('Happy path creates a snippet with questions', async () => {
+        const mockTime = moment();
+
+        const responseOptions = {
+            responseTexts: [
+                'As often as you like',
+                'Not more than once a month',
+                'Once every leap year'
+            ],
+            correctAnswerText: 'As often as you like'
+        };
+        
+        const expectedResult = { result: 'SUCCESS', creationTime: mockTime.format() };
+
+        addSnippetStub.resolves({ creationTime: mockTime.format() });
+
+        const eventBody = {
+            title: 'How often can you save?',
+            body: 'How often can you save?',
+            countryCode: 'ZAF',
+            responseOptions
+        };
+
+        const testEvent = helper.wrapEvent(eventBody, testAdminId, 'SYSTEM_ADMIN');
+        const creationResult = await handler.createSnippet(testEvent);
+
+        const body = helper.standardOkayChecks(creationResult);
+        expect(body).to.deep.equal(expectedResult);
+
+        const expectedSnippet = {
+            createdBy: testAdminId,
+            title: 'How often can you save?',
+            body: 'How often can you save?',
+            countryCode: 'ZAF',
+            active: true,
+            snippetPriority: 1,
+            snippetLanguage: 'en',
+            previewMode: true,
+            responseOptions
+        };
+
+        expect(addSnippetStub).to.have.been.calledOnceWithExactly(expectedSnippet);
+    });
+
+    it('Happy path, updates a snippet properly', async () => {
         const testUpdatedTime = moment();
 
         const expectedResult = { result: 'SUCCESS', updatedTime: testUpdatedTime.format() };
