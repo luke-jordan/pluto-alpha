@@ -272,9 +272,9 @@ const validateReferralParams = (params) => {
     const paramKeys = Object.keys(params);
     const requiredParameters = ['boostAmountOffered', 'boostSource', 'redeemConditionType', 'redeemConditionAmount'];
 
-    requiredParameters.forEach((key) => {
-        if (!paramKeys.includes(key)) {
-            throw new Error(`Missing required parameter: ${key}`);
+    requiredParameters.forEach((requiredKey) => {
+        if (!paramKeys.includes(requiredKey)) {
+            throw new Error(`Missing required parameter: ${requiredKey}`);
         }
     });
 
@@ -302,7 +302,7 @@ const updateReferralContext = async (event) => {
     logger('Assembled new referral defaults: ', userReferralDefaults);
     const { clientId, floatId } = params.boostSource;
 
-    const resultOfUpdate = await dynamo.updateClientFloatVars({ clientId, floatId, newReferralDefaults: { userReferralDefaults }});
+    const resultOfUpdate = await dynamo.updateClientFloatVars({ clientId, floatId, newReferralDefaults: userReferralDefaults });
     logger('Result of updating referral code defaults: ', resultOfUpdate);
 
     if (resultOfUpdate.result === 'SUCCESS') {

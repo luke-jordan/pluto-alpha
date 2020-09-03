@@ -272,9 +272,7 @@ describe('*** UNIT TEST RETRIEVING AND TRANSFORMING REFERRAL CODES ***', () => {
         const expectedClientFloatVars = {
             clientId: 'a_client_id',
             floatId: 'primary_cash',
-            newReferralDefaults: {
-                userReferralDefaults: testInboundEvent
-            }
+            newReferralDefaults: testInboundEvent
         };
 
         expect(updateClientFloatVarsStub).to.have.been.calledOnceWithExactly(expectedClientFloatVars);
