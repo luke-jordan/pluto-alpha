@@ -281,6 +281,13 @@ module.exports.fetchSnippetsAndUserCount = async () => {
     return resultOfFetch.map(camelCaseKeys);
 };
 
+module.exports.fetchQuizSnippets = async (countryCode = null) => {
+    const selectQuery = `select * from ${snippetTable} where response_options is not null` +
+        (countryCode ? ' and country_code = $1' : '') + ' order by creation_time desc';
+    const resultOfFetch = await rdsConnection.selectQuery(selectQuery, countryCode ? [countryCode] : []);
+    return resultOfFetch.map(camelCaseKeys);
+};
+
 /**
  * Fetches a single snippet for admin user. All snippet properties are returned.
  * @param {string} snippetId The identifier of the snippet ot be retrieved.

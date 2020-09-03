@@ -250,7 +250,7 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
 
         const selectQuery = `select * from snippet_data.snippet_user_join_table inner join snippet_data.snippet ` +
             `on snippet_data.snippet_user_join_table.snippet_id = snippet_data.snippet.snippet_id ` +
-            `where user_id = $1 and active = $2 and response_options is not null`;           
+            `where user_id = $1 and active = $2 and response_options is not null`;
         
         queryStub.resolves([mockQuestionSnippet]);
 
@@ -474,6 +474,43 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal([expectedSnippet, expectedSnippet]);
         expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [true]);
+    });
+
+    it('Fetches all quiz snippets (admin), no country code', async () => {
+        const responseOptions = {
+            responseTexts: [
+                'As often as you like',
+                'Not more than once a month',
+                'Once every leap year'
+            ],
+            correctAnswerText: 'As often as you like'
+        };
+
+        // also of course title body etc but those are implicitly covered
+        const mockFromRds = { 'snippet_id': testSnippetId, 'created_by': testAdminId, 'response_options': responseOptions };
+        const expectedSnippet = { snippetId: testSnippetId, createdBy: testAdminId, responseOptions };
+
+        queryStub.resolves([mockFromRds]);
+
+        const resultOfFetch = await rds.fetchQuizSnippets();
+
+        expect(resultOfFetch).to.exist;
+        expect(resultOfFetch).to.deep.equal([expectedSnippet]);
+
+        const expectedQuery = 'select * from snippet_data.snippet where response_options is not null order by creation_time desc';
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, []);
+    });
+
+    it('Fetches all quiz snippets, country code', async () => {
+        // just test query construction properly, rest is light as covered elsewhere
+        const mockSnippet = { 'snippet_id': 'some-snippet', 'title': 'Quiz question', 'response_options': { correctAnswerText: 'X' }};
+        queryStub.resolves([mockSnippet]);
+        const resultOfFetch = await rds.fetchQuizSnippets('ZAF');
+        expect(resultOfFetch).to.deep.equal([{ snippetId: 'some-snippet', title: 'Quiz question', responseOptions: { correctAnswerText: 'X' }}]);
+
+        const expectedQuery = 'select * from snippet_data.snippet where response_options is not null' +
+            ' and country_code = $1 order by creation_time desc';
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['ZAF']);
     });
 
     it('Fetches a snippet (admin)', async () => {

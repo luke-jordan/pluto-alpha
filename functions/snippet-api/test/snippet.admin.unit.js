@@ -18,6 +18,7 @@ const updateSnippetStub = sinon.stub();
 
 const fetchSnippetUserCountStub = sinon.stub();
 const fetchSnippetStub = sinon.stub();
+const fetchQuizSnippetStub = sinon.stub();
 
 const countSnippetEventsStub = sinon.stub();
 const insertPreviewUserStub = sinon.stub();
@@ -29,6 +30,7 @@ const handler = proxyquire('../snippet-admin-handler', {
         'updateSnippet': updateSnippetStub,
         'fetchSnippetsAndUserCount': fetchSnippetUserCountStub,
         'fetchSnippetForAdmin': fetchSnippetStub,
+        'fetchQuizSnippets': fetchQuizSnippetStub,
         'countSnippetEvents': countSnippetEventsStub,
         'insertPreviewUser': insertPreviewUserStub,
         'removePreviewUser': removePreviewUserStub
@@ -200,6 +202,22 @@ describe('*** UNIT TEST ADMIN SNIPPET READ FUNCTIONS ***', () => {
         const body = helper.standardOkayChecks(resultOfListing);
         expect(body).to.deep.equal([expectedFirst, expectedSecond]);
         expect(fetchSnippetUserCountStub).to.have.been.calledOnceWithExactly();
+    });
+
+    it('Sends shallow list of quiz snippets, for boost creation', async () => {
+        const quizSnippet1 = { snippetId: 'snippet-1', title: 'Quiz Snippet 1', responseOptions: { correctAnswerText: 'Answer Here' }};
+        const quizSnippet2 = { snippetId: 'snippet-2', title: 'Quiz Snippet 2', responseOptions: { correctAnswerText: 'Another Answer' }};
+        
+        fetchQuizSnippetStub.resolves([quizSnippet1, quizSnippet2]);
+
+        const testEvent = helper.wrapQueryParamEvent({ onlyQuizSnippets: true }, testAdminId, 'SYSTEM_ADMIN');
+        const resultOfListing = await handler.listSnippets(testEvent);
+
+        const body = helper.standardOkayChecks(resultOfListing);
+        expect(body).to.deep.equal([quizSnippet1, quizSnippet2]); // maybe in future strip response options, but not significant at present
+
+        expect(fetchQuizSnippetStub).to.have.been.calledOnceWithExactly();
+        expect(fetchSnippetUserCountStub).to.not.have.been.called;
     });
 
     it('Fetches snippet for admin', async () => {

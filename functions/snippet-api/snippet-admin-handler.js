@@ -16,6 +16,12 @@ module.exports.listSnippets = async (event) => {
             return { statusCode: 403 };
         }
 
+        const params = opsUtil.extractQueryParams(event);
+        if (params.onlyQuizSnippets) {
+            const quizSnippets = await persistence.fetchQuizSnippets();
+            return opsUtil.wrapResponse(quizSnippets);
+        }
+
         const snippets = await persistence.fetchSnippetsAndUserCount();
         logger('Got snippets:', snippets);
 
