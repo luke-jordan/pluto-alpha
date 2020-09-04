@@ -139,40 +139,47 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
     const testRevokeLimit = moment().subtract(30, 'days').valueOf();
     const testEndTime = moment();
 
+    const testBoostSource = {
+        bonusPoolId: 'primary_bonus_pool',
+        clientId: 'some_client_id',
+        floatId: 'primary_cash'
+    };
+
+    const userReferralDefaults = {
+        boostAmountOffered: '100000::HUNDREDTH_CENT::USD',
+        boostSource: testBoostSource,
+        redeemConditionType: 'SIMPLE_SAVE',
+        redeemConditionAmount: { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+        daysToMaintain: 30
+    };
+
+    const testReferralCodeDetails = {
+        referralCode: 'IGOTREFERRED',
+        creatingUserId: testReferringUserId,
+        persistedTimeMillis: testRefCodeCreationTime,
+        codeType: 'USER',
+        clientId: 'some_client_id',
+        floatId: 'primary_cash',
+        context: { // This context is ignored in favor of user referral defaults
+            boostAmountOffered: '100::HUNDREDTH_CENT::USD',
+            boostSource: { }
+        }
+    };
+
+    const testUserProfile = {
+        systemWideUserId: testReferredUserId,
+        countryCode: 'USA',
+        creationTimeEpochMillis: testProfileCreationTime
+    };
+
     beforeEach(() => testHelper.resetStubs(fetchRowStub, lambdaInvokeStub, momentStub));
     
-    it('Fetched referral context and redeems boost where all conditions met', async () => {
-        const testBoostSource = {
-            bonusPoolId: 'primary_bonus_pool',
-            clientId: 'some_client_id',
-            floatId: 'primary_cash'
-        };
-
-        const userReferralDefaults = {
-            boostAmountOffered: '100000::HUNDREDTH_CENT::USD',
-            boostSource: testBoostSource,
-            redeemConditionType: 'SIMPLE_SAVE',
-            redeemConditionAmount: { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
-            daysToMaintain: 30
-        };
-
-        const testReferralCodeDetails = {
-            referralCode: 'IGOTREFERRED',
-            creatingUserId: testReferringUserId,
-            persistedTimeMillis: testRefCodeCreationTime,
-            codeType: 'USER',
-            clientId: 'some_client_id',
-            floatId: 'primary_cash',
-            context: { // This context is ignored in favor of user referral defaults
-                boostAmountOffered: '100::HUNDREDTH_CENT::USD',
-                boostSource: { }
-            }
-        };
-
+    it('Fetches referral context and redeems boost where all conditions met', async () => {
+     
         momentStub.onFirstCall().returns({ add: () => testEndTime });
         momentStub.onSecondCall().returns({ add: () => testRevokeLimit });
 
-        fetchRowStub.onFirstCall().resolves({ countryCode: 'USA', creationTimeEpochMillis: testProfileCreationTime });
+        fetchRowStub.onFirstCall().resolves(testUserProfile);
         fetchRowStub.onSecondCall().resolves(testReferralCodeDetails);
         fetchRowStub.onThirdCall().resolves({ userReferralDefaults });
 
@@ -236,6 +243,17 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
             Payload: JSON.stringify(expectedBoostPayload)
         };
         expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(expectedBoostInvocation);
+
+        const expectedLogOptions = {
+            initiator: testReferredUserId,
+            context: {
+                referralContext: userReferralDefaults,
+                referralCode: 'IGOTREFERRED',
+                refCodeCreationTime: testRefCodeCreationTime,
+                referredUserCreationTime: testProfileCreationTime
+            }
+        };
+        expect(publishStub).to.have.been.calledOnceWithExactly(testReferringUserId, 'REFERRAL_CODE_USED', expectedLogOptions);
     });
 
     it('Does not redeem where conditions not met', async () => {
@@ -244,27 +262,35 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         // On invalid event
         await expect(handler.useReferralCode({ httpMethod: 'POST' })).to.eventually.deep.equal({ statusCode: 403 });
 
-        fetchRowStub.onFirstCall().resolves({ countryCode: 'USA' });
+        fetchRowStub.onFirstCall().resolves(testUserProfile);
         fetchRowStub.onSecondCall().resolves();
 
         // On referral code details not found
         await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal({ statusCode: 400 });
         fetchRowStub.reset();
 
-        const testReferralCodeDetails = { creatingUserId: testReferringUserId, codeType: 'USER' };
-
-        fetchRowStub.onFirstCall().resolves({ countryCode: 'USA' });
+        fetchRowStub.onFirstCall().resolves(testUserProfile);
         fetchRowStub.onSecondCall().resolves(testReferralCodeDetails);
 
         // On missing referral code context
         await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal({ statusCode: 400 });
         fetchRowStub.reset();
 
-        fetchRowStub.onFirstCall().resolves({ countryCode: 'USA' });
+        fetchRowStub.onFirstCall().resolves(testUserProfile);
         fetchRowStub.onSecondCall().resolves(testReferralCodeDetails);
         fetchRowStub.onThirdCall().resolves({ userReferralDefaults: { } });
 
         // On zero redemption
         await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal({ statusCode: 200 });
+        fetchRowStub.reset();
+
+        testReferralCodeDetails.persistedTimeMillis = moment(testRefCodeCreationTime).add(4, 'days').valueOf();
+
+        fetchRowStub.onFirstCall().resolves(testUserProfile);
+        fetchRowStub.onSecondCall().resolves(testReferralCodeDetails);
+        fetchRowStub.onThirdCall().resolves({ userReferralDefaults });
+
+        // Where used referral code is older than referred user
+        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal({ statusCode: 403 });
     });
 });
