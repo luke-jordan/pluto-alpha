@@ -9,6 +9,7 @@ const camelCaseKeys = require('camelcase-keys');
 
 const dynamo = require('dynamo-common');
 const opsUtil = require('ops-util-common');
+const publisher = require('publish-common');
 
 const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
@@ -133,7 +134,7 @@ const referralHasZeroRedemption = (referralContext) => {
 };
 
 const fetchUserProfile = async (systemWideUserId) => {
-    const relevantProfileColumns = ['country_code'];
+    const relevantProfileColumns = ['country_code', 'creation_time_epoch_millis'];
 
     logger('Fetching profile for user id: ', systemWideUserId);
     const userProfile = await dynamo.fetchSingleRow(config.get('tables.userProfile'), { systemWideUserId }, relevantProfileColumns);
@@ -153,6 +154,25 @@ const fetchReferralContext = async (referralCodeDetails) => {
     }
 
     return referralCodeDetails.context;
+};
+
+// Here the user using the code (referred user) is logged as the initator and the referrring user is used as the user id key
+const publishReferralCodeEvent = async (referredUserProfile, referralCodeDetails, referralContext) => {
+    const referredUserId = referredUserProfile.systemWideUserId;
+    const referringUserId = referralCodeDetails.creatingUserId;
+     
+    const logOptions = {
+        initiator: referredUserId,
+        context: {
+            referralContext,
+            referralCode: referralCodeDetails.referralCode,
+            refCodeCreationTime: referralCodeDetails.persistedTimeMillis,
+            referredUserCreationTime: referredUserProfile.creationTimeEpochMillis
+        }
+    };
+
+    logger('Publishing referral event with log options: ', logOptions);
+    await publisher.publishUserEvent(referringUserId, 'REFERRAL_CODE_USED', logOptions);
 };
 
 const assembleStatusConditions = (referredUserId, referralContext) => {
@@ -178,6 +198,15 @@ const assembleStatusConditions = (referredUserId, referralContext) => {
     return statusConditions;
 };
 
+const isValidReferralCode = (referralCodeDetails, referredUserProfile) => {
+    if (referralCodeDetails.persistedTimeMillis > referredUserProfile.creationTimeEpochMillis) {
+        logger('Referral code older than referred user, exiting');
+        return false;
+    }
+
+    return true;
+};
+
 // this handles redeeming a referral code, if it is present and includes an amount
 // the method will create a boost in 'PENDING', triggered when the referred user saves
 module.exports.useReferralCode = async (event) => {
@@ -198,6 +227,10 @@ module.exports.useReferralCode = async (event) => {
         if (!referralCodeDetails || Object.keys(referralCodeDetails).length === 0) {
             logger('No referral code details provided, exiting');
             return { statusCode: status('Bad Request') };
+        }
+
+        if (!isValidReferralCode(referralCodeDetails, userProfile)) {
+            return { statusCode: status('Forbidden') };
         }
 
         const referralContext = await fetchReferralContext(referralCodeDetails);
@@ -259,7 +292,12 @@ module.exports.useReferralCode = async (event) => {
         logger('Invoking lambda with payload: ', boostPayload);
         const resultOfTrigger = await lambda.invoke(lambdaInvocation).promise();
         logger('Result of firing off lambda invoke: ', resultOfTrigger);
-    
+
+        if (referralType === 'USER') {
+            logger('Publishing user referra code event');
+            await publishReferralCodeEvent(userProfile, referralCodeDetails, referralContext);
+        }
+
         return { statusCode: status('OK'), body: JSON.stringify({ resultOfTrigger }) };
     } catch (err) {
         logger('FATAL_ERROR: ', err);

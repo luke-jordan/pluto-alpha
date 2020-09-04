@@ -51,12 +51,6 @@ class MockRdsConnection {
 
 const proxyquire = require('proxyquire').noCallThru();
 
-const rds = proxyquire('../persistence/rds.boost', {
-    'rds-common': MockRdsConnection,
-    'uuid/v4': uuidStub,
-    '@noCallThru': true
-});
-
 const boostEventHandler = proxyquire('../boost-event-handler', {
     './persistence/rds.boost': {
         'insertBoost': insertBoostStub,
@@ -89,6 +83,12 @@ const boostCreateHandler = proxyquire('../boost-create-handler', {
         'publishMultiUserEvent': publishMultiStub
     },
     'moment': momentStub,
+    '@noCallThru': true
+});
+
+const rds = proxyquire('../persistence/rds.boost', {
+    'rds-common': MockRdsConnection,
+    'uuid/v4': uuidStub,
     '@noCallThru': true
 });
 
@@ -323,6 +323,7 @@ describe('*** UNIT TEST BOOST PROCESSING *** Individual or limited users', () =>
 
         const resultOfEventRecord = await boostEventHandler.handleBatchOfQueuedEvents(wrapEventAsSqs(testEvent));
         logger('Result of record: ', resultOfEventRecord);
+        // logger('Args: ', publishStub.getCall(0).args)
 
         expect(resultOfEventRecord).to.exist;
         // expect(publishStub).to.be.calledWithExactly(testUserId, 'REFERRAL_REDEEMED', publishOptions);

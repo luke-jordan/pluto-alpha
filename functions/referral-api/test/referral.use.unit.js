@@ -18,9 +18,8 @@ const proxyquire = require('proxyquire');
 const testHelper = require('./referral.test.helper');
 
 const fetchRowStub = sinon.stub();
-
 const lambdaInvokeStub = sinon.stub();
-
+const publishStub = sinon.stub();
 const momentStub = sinon.stub();
 
 class MockLambdaClient {
@@ -33,6 +32,9 @@ const handler = proxyquire('../referral-use-handler', {
     'dynamo-common': {
         fetchSingleRow: fetchRowStub,
         '@noCallThru': true
+    },
+    'publish-common': {
+        'publishUserEvent': publishStub
     },
     'aws-sdk': {
         'Lambda': MockLambdaClient  
@@ -131,6 +133,9 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
     const testReferringUserId = uuid();
     const testReferredUserId = uuid();
 
+    const testProfileCreationTime = moment().valueOf();
+    const testRefCodeCreationTime = moment().subtract(2, 'days').valueOf();
+
     const testRevokeLimit = moment().subtract(30, 'days').valueOf();
     const testEndTime = moment();
 
@@ -152,7 +157,9 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         };
 
         const testReferralCodeDetails = {
+            referralCode: 'IGOTREFERRED',
             creatingUserId: testReferringUserId,
+            persistedTimeMillis: testRefCodeCreationTime,
             codeType: 'USER',
             clientId: 'some_client_id',
             floatId: 'primary_cash',
@@ -165,7 +172,7 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         momentStub.onFirstCall().returns({ add: () => testEndTime });
         momentStub.onSecondCall().returns({ add: () => testRevokeLimit });
 
-        fetchRowStub.onFirstCall().resolves({ countryCode: 'USA' });
+        fetchRowStub.onFirstCall().resolves({ countryCode: 'USA', creationTimeEpochMillis: testProfileCreationTime });
         fetchRowStub.onSecondCall().resolves(testReferralCodeDetails);
         fetchRowStub.onThirdCall().resolves({ userReferralDefaults });
 
@@ -184,7 +191,7 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         expect(resultOfCode).to.deep.equal(expectedResult);
 
         expect(fetchRowStub).to.have.been.calledThrice;
-        expect(fetchRowStub).to.have.been.calledWithExactly('UserProfileTable', { systemWideUserId: testReferredUserId }, ['country_code']);
+        expect(fetchRowStub).to.have.been.calledWithExactly('UserProfileTable', { systemWideUserId: testReferredUserId }, ['country_code', 'creation_time_epoch_millis']);
         expect(fetchRowStub).to.have.been.calledWithExactly('ActiveReferralCodes', { referralCode: 'IGOTREFERRED', countryCode: 'USA' }, relevantColumns);
 
         const referralDefaultsKey = { clientId: 'some_client_id', floatId: 'primary_cash' };

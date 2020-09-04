@@ -16,5 +16,10 @@
     },
     "lambda": {
         "createBoost": "boost_create"
+    },
+    "publishing": {
+        "userEvents": {
+            "topicArn": "<referral code topic>"
+        }
     }
 }
