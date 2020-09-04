@@ -160,11 +160,15 @@ const fetchReferralContext = async (referralCodeDetails) => {
 const publishReferralCodeEvent = async (referredUserProfile, referralCodeDetails, referralContext) => {
     const referredUserId = referredUserProfile.systemWideUserId;
     const referringUserId = referralCodeDetails.creatingUserId;
+
+    const [boostAmountOffered, fromUnit] = referralContext.boostAmountOffered.split('::');    
+    const referralAmountForUser = opsUtil.convertToUnit(Number(boostAmountOffered), fromUnit, 'WHOLE_CURRENCY');
      
     const logOptions = {
         initiator: referredUserId,
         context: {
             referralContext,
+            referralAmountForUser,
             referralCode: referralCodeDetails.referralCode,
             refCodeCreationTime: referralCodeDetails.persistedTimeMillis,
             referredUserCreationTime: referredUserProfile.creationTimeEpochMillis

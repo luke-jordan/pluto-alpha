@@ -323,11 +323,8 @@ describe('*** UNIT TEST BOOST PROCESSING *** Individual or limited users', () =>
 
         const resultOfEventRecord = await boostEventHandler.handleBatchOfQueuedEvents(wrapEventAsSqs(testEvent));
         logger('Result of record: ', resultOfEventRecord);
-        // logger('Args: ', publishStub.getCall(0).args)
 
         expect(resultOfEventRecord).to.exist;
-        // expect(publishStub).to.be.calledWithExactly(testUserId, 'REFERRAL_REDEEMED', publishOptions);
-        // expect(publishStub).to.be.calledWithExactly(testOriginalUserId, 'REFERRAL_REDEEMED', publishOptions);
     });
 
 });

@@ -247,6 +247,7 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         const expectedLogOptions = {
             initiator: testReferredUserId,
             context: {
+                referralAmountForUser: 10, // whole currency
                 referralContext: userReferralDefaults,
                 referralCode: 'IGOTREFERRED',
                 refCodeCreationTime: testRefCodeCreationTime,
