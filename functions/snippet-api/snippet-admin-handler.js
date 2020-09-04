@@ -16,6 +16,12 @@ module.exports.listSnippets = async (event) => {
             return { statusCode: 403 };
         }
 
+        const params = opsUtil.extractQueryParams(event);
+        if (params.onlyQuizSnippets) {
+            const quizSnippets = await persistence.fetchQuizSnippets();
+            return opsUtil.wrapResponse(quizSnippets);
+        }
+
         const snippets = await persistence.fetchSnippetsAndUserCount();
         logger('Got snippets:', snippets);
 
@@ -119,6 +125,10 @@ module.exports.createSnippet = async (event) => {
             snippetLanguage: params.snippetLanguage || 'en',
             previewMode: typeof params.previewMode === 'boolean' ? params.previewMode : true
         };
+
+        if (!opsUtil.isObjectEmpty(params.responseOptions)) {
+            snippet.responseOptions = params.responseOptions;
+        }
 
         const creationResult = await persistence.addSnippet(snippet);
         logger('Result of snippet creation:', creationResult);

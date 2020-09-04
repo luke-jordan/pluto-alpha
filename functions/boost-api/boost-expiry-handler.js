@@ -165,7 +165,7 @@ const handleScoredBoostWinners = async (boost, winningAccounts, otherPlayerAccou
     const resultOfRedeemUpdate = await persistence.updateBoostAccountStatus(updateInstructions);
     logger('And result of redemption account update: ', resultOfRedeemUpdate);
 
-    const winningUserIds = Object.values(redemptionAccountDict[boostId]).map((entry) => entry.userId);
+    const winningUserIds = winningAccounts.map((accountId) => redemptionAccountDict[boostId][accountId]).map((entry) => entry.userId);
     await publisher.publishMultiUserEvent(winningUserIds, eventType, { context: { boostId }});
 
     return [...winningAccounts, ...consolationAccounts];

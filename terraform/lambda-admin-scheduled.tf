@@ -5,8 +5,8 @@ variable "ops_admin_scheduled_lambda_function_name" {
 
 resource "aws_lambda_function" "ops_admin_scheduled" {
 
-  function_name                  = "${var.ops_admin_scheduled_lambda_function_name}"
-  role                           = "${aws_iam_role.ops_admin_scheduled_role.arn}"
+  function_name                  = var.ops_admin_scheduled_lambda_function_name
+  role                           = aws_iam_role.ops_admin_scheduled_role.arn
   handler                        = "scheduled-job.runRegularJobs"
   memory_size                    = 256
   runtime                        = "nodejs12.x"
@@ -34,10 +34,16 @@ resource "aws_lambda_function" "ops_admin_scheduled" {
                 "port" :"${local.database_config.port}"
               },
               "publishing": {
-                "eventsEmailAddress": "${var.events_source_email_address[terraform.workspace]}"
+                "eventsEmailAddress": var.events_source_email_address[terraform.workspace],
+                "userEvents": {
+                    "topicArn": var.user_event_topic_arn[terraform.workspace]
+                },
+                "hash": {
+                  "key": var.log_hashing_secret[terraform.workspace]
+                }
               },
               "lambdas": {
-                "sendOutboundMessages": "${aws_lambda_function.outbound_comms_send.function_name}"
+                "sendOutboundMessages": aws_lambda_function.outbound_comms_send.function_name
               },
               "queues": {
                 "boostProcess": aws_sqs_queue.boost_process_queue.name
@@ -110,28 +116,33 @@ resource "aws_cloudwatch_log_group" "ops_admin_scheduled" {
 }
 
 resource "aws_iam_role_policy_attachment" "ops_admin_scheduled_basic_execution_policy" {
-  role = "${aws_iam_role.ops_admin_scheduled_role.name}"
+  role = aws_iam_role.ops_admin_scheduled_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
 resource "aws_iam_role_policy_attachment" "ops_admin_scheduled_vpc_execution_policy" {
-  role = "${aws_iam_role.ops_admin_scheduled_role.name}"
+  role = aws_iam_role.ops_admin_scheduled_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
 resource "aws_iam_role_policy_attachment" "admin_scheduled_job_secret_get" {
-  role = "${aws_iam_role.ops_admin_scheduled_role.name}"
+  role = aws_iam_role.ops_admin_scheduled_role.name
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_admin_worker_read"
 }
 
 resource "aws_iam_role_policy_attachment" "admin_scheduled_job_float_access" {
-  role = "${aws_iam_role.ops_admin_scheduled_role.name}"
-  policy_arn = "${aws_iam_policy.admin_client_float_access.arn}"
+  role = aws_iam_role.ops_admin_scheduled_role.name
+  policy_arn = aws_iam_policy.admin_client_float_access.arn
 }
 
 resource "aws_iam_role_policy_attachment" "admin_scheduled_job_permissions" {
-  role = "${aws_iam_role.ops_admin_scheduled_role.name}"
-  policy_arn = "${aws_iam_policy.daily_job_lambda_policy.arn}"
+  role = aws_iam_role.ops_admin_scheduled_role.name
+  policy_arn = aws_iam_policy.daily_job_lambda_policy.arn
+}
+
+resource "aws_iam_role_policy_attachment" "admin_scheduled_event_publish_policy" {
+  role = aws_iam_role.ops_admin_scheduled_role.name
+  policy_arn = aws_iam_policy.ops_sns_user_event_publish.arn
 }
 
 /////////////////// CLOUD WATCH FOR EVENT SOURCE, DAILY ///////////////////////

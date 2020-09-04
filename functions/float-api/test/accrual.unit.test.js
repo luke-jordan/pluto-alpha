@@ -1,17 +1,16 @@
 'use strict';
 
-const logger = require('debug')('jupiter:float:test');
 const helper = require('./test.helper');
 
 const uuid = require('uuid/v4');
 const moment = require('moment');
 
-const proxyquire = require('proxyquire').noCallThru();
 const sinon = require('sinon');
 const chai = require('chai');
-const sinonChai = require('sinon-chai');
+chai.use(require('sinon-chai'));
 const expect = chai.expect;
-chai.use(sinonChai);
+
+const proxyquire = require('proxyquire').noCallThru();
 
 const BigNumber = require('bignumber.js');
 
@@ -30,22 +29,37 @@ const writeCsvFileStub = sinon.stub();
 const obtainAccountBalancesStub = sinon.stub();
 const allocateToUsersStub = sinon.stub();
 
-let allocationStub = sinon.stub();
-let apportionStub = sinon.stub();
+const redisGetStub = sinon.stub();
+const redisSetStub = sinon.stub();
+const redisDelStub = sinon.stub();
+
+const allocationStub = sinon.stub();
+
+const mockRds = { 
+    addOrSubtractFloat: adjustFloatBalanceStub,
+    allocateFloat: allocateFloatBalanceStub,
+    calculateFloatBalance: calculateFloatBalanceStub,
+    obtainPriorAllocationBalances: obtainEntityBalanceStub,
+    fetchRecordsRelatedToLog: fetchRecordsRelatedToLog,
+    obtainAllAccountsWithPriorAllocations: obtainAccountBalancesStub,
+    allocateToUsers: allocateToUsersStub
+};
 
 const handler = proxyquire('../accrual-handler', {
     './persistence/dynamodb': { 
         fetchConfigVarsForFloat: fetchFloatConfigVarsStub,
         '@noCallThru': true 
     },
-    './persistence/rds': { 
-        addOrSubtractFloat: adjustFloatBalanceStub,
-        allocateFloat: allocateFloatBalanceStub,
-        calculateFloatBalance: calculateFloatBalanceStub,
-        obtainPriorAllocationBalances: obtainEntityBalanceStub,
-        fetchRecordsRelatedToLog: fetchRecordsRelatedToLog,
-        obtainAllAccountsWithPriorAllocations: obtainAccountBalancesStub,
-        allocateToUsers: allocateToUsersStub
+    './persistence/rds': mockRds,
+    'ioredis': class {
+        constructor () {
+            this.get = redisGetStub;
+            this.set = redisSetStub;
+            this.del = redisDelStub;
+        }
+    },
+    './allocation-helper': {
+        allocate: allocationStub
     },
     './persistence/csvfile': {
         writeAndUploadCsv: writeCsvFileStub,
@@ -99,91 +113,42 @@ describe('Single apportionment operations', () => {
 
 });
 
-describe('Multiple apportionment operations', () => {
-
-    it('Divide up the float with well-formed inputs', () => {
-        const amountToAportion = Math.floor(Math.random() * 1e9); // somewhere in the region of R100
-        
-        const numberOfAccounts = 100000; // note this takes 162ms for 10k, and seems to scale linearly, so 1.3secs for 100k. 
-        const numberList = Array.from(Array(numberOfAccounts).keys());
-        
-        const testAccountDict = new Map();
-        // generate set of numbers representing accounts with ~R10k each
-        const accountValues = numberList.map(() => Math.floor(Math.random() * 1e9));
-        numberList.forEach((number) => testAccountDict.set(`test-account-${number}`, accountValues[number]));
-        const sumOfAccounts = accountValues.reduce((cum, value) => cum + value, 0);
-
-        // logger(`Generated account shares: ${JSON.stringify(testAccountDict)}`);
-        logger(`Sum of values (in ZAR): ${sumOfAccounts / 1e4}, vs amount to apportion: ${amountToAportion / 1e4}`);
-        
-        const accountShares = accountValues.map((value) => (value * 10) / (sumOfAccounts * 10)); // note: FP may result in _above_ 100% (!)
-        const sumOfPercent = accountShares.reduce((cum, value) => cum + value, 0);
-        logger(`Percentage splits amount accounts sums to: ${sumOfPercent}`);
-        
-        const dividedUpAmounts = accountShares.map((share) => Math.round(share * amountToAportion));
-        const sumCheck = dividedUpAmounts.reduce((cum, value) => cum + value, 0);
-        const excess = amountToAportion - sumCheck; // this gets bigger as we have more accounts, though at rate of 2.85c in ~5 billion 
-        logger(`Divided up amounts sum to: ${sumCheck}, vs original: ${amountToAportion}, excess: ${excess}`);
-        
-        const resultMap = new Map();
-        numberList.forEach((number) => resultMap.set(`test-account-${number}`, dividedUpAmounts[number]));
-        if (excess !== 0) { 
-            resultMap.set('excess', excess);
-        }
-
-        logger('Calling apportionment operation, initiating core clock');
-        const resultOfApportionment = handler.apportion(amountToAportion, testAccountDict);
-        logger('Obtained result from apportionment');
-
-        expect(resultOfApportionment).to.exist;
-        expect(resultOfApportionment).to.be.a('map');
-
-        // deep equal comparison on maps is _very_ slow, so pick a random set of numbers, and test with those
-        const sampleSizeToCheck = Math.ceil(numberOfAccounts / 1000);
-        logger('Going to sample ', sampleSizeToCheck, ' accounts');
-        const randomSampleIndices = Array(numberOfAccounts).fill().map(() => Math.round(Math.random() * numberOfAccounts));
-        randomSampleIndices.forEach((number) => {
-            expect(resultOfApportionment.get(`test-account-${number}`)).to.equal(resultMap.get(`test-account-${number}`));
-        });
-        
-        if (excess !== 0) {
-            expect(resultOfApportionment.get('excess')).to.equal(resultMap.get('excess'));
-        }
-    }).timeout('4000'); // so we don't get spurious fails if the sample is taking a little time
-
-    it('Check that error is thrown if passed non-integer account balances', async () => {
-        const amountToAportion = Math.floor(Math.random() * 1e6);
-        const accountDict = new Map();
-        accountDict.set('test-account-1', 234.5);
-
-        expect(handler.apportion.bind(handler, amountToAportion, accountDict)).to.throw(TypeError);
-    });
-
-});
-
 describe('Primary allocation of inbound accrual lambda', () => {
 
-    before(() => {        
-        // withArgs(common.testValidClientId, common.testValidFloatId).
-        allocationStub = sinon.stub(handler, 'allocate');
-    });
-
     beforeEach(() => {
-        helper.resetStubs(fetchFloatConfigVarsStub, adjustFloatBalanceStub, allocateFloatBalanceStub, calculateFloatBalanceStub, allocationStub);
+        helper.resetStubs(
+            fetchFloatConfigVarsStub, adjustFloatBalanceStub, allocateFloatBalanceStub, 
+            calculateFloatBalanceStub, allocationStub, redisGetStub, redisSetStub, redisDelStub);
     });
 
-    after(() => {
-        handler.allocate.restore();
-    });
+    it('Handles errors correctly (ie still exits), including releasing state lock', async () => {
+        redisGetStub.resolves(null);
 
-    it('Handles errors correctly (ie still exits)', async () => {
         fetchFloatConfigVarsStub.withArgs('some_client', 'some_float').throws(new Error('That went wrong!'));
-        const expectedErrorReturn = await handler.accrue({ clientId: 'some_client', floatId: 'some_float'});
+        const badEvent = { clientId: 'some_client', floatId: 'some_float', backingEntityIdentifier: 'some_id'};
+        const expectedErrorReturn = await handler.accrue(badEvent);
+        
         expect(expectedErrorReturn).to.exist;
         expect(expectedErrorReturn).to.have.property('statusCode', 500);
+
+        expect(redisSetStub).to.have.been.calledOnceWithExactly('some_client::some_float::some_id', JSON.stringify(badEvent), 'EX', 300);
+        expect(redisDelStub).to.have.been.calledOnceWithExactly('some_client::some_float::some_id');
     });
 
-    it('Check initial accrual', async () => {
+    it('Aborts if state lock in place', async () => {
+        // just using what exists
+        const duplicatedEvent = { clientId: 'some_client', floatId: 'some_float', backingEntityIdentifier: 'some_id'};
+        redisGetStub.resolves('some_client::some_float::some_id').resolves(JSON.stringify(duplicatedEvent));
+
+        const response = await handler.accrue(duplicatedEvent);
+        expect(response).to.deep.equal({ statusCode: 200, body: 'STATE_LOCKED' });
+
+        expect(redisSetStub).to.not.have.been.called;
+        expect(fetchFloatConfigVarsStub).to.not.have.been.called;
+        expect(adjustFloatBalanceStub).to.not.have.been.called;
+    });
+
+    it('Check initial accrual, no state lock, no existing log', async () => {
         const testBonusPoolId = helper.commonFloatConfig.bonusPoolTracker;
         const testClientCoId = helper.commonFloatConfig.clientCoShareTracker;
 
@@ -199,7 +164,7 @@ describe('Primary allocation of inbound accrual lambda', () => {
             accrualAmount: amountAccrued,
             currency: 'ZAR',
             unit: constants.floatUnits.HUNDREDTH_CENT,
-            backingEntityIdentifier: uuid(),
+            backingEntityIdentifier: 'system-calc-X',
             referenceTimeMillis
         };
 
@@ -207,6 +172,9 @@ describe('Primary allocation of inbound accrual lambda', () => {
         Reflect.deleteProperty(expectedFloatAdjustment, 'accrualAmount');
         expectedFloatAdjustment.amount = amountAccrued;
         expectedFloatAdjustment.logType = 'WHOLE_FLOAT_ACCRUAL';
+
+        redisGetStub.resolves(null);
+        redisSetStub.resolves('OK');
 
         fetchFloatConfigVarsStub.withArgs(common.testValidClientId, common.testValidFloatId).resolves(helper.commonFloatConfig);
         calculateFloatBalanceStub.resolves({ balance: 100, unit: constants.floatUnits.HUNDREDTH_CENT });
@@ -259,14 +227,19 @@ describe('Primary allocation of inbound accrual lambda', () => {
         };
 
         // we test bonus allocation of any fractional amount in the tests below, so here just set to none
-        allocationStub.withArgs(userAllocEvent).resolves({ allocationRecords: testTxIds, bonusAllocation: { } });
+        allocationStub.resolves({ allocationRecords: testTxIds, bonusAllocation: { } });
         
         // and last we test the record keeping
         const mockRecords = [{ 'first_column': 'some-id', 'second_column': 60 }, { 'first_column': 'another-id', 'second_column': 80 }];
         fetchRecordsRelatedToLog.resolves(mockRecords);
         writeCsvFileStub.resolves('s3://bucket/somekey');
         
-        const response = await handler.accrue(accrualEvent, { });
+        const response = await handler.accrue(accrualEvent);
+
+        // expect the state to be set
+        const expectedStateLockKey = `${common.testValidClientId}::${common.testValidFloatId}::system-calc-X`;
+        expect(redisGetStub).to.have.been.calledOnceWithExactly(expectedStateLockKey);
+        expect(redisSetStub).to.have.been.calledWithExactly(expectedStateLockKey, JSON.stringify(accrualEvent), 'EX', 300);
 
         // expect the config variables to be fetched
         expect(fetchFloatConfigVarsStub).to.have.been.calledOnce;
@@ -283,7 +256,8 @@ describe('Primary allocation of inbound accrual lambda', () => {
 
         // for now we are going to call this method directly; in future will be easy to change it into a queue or async lambda invocation
         expect(allocationStub).to.have.been.calledOnce;
-        expect(allocationStub).to.have.been.calledWithExactly(userAllocEvent);
+        expect(allocationStub).to.have.been.calledWithExactly(userAllocEvent, mockRds);
+
         // expect the lambda to then return the correct, well formatted response
         expect(response.statusCode).to.equal(200);
         expect(response.body).to.exist;
@@ -298,115 +272,6 @@ describe('Primary allocation of inbound accrual lambda', () => {
         expect(responseEntity.entityAllocations['BONUS_FEE']['amount']).to.be.lessThan(amountAccrued - clientShare);
 
         expect(responseEntity.userAllocationTransactions).to.deep.equal({ allocationRecords: testTxIds, bonusAllocation: { } });
-    });
-
-});
-
-describe('Primary allocation of unallocated float lamdba', () => {
-
-    before(() => {
-        apportionStub = sinon.stub(handler, 'apportion');
-    });
-
-    beforeEach(() => {
-        helper.resetStubs(fetchFloatConfigVarsStub, adjustFloatBalanceStub, allocateFloatBalanceStub, calculateFloatBalanceStub, 
-            obtainAccountBalancesStub, allocateToUsersStub);
-    });
-
-    after(() => {
-        handler.apportion.restore();
-    });
-
-    it('Happy path, when passed a balance to divide', async () => {
-        const numberAccounts = 10000;
-        const amountToAllocate = 1000 * 100 * 100; // allocating R1k in interest
-
-        const mockLogId = uuid();
-
-        // comes in from scheduled job
-        const incomingEvent = {
-            clientId: common.testValidClientId, 
-            floatId: common.testValidFloatId, 
-            totalAmount: amountToAllocate,
-            currency: 'ZAR',
-            unit: constants.floatUnits.HUNDREDTH_CENT,
-            backingEntityType: constants.entityTypes.ACCRUAL_EVENT,
-            backingEntityIdentifier: uuid(),
-            bonusPoolIdForExcess: common.testValueBonusPoolTracker,
-            logId: mockLogId
-        };
-
-
-        const existingBalances = new Map();
-        // this will ensure the total balance is much larger than the amount to allocate, but roughly equal to order of magnitude larger with number accounts
-        Array(numberAccounts).fill().forEach(() => existingBalances.set(uuid(), Math.round(Math.random() * amountToAllocate)));
-        
-        // this gets tested above, and has a whole bunch of logic that would be silly to just mimc here, but we need to ensure excess is tested
-        // so we do not make sure that the allocation is accurate (i.e., totals), we just construct a map and add excess to
-        const apportionedBalances = new Map();
-        const averagePortion = amountToAllocate / numberAccounts;
-        for (const accountId of existingBalances.keys()) {
-            apportionedBalances.set(accountId, Math.round((Math.random() + 0.5) * averagePortion));
-        }
-        apportionedBalances.set(constants.EXCESSS_KEY, -75);
-
-        fetchFloatConfigVarsStub.withArgs(common.testValidClientId, common.testValidFloatId).resolves({ bonusPoolTracker: common.testValueBonusPoolTracker });
-        
-        const bonuxTxAlloc = {
-            label: 'BONUS',
-            amount: -75,
-            currency: incomingEvent.currency,
-            unit: incomingEvent.unit,
-            transactionType: 'ACCRUAL',
-            transactionState: 'SETTLED',
-            allocatedToType: constants.entityTypes.BONUS_POOL,
-            allocatedToId: common.testValueBonusPoolTracker,
-            relatedEntityType: incomingEvent.backingEntityType,
-            relatedEntityId: incomingEvent.backingEntityIdentifier,
-            logId: mockLogId
-        };
-        const bonusTxId = uuid();
-
-        const expectedUserAllocsToRds = [];
-        const mockResultFromRds = [];
-        for (const accountId of existingBalances.keys()) {
-            const userAllocInstruction = {
-                accountId: accountId,
-                amount: apportionedBalances.get(accountId),
-                currency: 'ZAR',
-                unit: incomingEvent.unit,
-                allocType: 'ACCRUAL',
-                allocState: 'SETTLED',
-                relatedEntityType: incomingEvent.backingEntityType,
-                relatedEntityId: incomingEvent.backingEntityIdentifier,
-                logId: mockLogId
-            };
-            expectedUserAllocsToRds.push(userAllocInstruction);
-            mockResultFromRds.push({ floatTxId: uuid(), accountTxId: uuid(), amount: apportionedBalances.get(accountId) });
-        }
-        
-        // only one call to each and arguments are more efficiently (for debugging) tested below
-        apportionStub.returns(apportionedBalances);
-        obtainAccountBalancesStub.resolves(existingBalances);
-        allocateFloatBalanceStub.resolves({ 'BONUS': bonusTxId });
-        allocateToUsersStub.resolves(mockResultFromRds);
-        
-        const allocationResult = await handler.allocate(incomingEvent, { });
-        expect(allocationResult).to.exist;
-        
-        const expectedBody = { 
-            allocationRecords: mockResultFromRds, 
-            bonusAllocation: { 'BONUS': bonusTxId, amount: -75 },
-            priorAllocationMap: existingBalances 
-        };
-        expect(allocationResult).to.deep.equal(expectedBody);
-        
-        expect(apportionStub).to.have.been.calledOnceWithExactly(amountToAllocate, existingBalances, true);
-        expect(obtainAccountBalancesStub).to.have.been.calledOnceWithExactly(common.testValidFloatId, 'ZAR', constants.entityTypes.END_USER_ACCOUNT);
-        expect(allocateFloatBalanceStub).to.have.been.calledOnceWithExactly(common.testValidClientId, common.testValidFloatId, [bonuxTxAlloc]);
-        
-        expect(allocateToUsersStub).to.have.been.calledOnceWithExactly(common.testValidClientId, common.testValidFloatId, expectedUserAllocsToRds);
-    
     });
 
 });

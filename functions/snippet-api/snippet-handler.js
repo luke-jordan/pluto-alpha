@@ -125,7 +125,10 @@ module.exports.fetchSnippetsForUser = async (event) => {
 
         const systemWideUserId = userDetails.systemWideUserId;
 
-        const uncreatedSnippets = await persistence.fetchUncreatedSnippets(systemWideUserId);
+        const params = opsUtil.extractParamsFromEvent(event);
+        const includeQuestionSnippets = params.includeQuestionSnippets || false;
+
+        const uncreatedSnippets = await persistence.fetchUncreatedSnippets(systemWideUserId, includeQuestionSnippets);
         logger('Found uncreated snippets:', uncreatedSnippets);
 
         if (Array.isArray(uncreatedSnippets) && uncreatedSnippets.length > 0) {
@@ -146,7 +149,7 @@ module.exports.fetchSnippetsForUser = async (event) => {
             return opsUtil.wrapResponse({ type: 'ALL', snippets: sortSnippets(previewSnippets) });
         }
      
-        const createdSnippets = await persistence.fetchCreatedSnippets(systemWideUserId);
+        const createdSnippets = await persistence.fetchCreatedSnippets(systemWideUserId, includeQuestionSnippets);
         logger('Found created snippets:', createdSnippets);
 
         return opsUtil.wrapResponse({ type: 'ALL', snippets: sortSnippets(createdSnippets) });

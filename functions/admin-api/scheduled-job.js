@@ -83,18 +83,39 @@ const assembleAccrualPayload = async (clientFloatInfo) => {
     };
 };
 
-const assembleAccrualInvocation = async (clientFloatInfo) => {
-    const accrualPayload = await assembleAccrualPayload(clientFloatInfo);
+const assembleAccrualData = (accrualInvocation, accrualInvocationResult) => {
+    const resultPayload = JSON.parse(accrualInvocationResult['Payload']);
+    const resultBody = JSON.parse(resultPayload.body);
 
-    const accrualInvocation = {
-        FunctionName: config.get('lambdas.processAccrual'),
-        InvocationType: 'RequestResponse',
-        Payload: JSON.stringify(accrualPayload)
+    const accrualInstruction = JSON.parse(accrualInvocation['Payload']);
+    const unit = accrualInstruction.unit;
+    const currency = accrualInstruction.currency;
+    
+    const bonusFee = resultBody.entityAllocations['BONUS_FEE'];
+    const companyFee = resultBody.entityAllocations['CLIENT_FEE'];
+
+    const bonusShare = resultBody.entityAllocations['BONUS_SHARE'];
+    const companyShare = resultBody.entityAllocations['CLIENT_SHARE'];
+
+    const numberUserAllocations = resultBody.userAllocationTransactions.allocationRecords.accountTxIds.length;
+    const bonusExcessAllocation = Reflect.has(resultBody.userAllocationTransactions, 'bonusAllocation');
+
+    return {
+        clientId: accrualInstruction.clientId,
+        floatId: accrualInstruction.floatId,
+        calculationUnit: unit,
+        calculationCurrency: currency,
+        floatAmount: accrualInstruction.calculationBasis.floatAmountHunCent,
+        baseAccrualRate: accrualInstruction.calculationBasis.accrualRateAnnualBps,
+        dailyRate: accrualInstruction.calculationBasis.accrualRateApplied,
+        accrualAmount: accrualInstruction.accrualAmount,
+        bonusFee,
+        companyFee,
+        bonusShare,
+        companyShare,
+        numberUserAllocations,
+        bonusExcessAllocation
     };
-
-    logger('Accrual invocation: ', accrualInvocation);
-
-    return accrualInvocation;
 };
 
 const safeSimpleFormat = (objectWithAmount, unit, currency) => {
@@ -110,55 +131,48 @@ const safeSimpleFormat = (objectWithAmount, unit, currency) => {
     return `${currency} ${parseFloat(opsUtil.convertToUnit(amount, unit, 'WHOLE_CURRENCY')).toFixed(FORMAT_NUM_DIGITS)}`;
 };
 
-const extractParamsForFloatAccrualEmail = (accrualInvocation, accrualInvocationResult) => {
-    const resultPayload = JSON.parse(accrualInvocationResult['Payload']);
-    const resultBody = JSON.parse(resultPayload.body);
-
-    const accrualInstruction = JSON.parse(accrualInvocation['Payload']);
-    const unit = accrualInstruction.unit;
-    const currency = accrualInstruction.currency;
-    
-    const bonusFeeRaw = resultBody.entityAllocations['BONUS_FEE'];
-    const companyFeeRaw = resultBody.entityAllocations['CLIENT_FEE'];
-
-    const bonusShareRaw = resultBody.entityAllocations['BONUS_SHARE'];
-    const companyShareRaw = resultBody.entityAllocations['CLIENT_SHARE'];
-
-    const numberUserAllocations = resultBody.userAllocationTransactions.allocationRecords.accountTxIds.length;
-    const bonusAllocation = Reflect.has(resultBody.userAllocationTransactions, 'bonusAllocation') 
-        ? 'None' : '(yes : insert excess)';
+const extractParamsForFloatAccrualEmail = (accrualParamsAndResults) => {
+    const bonusAllocation = accrualParamsAndResults.bonusExcessAllocation ? '(yes : insert excess)' : 'None';
 
     const bpsToPercentAndTrim = (rate) => parseFloat(rate * 100).toFixed(FORMAT_NUM_DIGITS);
+    const { clientId, floatId, calculationUnit: unit, calculationCurrency: currency } = accrualParamsAndResults;
 
     return {
-        clientId: accrualInstruction.clientId,
-        floatId: accrualInstruction.floatId,
-        floatAmount: safeSimpleFormat({ amount: accrualInstruction.calculationBasis.floatAmountHunCent }, unit, currency),
-        baseAccrualRate: `${accrualInstruction.calculationBasis.accrualRateAnnualBps} bps`,
-        dailyRate: `${bpsToPercentAndTrim(accrualInstruction.calculationBasis.accrualRateApplied)} %`,
-        accrualAmount: safeSimpleFormat({ amount: accrualInstruction.accrualAmount }, unit, currency),
-        bonusAmount: safeSimpleFormat(bonusFeeRaw, unit, currency),
-        companyAmount: safeSimpleFormat(companyFeeRaw, unit, currency),
-        bonusShare: safeSimpleFormat(bonusShareRaw, unit, currency),
-        companyShare: safeSimpleFormat(companyShareRaw, unit, currency),
-        numberUserAllocations,
+        clientId,
+        floatId,
+        floatAmount: safeSimpleFormat({ amount: accrualParamsAndResults.floatAmount }, unit, currency),
+        baseAccrualRate: `${accrualParamsAndResults.baseAccrualRate} bps`,
+        dailyRate: `${bpsToPercentAndTrim(accrualParamsAndResults.dailyRate)} %`,
+        accrualAmount: safeSimpleFormat({ amount: accrualParamsAndResults.accrualAmount }, unit, currency),
+        bonusAmount: safeSimpleFormat(accrualParamsAndResults.bonusFee, unit, currency),
+        companyAmount: safeSimpleFormat(accrualParamsAndResults.companyFee, unit, currency),
+        bonusShare: safeSimpleFormat(accrualParamsAndResults.bonusShare, unit, currency),
+        companyShare: safeSimpleFormat(accrualParamsAndResults.companyShare, unit, currency),
+        numberUserAllocations: accrualParamsAndResults.numberUserAllocations,
         bonusAllocation: JSON.stringify(bonusAllocation)
     };
 };
 
-const initiateFloatAccruals = async () => {
-    const clientsAndFloats = await dynamoFloat.listClientFloats();
-    logger('Have client and float info: ', clientsAndFloats);
+const invokeAccrualAndPublish = async (clientFloatInfo) => {
+    const accrualPayload = await assembleAccrualPayload(clientFloatInfo);
+
+    const accrualInvocation = {
+        FunctionName: config.get('lambdas.processAccrual'),
+        InvocationType: 'RequestResponse',
+        Payload: JSON.stringify(accrualPayload)
+    };
+
+    logger('Accrual invocation: ', accrualInvocation);
+
+    const accrualResult = await lambda.invoke(accrualInvocation).promise();
+
+    const accrualParamsAndResults = assembleAccrualData(accrualInvocation, accrualResult);
     
-    // we do these in two distinct stages so that we can retain the calculation basis etc in the invocations
-    // we do rely somewhat on Promise.all preserving order, which is part of spec, but keep an eye out once many floats
-    const accrualInvocations = await Promise.all(clientsAndFloats.map((clientAndFloat) => assembleAccrualInvocation(clientAndFloat)));
-    const accrualInvocationResults = await Promise.all(accrualInvocations.map((invocation) => lambda.invoke(invocation).promise()));
+    const eventOptions = { initiator: 'scheduled_daily_system_job', context: accrualParamsAndResults };
+    await publisher.publishUserEvent(`${clientFloatInfo.clientId}::${clientFloatInfo.floatId}`, 'FLOAT_ACCRUAL', eventOptions);
 
-    logger('Results of accruals: ', accrualInvocationResults);
-
-    // todo: use more robust templating so can handle indefinite length arrays, for now just do this one
-    const accrualEmailDetails = extractParamsForFloatAccrualEmail(accrualInvocations[0], accrualInvocationResults[0]);
+    // todo: consider using a single email and/or extracting admin from client-float pair
+    const accrualEmailDetails = extractParamsForFloatAccrualEmail(accrualParamsAndResults);
 
     if (config.get('email.accrualResult.enabled')) {
         const emailResult = await publisher.sendSystemEmail({
@@ -170,8 +184,22 @@ const initiateFloatAccruals = async () => {
         
         logger('Result of email send: ', emailResult);
     }
+    
+    return accrualEmailDetails;
+};
 
-    return accrualInvocations.length;
+const initiateFloatAccruals = async () => {
+    const clientsAndFloats = await dynamoFloat.listClientFloats();
+    logger('Have client and float info: ', clientsAndFloats);
+    
+    // we do these in two distinct stages so that we can retain the calculation basis etc in the invocations
+    // we do rely somewhat on Promise.all preserving order, which is part of spec, but keep an eye out once many floats
+    const accrualInvocationResults = await Promise.all(clientsAndFloats.map((clientAndFloat) => invokeAccrualAndPublish(clientAndFloat)));
+    // const accrualInvocationResults = await Promise.all(accrualInvocations.map((invocation) => lambda.invoke(invocation).promise()));
+
+    logger('Results of accruals: ', accrualInvocationResults);
+
+    return accrualInvocationResults.length;
 };
 
 const generateUserViewLink = (humanRef) => {
