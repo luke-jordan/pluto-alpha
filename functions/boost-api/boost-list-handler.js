@@ -242,6 +242,25 @@ const calculateBoostYield = async (boostId) => {
     return boostAndSavedAmount.map((boostAmountDetails) => calculateYield(boostAmountDetails));
 };
 
+const fetchQuestionSnippets = async (role, snippetIds) => {
+    const questionSnippets = await persistence.fetchQuestionSnippets(snippetIds);
+    logger('Got question snippets: ', questionSnippets);
+
+    // rds may not hand the snippets back in the order they were selected, so need to sort them, then do a quick transform
+    const transformedSnippets = questionSnippets.
+        sort((snippetA, snippetB) => snippetIds.indexOf(snippetA.snippetId) - snippetIds.indexOf(snippetB.snippetId)).
+        map((snippet) => {
+            const { snippetId, title, body, responseOptions } = snippet;
+            if (role !== 'SYSTEM_ADMIN') {
+                Reflect.deleteProperty(responseOptions, 'correctAnswerText');
+            }
+
+            return { snippetId, title, body, responseOptions };
+        });
+
+    return transformedSnippets;
+};
+
 /**
  * This method provides the details of a boost, including (if a friend tournament), the score logs
  */
@@ -268,6 +287,12 @@ module.exports.fetchBoostDetails = async (event) => {
 
         if (role === 'SYSTEM_ADMIN') {
             boost.boostYields = await calculateBoostYield(boostId);
+        }
+
+        if (boost.boostType === 'GAME' && boost.boostCategory === 'QUIZ') {
+            const { questionSnippetIds } = boost.gameParams;
+            boost.questionSnippets = await fetchQuestionSnippets(role, questionSnippetIds);
+            Reflect.deleteProperty(boost, 'accountIds'); // code smell, todo : probably need a minor refactor in here
         }
 
         logger('Returning assembled boost: ', boost);

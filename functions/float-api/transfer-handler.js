@@ -7,9 +7,7 @@ const uuid5 = require('uuid/v5');
 const rds = require('./persistence/rds');
 const constants = require('./constants');
 
-// todo : pull "allocate" method into here, and rename this allocation-handler, which is more in keeping with how
-// the two parts have evolved (see FM-30)
-const accrualModule = require('./accrual-handler');
+const allocationHelper = require('./allocation-helper');
 
 const Redis = require('ioredis');
 const redis = new Redis({
@@ -195,7 +193,7 @@ const handleInstruction = async (instruction) => {
     if (isToAllUsers) {
         const allocInstruction = allUserAllocation(instruction);
         logger('Sending to division: ', allocInstruction);
-        const userDistResult = await accrualModule.allocate(allocInstruction);
+        const userDistResult = await allocationHelper.allocate(allocInstruction);
         logger('Result of allocation: ', userDistResult);
         floatTxIds = userDistResult.allocationRecords.floatTxIds;
         accountTxIds = userDistResult.allocationRecords.accountTxIds;

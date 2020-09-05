@@ -66,6 +66,7 @@ resource "aws_rds_cluster" "pg_rds" {
   db_subnet_group_name   = aws_db_subnet_group.rds_subnet_group.id
   vpc_security_group_ids = [aws_security_group.sg_db_5432_ingress.id]
   storage_encrypted       = true
+  deletion_protection     = true
 
   tags                    = {"environment"  = terraform.workspace}
 

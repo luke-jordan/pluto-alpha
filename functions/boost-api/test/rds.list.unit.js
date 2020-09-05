@@ -330,6 +330,7 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
             'end_time': testEndTime.format(),
             'status_conditions': { REDEEMED: ['something'] }, 
             'reward_parameters': { rewardType: 'POOLED' },
+            'game_params': { gameImage: 'PYRAMID_SCHEME' },
             'boost_amount': 100, 
             'boost_unit': 
             'WHOLE_CURRENCY', 
@@ -352,6 +353,7 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
             endTime: moment(testEndTime.format()),
             statusConditions: { REDEEMED: ['something'] }, 
             rewardParameters: { rewardType: 'POOLED' },
+            gameParams: { gameImage: 'PYRAMID_SCHEME' },
             boostAmount: { amount: 100, unit: 'WHOLE_CURRENCY', currency: 'ZAR' },
             flags: ['FRIEND_TOURNAMENT'],
             accountIds: ['account-1', 'account-2']
@@ -389,6 +391,7 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
             endTime: moment(testEndTime.format()),
             statusConditions: { REDEEMED: ['something'] }, 
             rewardParameters: {},
+            gameParams: {},
             boostAmount: { amount: 100, unit: 'WHOLE_CURRENCY', currency: 'ZAR' },
             flags: []
         });
@@ -443,5 +446,29 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
 
         expect(resultOfSum).to.deep.equal(expectedResult);
         expect(queryStub).to.have.been.calledOnceWithExactly(sumQuery, ['REDEEMED', 'boost-id-1', 'boost-id-2']);
+    });
+
+    it('Fetches question snippets', async () => {
+        const questionSnippetFromRds = {
+            'snippet_id': 'some-snippet-id',
+            'title': 'Quiz Snippet 2',
+            'body': 'How often can you withdraw from your Jupiter account?',
+            'response_options': {
+                responseTexts: [
+                    'Whenever planet Jupiter is at the zenith of your location',
+                    'Every Friday at 6pm',
+                    'As often as you like'
+                ],
+                correctAnswerText: 'As often you like'
+            }
+        };
+
+        queryStub.resolves([questionSnippetFromRds]);
+
+        const resultOfFetch = await rds.fetchQuestionSnippets(['snippet-id-1']);
+        expect(resultOfFetch).to.deep.equal([camelizeKeys(questionSnippetFromRds)]);
+
+        const selectQuery = 'select snippet_id, title, body, response_options from snippet_data.snippet where snippet_id in ($1)';
+        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, ['snippet-id-1']);
     });
 });

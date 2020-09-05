@@ -1,7 +1,10 @@
 'use strict';
 
+// const logger = require('debug')('juipter:boost:test');
 const config = require('config');
 const moment = require('moment');
+
+const camelizeKeys = require('camelize-keys');
 
 const testHelper = require('./boost.test.helper');
 
@@ -223,5 +226,30 @@ describe('*** UNIT TEST BOOST READING ***', () => {
         expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, []);
     });
     
+    it('Fetches question snippets', async () => {
+        const questionSnippetFromRds = {
+            'snippet_id': 'some-snippet-id',
+            'title': 'Quiz Snippet 1',
+            'body': 'How often can you save with Jupiter?',
+            'response_options': {
+                responseTexts: [
+                    'Only during a solar eclipse',
+                    'Whenever you like',
+                    'When you are deemed worthy'
+                ],
+                correctAnswerText: 'Whenever you like'
+            }
+        };
+
+        queryStub.resolves([questionSnippetFromRds]);
+
+        const resultOfFetch = await rds.fetchQuestionSnippets(['snippet-id-1']);
+
+        expect(resultOfFetch).to.exist;
+        expect(resultOfFetch).to.deep.equal([camelizeKeys(questionSnippetFromRds)]);
+
+        const selectQuery = 'select snippet_id, title, body, response_options from snippet_data.snippet where snippet_id in ($1)';
+        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, ['snippet-id-1']);
+    });
 
 });
