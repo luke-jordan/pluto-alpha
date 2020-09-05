@@ -123,8 +123,8 @@ describe('*** UNIT TEST CREATE BOOST QUIZ ***', async () => {
         statusConditions: {
             OFFERED: ['message_instruction_created'],
             UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
-            REDEEMED: ['percent_destroyed_above #{50::30000}'],
-            FAILED: ['number_taps_less_than #{10::30000}']
+            REDEEMED: ['percent_destroyed_above #{10::30000}'],
+            FAILED: ['percent_destroyed_below #{10::30000}']
         }
     };
 
@@ -157,8 +157,7 @@ describe('*** UNIT TEST CREATE BOOST QUIZ ***', async () => {
             gameParams,
             statusConditions: {
                 OFFERED: ['message_instruction_created'],
-                UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
-                REDEEMED: ['percent_destroyed_above #{50::30000}']
+                UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}']
             }
         };
 

@@ -86,6 +86,7 @@ const extractStatusConditions = (gameParams, initialStatus) => {
     
     const allowRepeatPlay = typeof gameParams.allowRepeatPlay === 'boolean' && gameParams.allowRepeatPlay; // to avoid truthiness
     const isTournament = typeof gameParams.numberWinners === 'number';
+    const isPercentGame = ['DESTROY_IMAGE', 'QUIZ'].includes(gameParams.gameType);
     
     if (isInitialStatusBefore(initialStatus, 'OFFERED')) {
         statusConditions['OFFERED'] = ['message_instruction_created'];
@@ -95,14 +96,14 @@ const extractStatusConditions = (gameParams, initialStatus) => {
     }
     if (isInitialStatusBefore(initialStatus, 'PENDING') && isTournament) {
         // this is a tournament, so add a pending condition, which is taps or percent above 0 [note: status is still 'pending' even if can play again]
-        const relevantParam = gameParams.gameType === 'DESTROY_IMAGE' ? 'percent_destroyed_above' : 'number_taps_greater_than';
+        const relevantParam = isPercentGame ? 'percent_destroyed_above' : 'number_taps_greater_than';
         statusConditions['PENDING'] = [`${relevantParam} #{0::${gameParams.timeLimitSeconds * 1000}}`];
     }
     if (isInitialStatusBefore(initialStatus, 'REDEEMED')) {
         statusConditions['REDEEMED'] = convertParamsToRedemptionCondition(gameParams);
     }
     if (isInitialStatusBefore(initialStatus, 'FAILED') && !isTournament && !allowRepeatPlay) {
-        const relevantParam = gameParams.gameType === 'DESTROY_IMAGE' ? 'percent_destroyed_below' : 'number_taps_less_than';
+        const relevantParam = isPercentGame ? 'percent_destroyed_below' : 'number_taps_less_than';
         statusConditions['FAILED'] = [`${relevantParam} #{${gameParams.winningThreshold}::${gameParams.timeLimitSeconds * 1000}}`];
     }
     if (isInitialStatusBefore(initialStatus, 'CONSOLED') && gameParams.hasConsolationPrize) {
