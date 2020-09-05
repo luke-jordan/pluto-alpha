@@ -6,14 +6,13 @@ const statusCodes = require('statuses');
 
 const boostRedemptionHandler = require('./boost-redemption-handler');
 const persistence = require('./persistence/rds.boost');
+const publisher = require('publish-common');
 
 const util = require('./boost.util');
 const conditionTester = require('./condition-tester');
 
 const AWS = require('aws-sdk');
-
-AWS.config.update({ region: config.get('aws.region') });
-const lambda = new AWS.Lambda();
+const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
 const expireFinishedTournaments = async (boost) => {
     // for now, we only care enough if this is a friend tournament
@@ -61,24 +60,26 @@ const generateUpdateInstruction = ({ boostId, statusResult, accountId, boostAmou
     };
 };
 
-const calculateUserQuizScore = async (gameParams, userResponses) => {
+const calculateUserQuizScore = async ({ gameParams, userResponses, timeTakenMillis, systemWideUserId }) => {
     const questionSnippetIds = gameParams.questionSnippetIds;
     const questionSnippets = await persistence.fetchQuestionSnippets(questionSnippetIds);
     logger('Got question snippets: ', questionSnippets);
 
     const correctAnswers = userResponses.filter((userResponse) => {
         const { snippetId, userAnswerText } = userResponse;
-        const questionSnippet = questionSnippets.filter((snippet) => snippet.snippetId === snippetId);
-        return userAnswerText === questionSnippet[0].responseOptions.correctAnswerText;
+        const questionSnippet = questionSnippets.find((snippet) => snippet.snippetId === snippetId);
+        return questionSnippet && userAnswerText === questionSnippet.responseOptions.correctAnswerText;
     });
 
-    logger(`User quiz score is: ${correctAnswers.length}/${questionSnippetIds.length}`);
+    const numberCorrectAnswers = correctAnswers.length;
+    const numberQuestions = questionSnippetIds.length;
 
-    return {
-        correctAnswers: questionSnippets.map((snippet) => snippet.responseOptions.correctAnswerText),
-        numberCorrectAnswers: correctAnswers.length,
-        numberQuestions: questionSnippetIds.length
-    };
+    logger(`User quiz score is: ${numberCorrectAnswers}/${numberQuestions}`);
+
+    const logContext = { numberCorrectAnswers, numberQuestions, timeTakenMillis, userResponses, questionSnippets };
+    await publisher.publishUserEvent(systemWideUserId, 'QUIZ_ANSWER', { context: logContext });
+
+    return { numberCorrectAnswers, numberQuestions, correctAnswers: questionSnippets.map(({ responseOptions }) => responseOptions.correctAnswerText) };
 };
 
 /**
@@ -125,12 +126,15 @@ module.exports.processUserBoostResponse = async (event) => {
             return { statusCode: statusCodes('Bad Request'), body: JSON.stringify({ message: 'Boost is not open and repeat play not allowed', status: currentStatus }) };
         }
 
-        let resultOfQuiz = {};
+        let resultBody = {};
         if (boost.boostType === 'GAME' && boost.boostCategory === 'QUIZ') {
-            resultOfQuiz = await calculateUserQuizScore(boost.gameParams, params.userResponses);
+            const quizParams = { gameParams: boost.gameParams, userResponses: params.userResponses, timeTakenMillis: params.timeTakenMillis, systemWideUserId };
+            const resultOfQuiz = await calculateUserQuizScore(quizParams);
             logger('Result of quiz: ', resultOfQuiz);
             const { numberCorrectAnswers, numberQuestions } = resultOfQuiz;
-            params.percentDestroyed = Number((numberCorrectAnswers / numberQuestions).toFixed(2)) * 100;
+            params.percentDestroyed = Number((numberCorrectAnswers / numberQuestions).toFixed(2)) * 100; // for status checks
+            // at the moment we leave in correct answers because we may want to display to user (open to abuse down the line so keep watch)
+            resultBody.resultOfQuiz = resultOfQuiz;
         }
 
         const statusEvent = { eventType, eventContext: params };
@@ -143,10 +147,10 @@ module.exports.processUserBoostResponse = async (event) => {
         if (statusResult.length === 0) {
             // only a malformed tournament would have no status change when user plays, but just in case
             const returnResult = util.isBoostTournament(boost) ? { result: 'TOURNAMENT_ENTERED', endTime: boost.boostEndTime.valueOf() } : { result: 'NO_CHANGE' };
-            return { statusCode: 200, body: JSON.stringify(returnResult)};
+            return { statusCode: 200, body: JSON.stringify({ ...returnResult, ...resultBody })};
         }
 
-        const resultBody = { result: 'TRIGGERED', statusMet: statusResult, endTime: boost.boostEndTime.valueOf() };
+        resultBody = { result: 'TRIGGERED', statusMet: statusResult, endTime: boost.boostEndTime.valueOf(), ...resultBody };
 
         let resultOfTransfer = {};
         let boostAmount = boost.boostAmount;
@@ -180,10 +184,6 @@ module.exports.processUserBoostResponse = async (event) => {
 
         if (statusResult.includes('PENDING')) {
             await expireFinishedTournaments(boost);
-        }
-
-        if (resultOfQuiz && Object.keys(resultOfQuiz).length > 0) {
-            resultBody.resultOfQuiz = resultOfQuiz;
         }
 
         return {

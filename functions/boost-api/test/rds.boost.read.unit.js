@@ -228,6 +228,7 @@ describe('*** UNIT TEST BOOST READING ***', () => {
     
     it('Fetches question snippets', async () => {
         const questionSnippetFromRds = {
+            'snippet_id': 'some-snippet-id',
             'title': 'Quiz Snippet 1',
             'body': 'How often can you save with Jupiter?',
             'response_options': {
@@ -247,7 +248,7 @@ describe('*** UNIT TEST BOOST READING ***', () => {
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal([camelizeKeys(questionSnippetFromRds)]);
 
-        const selectQuery = 'select title, body, response_options from snippet_data.snippet where snippet_id in ($1)';
+        const selectQuery = 'select snippet_id, title, body, response_options from snippet_data.snippet where snippet_id in ($1)';
         expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, ['snippet-id-1']);
     });
 

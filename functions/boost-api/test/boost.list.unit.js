@@ -398,7 +398,7 @@ describe('*** UNIT TEST BOOST DETAILS (CHANGED AND SPECIFIED) ***', () => {
     });
 
     it('Fetches details for quiz boost', async () => {
-        const testQuizBoost = { ...mockBoost };
+        const testQuizBoost = { ...mockBoost, boostCategory: 'QUIZ' };
 
         testQuizBoost.flags = [];
         testQuizBoost.accountIds = ['account-id-1'];
@@ -408,13 +408,14 @@ describe('*** UNIT TEST BOOST DETAILS (CHANGED AND SPECIFIED) ***', () => {
             winningThreshold: 10,
             instructionBand: 'Answer all quiz questions correctly in 30 seconds',
             entryCondition: 'save_event_greater_than #{100000:HUNDREDTH_CENT:USD}',
-            questionSnippetIds: ['snippet-id-1']
+            questionSnippetIds: ['snippet-id-2', 'snippet-id-1']
         };
 
         findAccountsStub.resolves(['account-id-1']);
         fetchBoostDetailsStub.resolves(testQuizBoost);
 
-        const testQuestionSnippet = {
+        const testQuestionSnippet = (snippetId) => ({
+            snippetId,
             title: 'Quiz Snippet 2',
             body: 'How often can you withdraw from your Jupiter account?',
             responseOptions: {
@@ -425,19 +426,22 @@ describe('*** UNIT TEST BOOST DETAILS (CHANGED AND SPECIFIED) ***', () => {
                 ],
                 correctAnswerText: 'As often you like'
             }
-        };
+        });
 
-        fetchSnippetsStub.resolves([testQuestionSnippet]);
+        // note order here is reversed from that in questionSnippetIds, to make sure the sort is in place
+        fetchSnippetsStub.resolves([testQuestionSnippet('snippet-id-1'), testQuestionSnippet('snippet-id-2')]);
 
         const testEvent = wrapEvent({ boostId: 'boost-id-1' }, 'user-id', 'ORDINARY_USER');
         
         const resultOfFetch = await handler.fetchBoostDetails(testEvent);
         const resultBody = helper.standardOkayChecks(resultOfFetch, true);
 
-        const expectedSnippet = { ...testQuestionSnippet };
+        const expectedSnippets = ['snippet-id-2', 'snippet-id-1'].map(testQuestionSnippet).map((snippet) => {
+            Reflect.deleteProperty(snippet.responseOptions, 'correctAnswerText');
+            return snippet;
+        });
         
-        Reflect.deleteProperty(expectedSnippet.responseOptions, 'correctAnswerText');
-        const expectedResult = { ...testQuizBoost, questionSnippets: [expectedSnippet] };
+        const expectedResult = { ...testQuizBoost, questionSnippets: expectedSnippets };
 
         expect(resultBody).to.deep.equal(expectedResult);
 

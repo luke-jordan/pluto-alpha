@@ -18,6 +18,7 @@ const updateBoostAccountStub = sinon.stub();
 const alterBoostStub = sinon.stub();
 const findUserIdsStub = sinon.stub();
 
+const publishUserEventStub = sinon.stub();
 const publishMultiStub = sinon.stub();
 const momentStub = sinon.stub();
 
@@ -69,9 +70,10 @@ const quizResponseHandler = proxyquire('../boost-user-handler', {
     './boost-redemption-handler': {
         'redeemOrRevokeBoosts': redeemOrRevokeStub
     },
+    'publish-common': {
+        'publishUserEvent': publishUserEventStub
+    },
     'aws-sdk': {
-         // eslint-disable-next-line no-empty-function
-         'config': { update: () => ({}) },
         'Lambda': MockLambdaClient
     },
     '@noCallThru': true
@@ -333,5 +335,15 @@ describe('*** UNIT TEST QUIZ REPONSE HANDLING ***', () => {
         expect(updateBoostAccountStub).to.have.been.calledOnceWithExactly([expectedUpdateInstruction]);
         expect(insertBoostLogStub).to.have.been.calledOnceWithExactly([expectedGameLog]);
         expect(updateBoostRedeemedStub).to.have.been.calledOnceWithExactly([testBoostId]);
+
+        const expectedContext = {
+            numberCorrectAnswers: 2,
+            numberQuestions: 3,
+            timeTakenMillis: 15000,
+            questionSnippets,
+            userResponses: testEvent.userResponses
+        };
+        
+        expect(publishUserEventStub).to.have.been.calledWith(testUserId, 'QUIZ_ANSWER', { context: expectedContext });
     });
 });

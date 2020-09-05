@@ -246,14 +246,17 @@ const fetchQuestionSnippets = async (role, snippetIds) => {
     const questionSnippets = await persistence.fetchQuestionSnippets(snippetIds);
     logger('Got question snippets: ', questionSnippets);
 
-    const transformedSnippets = questionSnippets.map((snippet) => {
-        const { title, body, responseOptions } = snippet;
-        if (role !== 'SYSTEM_ADMIN') {
-            Reflect.deleteProperty(responseOptions, 'correctAnswerText');
-        }
+    // rds may not hand the snippets back in the order they were selected, so need to sort them, then do a quick transform
+    const transformedSnippets = questionSnippets.
+        sort((snippetA, snippetB) => snippetIds.indexOf(snippetA.snippetId) - snippetIds.indexOf(snippetB.snippetId)).
+        map((snippet) => {
+            const { snippetId, title, body, responseOptions } = snippet;
+            if (role !== 'SYSTEM_ADMIN') {
+                Reflect.deleteProperty(responseOptions, 'correctAnswerText');
+            }
 
-        return { title, body, responseOptions };
-    });
+            return { snippetId, title, body, responseOptions };
+        });
 
     return transformedSnippets;
 };
@@ -286,9 +289,10 @@ module.exports.fetchBoostDetails = async (event) => {
             boost.boostYields = await calculateBoostYield(boostId);
         }
 
-        if (boost.gameParams && boost.gameParams.gameType === 'QUIZ') {
+        if (boost.boostType === 'GAME' && boost.boostCategory === 'QUIZ') {
             const { questionSnippetIds } = boost.gameParams;
             boost.questionSnippets = await fetchQuestionSnippets(role, questionSnippetIds);
+            Reflect.deleteProperty(boost, 'accountIds'); // code smell, todo : probably need a minor refactor in here
         }
 
         logger('Returning assembled boost: ', boost);
