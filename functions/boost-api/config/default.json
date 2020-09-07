@@ -47,6 +47,7 @@
         "audienceTable": "audience_data.audience",
         "audienceJoinTable": "audience_data.audience_account_join",
         "friendshipTable": "friend_data.core_friend_relationship",
+        "snippetTable": "snippet_data.snippet",
         "profileTable": "UserProfileTable",
         "clientFloatTable": "ClientFloatTable"
     },

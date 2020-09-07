@@ -1,8 +1,0 @@
-{
-    "clientId": "zar_client_co",
-    "floatId": "zar_cash_primary",
-    "accrualAmount": "1000000",
-    "currency": "ZAR",
-    "unit": "HUNDREDTH_CENT",
-    "backingEntityIdentifier": "tx-id-backing"
-}

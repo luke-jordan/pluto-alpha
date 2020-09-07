@@ -177,6 +177,7 @@ module.exports.fetchBoostDetails = async (boostId, includeAccounts) => {
         
         statusConditions: rawBoost['status_conditions'],
         rewardParameters: rawBoost['reward_parameters'] || {},
+        gameParams: rawBoost['game_params'] || {},
 
         boostAmount: {
             amount: rawBoost['boost_amount'],
@@ -227,4 +228,13 @@ module.exports.sumBoostAndSavedAmounts = async (boostIds) => {
     logger('Result of sums:', resultOfSums);
 
     return resultOfSums.map((result) => camelizeKeys(result));
+};
+
+// Known duplicate of rds.boost -> fetchQuestionSnippet. To be consolidated.
+module.exports.fetchQuestionSnippets = async (snippetIds) => {
+    const selectQuery = `select snippet_id, title, body, response_options from ${config.get('tables.snippetTable')} ` + 
+        `where snippet_id in (${extractArrayIndices(snippetIds)})`;
+    const resultOfFetch = await rdsConnection.selectQuery(selectQuery, snippetIds);
+    logger('Result of snippet fetch: ', resultOfFetch);
+    return resultOfFetch.map((result) => camelizeKeys(result));
 };

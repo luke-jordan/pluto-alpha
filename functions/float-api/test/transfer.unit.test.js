@@ -27,6 +27,8 @@ const allocateUserStub = sinon.stub();
 const redisGetStub = sinon.stub();
 const redisSetStub = sinon.stub();
 
+const mockRds = { 'allocateFloat': allocatePoolStub, 'allocateToUsers': allocateUserStub, '@noCallThru': true };
+
 class MockRedis {
     constructor () { 
         this.get = redisGetStub;
@@ -35,15 +37,11 @@ class MockRedis {
 }
 
 const handler = proxyquire('../transfer-handler', {
-    './persistence/rds': {
-        'allocateFloat': allocatePoolStub,
-        'allocateToUsers': allocateUserStub,
-        '@noCallThru': true
-    },
+    './persistence/rds': mockRds,
     './persistence/dynamodb': {
         '@noCallThru': true
     },
-    './accrual-handler': {
+    './allocation-helper': {
         '@noCallThru': true
     },
     'ioredis': MockRedis,
@@ -144,6 +142,7 @@ describe('*** UNIT TEST BONUS TRANSFER ***', () => {
         expect(bodyOfResult).to.deep.equal(expectedResult);
         expect(allocatePoolStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId, testNonUserAllocRequest);
         expect(allocateUserStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId, testUserAllocRequests('PENDING'));
+        
         expect(redisGetStub).to.have.been.calledOnceWithExactly(testActiveTxId);
         expect(redisSetStub).to.have.been.calledWithExactly(testActiveTxId, 'PENDING', 'EX', config.get('cache.ttls.float'));
         expect(redisSetStub).to.have.been.calledWithExactly(testActiveTxId, JSON.stringify(testTxResult), 'EX', config.get('cache.ttls.float'));

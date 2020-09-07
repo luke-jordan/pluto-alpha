@@ -1,12 +1,12 @@
 variable "float_accrue_lambda_function_name" {
   default = "float_accrue"
-  type = "string"
+  type = string
 }
 
 resource "aws_lambda_function" "float_accrue" {
 
   function_name                  = "${var.float_accrue_lambda_function_name}"
-  role                           = "${aws_iam_role.float_accrue_role.arn}"
+  role                           = aws_iam_role.float_accrue_role.arn
   handler                        = "accrual-handler.accrue"
   memory_size                    = 256
   runtime                        = "nodejs12.x"
@@ -46,6 +46,10 @@ resource "aws_lambda_function" "float_accrue" {
             },
             "records": {
               "bucket": "${aws_s3_bucket.float_record_bucket.bucket}"
+            },
+            "cache": {
+              "host": aws_elasticache_cluster.ops_redis_cache.cache_nodes.0.address,
+              "port": aws_elasticache_cluster.ops_redis_cache.cache_nodes.0.port
             }
         }
       )}"
@@ -54,7 +58,10 @@ resource "aws_lambda_function" "float_accrue" {
 
   vpc_config {
     subnet_ids = [for subnet in aws_subnet.private : subnet.id]
-    security_group_ids = [aws_security_group.sg_5432_egress.id, aws_security_group.sg_db_access_sg.id, aws_security_group.sg_https_dns_egress.id]
+    security_group_ids = [aws_security_group.sg_5432_egress.id, 
+      aws_security_group.sg_db_access_sg.id, aws_security_group.sg_https_dns_egress.id,
+      aws_security_group.sg_cache_6379_ingress.id, aws_security_group.sg_ops_cache_access.id
+    ]
   }
 
   depends_on = [aws_cloudwatch_log_group.float_accrue]
@@ -100,7 +107,7 @@ resource "aws_iam_role_policy_attachment" "float_accrue_vpc_execution_policy" {
 
 resource "aws_iam_role_policy_attachment" "float_accrue_client_float_table_access" {
   role = aws_iam_role.float_accrue_role.name
-  policy_arn = "${aws_iam_policy.dynamo_table_client_float_table_access.arn}"
+  policy_arn = aws_iam_policy.dynamo_table_client_float_table_access.arn
 }
 
 resource "aws_iam_role_policy_attachment" "float_accrue_s3_put_access" {
