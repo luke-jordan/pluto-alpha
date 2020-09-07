@@ -134,7 +134,7 @@ const referralHasZeroRedemption = (referralContext) => {
 };
 
 const fetchUserProfile = async (systemWideUserId) => {
-    const relevantProfileColumns = ['country_code', 'creation_time_epoch_millis'];
+    const relevantProfileColumns = ['referral_code_used', 'country_code', 'creation_time_epoch_millis'];
 
     logger('Fetching profile for user id: ', systemWideUserId);
     const userProfile = await dynamo.fetchSingleRow(config.get('tables.userProfile'), { systemWideUserId }, relevantProfileColumns);
@@ -145,6 +145,24 @@ const fetchUserProfile = async (systemWideUserId) => {
     }
 
     return userProfile;
+};
+
+const updateProfileReferralCode = async (systemWideUserId, referralCodeUsed) => {
+    const updateParams = {
+        tableName: config.get('tables.userProfile'),
+        itemKey: { systemWideUserId },
+        updateExpression: 'set referral_code_used = :rcu',
+        substitutionDict: { ':rcu': referralCodeUsed },
+        returnOnlyUpdated: true
+    };
+
+    try {
+        const resultOfUpdate = await dynamo.updateRow(updateParams);
+        return { result: 'SUCCESS', referralCodeUsed: resultOfUpdate.returnedAttributes.referralCodeUsed };
+    } catch (err) {
+        logger('Error updating user profile referral code: ', err);
+        throw err;
+    }
 };
 
 const fetchReferralContext = async (referralCodeDetails) => {
@@ -179,6 +197,13 @@ const publishReferralCodeEvent = async (referredUserProfile, referralCodeDetails
     await publisher.publishUserEvent(referringUserId, 'REFERRAL_CODE_USED', logOptions);
 };
 
+const publishEventAndUpdateProfile = async (userProfile, referralContext, referralCodeDetails) => {
+    const resultOfUpdate = await updateProfileReferralCode(userProfile.systemWideUserId, referralCodeDetails.referralCode);
+    logger('Profile update result: ', resultOfUpdate);
+
+    await publishReferralCodeEvent(userProfile, referralCodeDetails, referralContext);
+};
+
 const assembleStatusConditions = (referredUserId, referralContext) => {
     const { redeemConditionType, redeemConditionAmount, daysToMaintain } = referralContext;
     
@@ -202,7 +227,23 @@ const assembleStatusConditions = (referredUserId, referralContext) => {
     return statusConditions;
 };
 
-const isValidReferralCode = (referralCodeDetails, referredUserProfile) => {
+const isValidReferralCode = async (referralCodeDetails, referredUserProfile) => {
+    if (referralCodeDetails.referralCode === referredUserProfile.referralCodeUsed) {
+        logger('Referral code has already been used, exiting');
+        return false;
+    }
+
+    if (referralCodeDetails.referralCode !== referredUserProfile.referralCodeUsed) {
+        const previousReferralCodeDetails = await fetchReferralCodeDetails(referredUserProfile.referralCodeUsed, referredUserProfile.countryCode);
+        logger('Got details of previously used referral code: ', previousReferralCodeDetails);
+        if (['BETA', 'CHANNEL'].includes(previousReferralCodeDetails.codeType) && referralCodeDetails.codeType === 'USER') {
+            return true;
+        }
+
+        logger('Referral code is out of sequence, exiting');
+        return false;
+    }
+
     if (referralCodeDetails.persistedTimeMillis > referredUserProfile.creationTimeEpochMillis) {
         logger('Referral code older than referred user, exiting');
         return false;
@@ -233,7 +274,8 @@ module.exports.useReferralCode = async (event) => {
             return { statusCode: status('Bad Request') };
         }
 
-        if (!isValidReferralCode(referralCodeDetails, userProfile)) {
+        const validReferralCode = await isValidReferralCode(referralCodeDetails, userProfile);
+        if (!validReferralCode) {
             return { statusCode: status('Forbidden') };
         }
 
@@ -298,8 +340,7 @@ module.exports.useReferralCode = async (event) => {
         logger('Result of firing off lambda invoke: ', resultOfTrigger);
 
         if (referralType === 'USER') {
-            logger('Publishing user referra code event');
-            await publishReferralCodeEvent(userProfile, referralCodeDetails, referralContext);
+            await publishEventAndUpdateProfile(userProfile, referralContext, referralCodeDetails);
         }
 
         return { statusCode: status('OK'), body: JSON.stringify({ resultOfTrigger }) };
