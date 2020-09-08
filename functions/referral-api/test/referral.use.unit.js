@@ -187,7 +187,7 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         clientId: 'some_client_id',
         floatId: 'primary_cash',
         context: {
-            boostAmountOffered: '1000::HUNDREDTH_CENT::USD',
+            boostAmountOffered: '100::HUNDREDTH_CENT::USD',
             boostSource: { }
         }
     };
@@ -199,9 +199,9 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         referralCodeUsed: testBetaCode
     };
 
-    beforeEach(() => testHelper.resetStubs(fetchRowStub, lambdaInvokeStub, momentStub));
+    beforeEach(() => testHelper.resetStubs(fetchRowStub, updateRowStub, lambdaInvokeStub, momentStub));
     
-    it('Fetches referral context and redeems boost where all conditions met', async () => {
+    it('Fetches referral context and redeems boost where all conditions met, simple save', async () => {
 
         momentStub.onFirstCall().returns({ add: () => testEndTime });
         momentStub.onSecondCall().returns({ add: () => testRevokeLimit });
@@ -292,8 +292,77 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         expect(publishStub).to.have.been.calledOnceWithExactly(testReferringUserId, 'REFERRAL_CODE_USED', expectedLogOptions);
     });
 
+    it('Fetches referral context and redeems boost where all conditions met, target balance', async () => {
+        const referralCodeDetails = { ...testReferralCodeDetails };
+        const referralDefaults = { ...userReferralDefaults };
+
+        referralDefaults.redeemConditionType = 'TARGET_BALANCE';
+        referralCodeDetails.codeType = 'BETA';
+        referralCodeDetails.context = referralDefaults;
+
+        momentStub.onFirstCall().returns({ add: () => testEndTime });
+        momentStub.onSecondCall().returns({ add: () => testRevokeLimit });
+
+        fetchRowStub.onCall(0).resolves(testUserProfile);
+        fetchRowStub.onCall(1).resolves(referralCodeDetails);
+        fetchRowStub.onCall(2).resolves({ userReferralDefaults: referralDefaults });
+
+        updateRowStub.resolves({ returnedAttributes: { referralCodeUsed: testReferralCode }});
+        lambdaInvokeStub.returns({ promise: () => ({ statusCode: 200 })});
+
+        const testEvent = { referralCodeUsed: testReferralCode, referredUserId: testReferredUserId };
+
+        const resultOfCode = await handler.useReferralCode(testEvent);
+        const resultBody = testHelper.standardOkayChecks(resultOfCode, true);
+
+        expect(resultBody).to.deep.equal({ result: 'BOOST_TRIGGERED' });
+
+        const expectedAudienceSelection = {
+            conditions: [
+                { op: 'in', prop: 'systemWideUserId', value: [testReferredUserId] }
+            ]
+        };
+
+        const expectedMsgInstructions = [
+            { systemWideUserId: testReferredUserId, msgInstructionFlag: 'REFERRAL::REDEEMED::REFERRED' }
+        ];
+
+        const expectedStatusConditions = {
+            REDEEMED: [
+                `save_completed_by #{${testReferredUserId}}`, 'balance_crossed_abs_target #{10000::HUNDREDTH_CENT::USD}'
+            ],
+            REVOKED: [`withdrawal_before #{${testRevokeLimit}}`]
+        };
+
+        const expectedBoostPayload = {
+            creatingUserId: testReferredUserId,
+            label: `User referral code`,
+            boostTypeCategory: 'REFERRAL::BETA_CODE_USED',
+            boostAmountOffered: '100000::HUNDREDTH_CENT::USD',
+            boostBudget: 100000,
+            boostSource: testBoostSource,
+            endTimeMillis: testEndTime.valueOf(),
+            boostAudience: 'INDIVIDUAL',
+            boostAudienceSelection: expectedAudienceSelection,
+            initialStatus: 'PENDING',
+            statusConditions: expectedStatusConditions,
+            messageInstructionFlags: { 'REDEEMED': expectedMsgInstructions }
+        };
+
+        const expectedBoostInvocation = {
+            FunctionName: 'boost_create',
+            InvocationType: 'Event',
+            Payload: JSON.stringify(expectedBoostPayload)
+        };
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(expectedBoostInvocation);
+
+    });
+
     it('Does not redeem where conditions not met', async () => {
-        const testEvent = { referralCodeUsed: 'IAMREFERRED', referredUserId: testReferredUserId };
+        const referralCodeDetails = { ...testReferralCodeDetails };
+        const userProfile = { ...testUserProfile };
+
+        const testEvent = { referralCodeUsed: testReferralCode, referredUserId: testReferredUserId };
 
         const expectedResult = {
             statusCode: 200,
@@ -304,38 +373,51 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         // On invalid event
         await expect(handler.useReferralCode({ httpMethod: 'POST' })).to.eventually.deep.equal({ statusCode: 403 });
 
-        fetchRowStub.onFirstCall().resolves(testUserProfile);
+        fetchRowStub.onFirstCall().resolves(userProfile);
         fetchRowStub.onSecondCall().resolves();
 
         // On referral code details not found
         await expect(handler.useReferralCode({ referredUserId: testReferredUserId })).to.eventually.deep.equal(expectedResult);
         fetchRowStub.reset();
 
-        fetchRowStub.onFirstCall().resolves(testUserProfile);
-        fetchRowStub.onSecondCall().resolves(testReferralCodeDetails);
+        fetchRowStub.onFirstCall().resolves(userProfile);
+        fetchRowStub.onSecondCall().resolves(referralCodeDetails);
         fetchRowStub.onThirdCall().resolves(testBetaCodeDetails);
 
         // On missing referral code context
         await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal(expectedResult);
         fetchRowStub.reset();
 
-        fetchRowStub.onCall(0).resolves(testUserProfile);
-        fetchRowStub.onCall(1).resolves(testReferralCodeDetails);
+        fetchRowStub.onCall(0).resolves(userProfile);
+        fetchRowStub.onCall(1).resolves(referralCodeDetails);
     
         fetchRowStub.onCall(2).resolves(testBetaCodeDetails);
         fetchRowStub.onCall(3).resolves({ userReferralDefaults: { } });
 
         expectedResult.body = JSON.stringify({ result: 'CODE_SET' });
 
-        // On zero redemption
+        // On zero redemption, case 1
         await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal(expectedResult);
         fetchRowStub.reset();
 
-        testReferralCodeDetails.persistedTimeMillis = moment(testRefCodeCreationTime).add(4, 'days').valueOf();
+        fetchRowStub.onCall(0).resolves(userProfile);
+        fetchRowStub.onCall(1).resolves(referralCodeDetails);
+    
+        fetchRowStub.onCall(2).resolves(testBetaCodeDetails);
+        fetchRowStub.onCall(3).resolves({ userReferralDefaults: { boostAmountOffered: '0' } });
 
-        fetchRowStub.onFirstCall().resolves(testUserProfile);
-        fetchRowStub.onSecondCall().resolves(testReferralCodeDetails);
-        fetchRowStub.onThirdCall().resolves({ userReferralDefaults });
+        expectedResult.body = JSON.stringify({ result: 'CODE_SET' });
+
+        // On zero redemption, case 2
+        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal(expectedResult);
+        fetchRowStub.reset();
+
+        referralCodeDetails.persistedTimeMillis = moment(testRefCodeCreationTime).add(4, 'days').valueOf();
+
+        fetchRowStub.onCall(0).resolves(userProfile);
+        fetchRowStub.onCall(1).resolves(referralCodeDetails);
+    
+        fetchRowStub.onCall(2).resolves(testBetaCodeDetails);
 
         expectedResult.body = JSON.stringify({ result: 'CODE_NOT_ALLOWED' });
 
@@ -343,14 +425,48 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal(expectedResult);
         fetchRowStub.reset();
 
-        fetchRowStub.onCall(0).resolves(testUserProfile);
-        fetchRowStub.onCall(1).resolves(testReferralCodeDetails);
+        referralCodeDetails.persistedTimeMillis = testRefCodeCreationTime;
+
+        fetchRowStub.onCall(0).resolves(userProfile);
+        fetchRowStub.onCall(1).resolves(referralCodeDetails);
     
-        fetchRowStub.onCall(2).resolves(testReferralCodeDetails);
+        fetchRowStub.onCall(2).resolves(referralCodeDetails);
         fetchRowStub.onCall(3).resolves({ userReferralDefaults });
 
         // Where referral code is out of sequence
         await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal(expectedResult);
+        fetchRowStub.reset();
+
+        userProfile.referralCodeUsed = testReferralCode;
+
+        fetchRowStub.onCall(0).resolves(userProfile);
+        fetchRowStub.onCall(1).resolves(referralCodeDetails);
+    
+        // Where referral code has already been used
+        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal(expectedResult);
+    });
+
+    it('Catches error where referred user profile not found', async () => {
+        fetchRowStub.onCall(0).resolves();
+        const resultOfCode = await handler.useReferralCode({ referralCodeUsed: testReferralCode, referredUserId: testReferredUserId });
+        expect(testHelper.extractErrorMsg(resultOfCode)).to.deep.equal(`Error! No profile found for: ${testReferredUserId}`);
+    });
+
+    it('Catches error on referred user profile update failure', async () => {
+        Reflect.deleteProperty(testUserProfile, 'referralCodeUsed');
+
+        momentStub.onFirstCall().returns({ add: () => testEndTime });
+        momentStub.onSecondCall().returns({ add: () => testRevokeLimit });
+
+        fetchRowStub.onCall(0).resolves(testUserProfile);
+        fetchRowStub.onCall(1).resolves(testReferralCodeDetails);    
+        fetchRowStub.onCall(2).resolves({ userReferralDefaults });
+
+        updateRowStub.throws(new Error('Dynamo update error'));
+        lambdaInvokeStub.returns({ promise: () => ({ statusCode: 200 })});
+
+        const resultOfCode = await handler.useReferralCode({ referralCodeUsed: testReferralCode, referredUserId: testReferredUserId });
+        expect(testHelper.extractErrorMsg(resultOfCode)).to.deep.equal('Dynamo update error');
     });
 
 });

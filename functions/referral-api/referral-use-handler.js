@@ -105,32 +105,19 @@ module.exports.verify = async (event) => {
 
 const createAudienceConditions = (boostUserIds) => ({ conditions: [{ op: 'in', prop: 'systemWideUserId', value: boostUserIds }]});
 
-const safeReferralAmountExtract = (referralContext, key = 'boostAmountOffered') => {
-    if (!referralContext || typeof referralContext[key] !== 'string') {
-        return 0;
-    }
-  
-    const amountArray = referralContext[key].split('::');
-    if (!amountArray || amountArray.length === 0) {
-        return 0;
-    }
-  
-    return amountArray[0];
-};
-
 const referralHasZeroRedemption = (referralContext) => {
     if (!referralContext.boostAmountOffered || typeof referralContext.boostAmountOffered !== 'string') {
         logger('No boost amount offered at all, return true');
         return true;
     }
 
-    try {
-        const splitAmount = parseInt(referralContext.boostAmountOffered.split('::'), 10);
-        return splitAmount === 0;
-    } catch (err) {
-        logger('Boost amount offered must be malformed: ', err);
+    const splitAmount = parseInt(referralContext.boostAmountOffered.split('::'), 10);
+    if (!splitAmount || typeof splitAmount !== 'number' || splitAmount === 0) {
+        logger('Boost amount offered must be malformed: ', referralContext.boostAmountOffered);
         return true;
     }
+
+    return false;
 };
 
 const fetchUserProfile = async (systemWideUserId) => {
@@ -161,7 +148,7 @@ const updateProfileReferralCode = async (systemWideUserId, referralCodeUsed) => 
         return { result: 'SUCCESS', referralCodeUsed: resultOfUpdate.returnedAttributes.referralCodeUsed };
     } catch (err) {
         logger('Error updating user profile referral code: ', err);
-        throw err;
+        throw new Error(err.message);
     }
 };
 
@@ -233,15 +220,13 @@ const isValidReferralCode = async (referralCodeDetails, referredUserProfile) => 
         return false;
     }
 
-    if (referralCodeDetails.referralCode !== referredUserProfile.referralCodeUsed) {
+    if (referredUserProfile.referralCodeUsed && referralCodeDetails.referralCode !== referredUserProfile.referralCodeUsed) {
         const previousReferralCodeDetails = await fetchReferralCodeDetails(referredUserProfile.referralCodeUsed, referredUserProfile.countryCode, standardCodeColumns);
         logger('Got details of previously used referral code: ', previousReferralCodeDetails);
-        if (['BETA', 'CHANNEL'].includes(previousReferralCodeDetails.codeType) && referralCodeDetails.codeType === 'USER') {
-            return true;
+        if (!['BETA', 'CHANNEL'].includes(previousReferralCodeDetails.codeType) && referralCodeDetails.codeType === 'USER') {
+            logger('Referral code is out of sequence, exiting');
+            return false;
         }
-
-        logger('Referral code is out of sequence, exiting');
-        return false;
     }
 
     if (referralCodeDetails.persistedTimeMillis > referredUserProfile.creationTimeEpochMillis) {
@@ -260,8 +245,9 @@ const triggerBoostForReferralCode = async (userProfile, referralCodeDetails, ref
     const boostCategory = `${referralType}_CODE_USED`;
         
     const redemptionMsgInstructions = [{ systemWideUserId: referredUserId, msgInstructionFlag: 'REFERRAL::REDEEMED::REFERRED' }];
-    const boostAmountPerUser = safeReferralAmountExtract(referralContext);
-    
+    const amountArray = referralContext.boostAmountOffered.split('::');
+    const boostAmountPerUser = amountArray[0];
+
     if (referralType === 'USER') {
         const referringUserId = referralCodeDetails.creatingUserId;
         redemptionMsgInstructions.push({ systemWideUserId: referringUserId, msgInstructionFlag: 'REFERRAL::REDEEMED::REFERRER' });
@@ -354,6 +340,6 @@ module.exports.useReferralCode = async (event) => {
         return opsUtil.wrapResponse(resultOfTrigger);
     } catch (err) {
         logger('FATAL_ERROR: ', err);
-        return opsUtil.wrapResponse({ message: err }, 500);
+        return opsUtil.wrapResponse({ error: err.message }, 500);
     }
 };
