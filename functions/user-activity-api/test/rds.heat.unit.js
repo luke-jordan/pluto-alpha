@@ -27,18 +27,19 @@ const savingHeatRds = proxyquire('../persistence/rds.heat', {
     '@noCallThru': true
 });
 
-const resetStubs = helper.resetStubs(queryStub, insertStub);
+const resetStubs = () => helper.resetStubs(queryStub, insertStub);
 
 describe.only('*** USER ACTIVITY *** SAVING HEAT POINT INSERTION', async () => {
+    
     beforeEach(resetStubs);
 
     it('Fetch number of points and parameters for an event', async () => {
-        const expectedQuery = 'select event_point_match_id, number_point, parameters from transaction_data.event_point_list ' +
+        const expectedQuery = 'select event_point_match_id, number_points, parameters from transaction_data.event_point_list ' +
             'where client_id = $1 and float_id = $2 and event_type = $3';
         queryStub.resolves([{ 'number_points': 10, 'parameters': {} }]);
         
         const resultOfQuery = await savingHeatRds.obtainPointsForEvent('client', 'float', 'EVENT_TYPE');
-        expect(resultOfQuery).to.deep.equal({ numberPoints: 10, parameters: {} });
+        expect(resultOfQuery).to.deep.equal({ eventPointMatchId: 'somePointJoin', numberPoints: 10, parameters: {} });
 
         expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['client', 'float', 'EVENT_TYPE']);
     });
@@ -50,10 +51,21 @@ describe.only('*** USER ACTIVITY *** SAVING HEAT POINT INSERTION', async () => {
         const expectColumnTemplate = '${userId}, ${eventPointMatchId}, ${numberPoints}';
         const expectedRow = [{ userId: 'userX', eventPointMatchId: 'somePointJoin', numberPoints: 5 }];
 
-        const resultOfQuery = await savingHeatRds.insertPointLog([{ userId: 'userX', eventPointMatchId: 'somePointJoin', numberPoints: 5 }]);
+        const resultOfQuery = await savingHeatRds.insertPointLogs([{ userId: 'userX', eventPointMatchId: 'somePointJoin', numberPoints: 5 }]);
 
         expect(resultOfQuery).to.deep.equal({ result: 'INSERTED' });
         expect(insertStub).to.have.been.calledOnceWithExactly(expectedQuery, expectColumnTemplate, expectedRow);
+    });
+
+    it('Returns list of events for which non-zero points are active', async () => {
+        const expectedQuery = 'select event_type from transaction_data.event_point_list where ' +
+            'number_points > 0 and active = true and event_type in ($1, $2)';
+        queryStub.resolves([{ 'event_type': 'SECOND_EVENT_TYPE' }]);
+
+        const resultOfQuery = await savingHeatRds.filterForPointRelevance(['FIRST_EVENT_TYPE', 'SECOND_EVENT_TYPE']);
+
+        expect(resultOfQuery).to.deep.equal(['SECOND_EVENT_TYPE']);
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['FIRST_EVENT_TYPE', 'SECOND_EVENT_TYPE']);
     });
 
 });
@@ -66,7 +78,7 @@ describe.only('*** USER ACTIVITY *** SAVING HEAT SUMMATION', async () => {
             'where owner_user_id in ($1) group by owner_user_id';
         queryStub.resolves([{ 'owner_user_id': 'some-user', 'sum': 1440 }]);
 
-        const resultOfQuery = await savingHeatRds.sumPointsForUsers(['owner_user_id']);
+        const resultOfQuery = await savingHeatRds.sumPointsForUsers(['some-user']);
 
         expect(resultOfQuery).to.deep.equal({ 'some-user': 1440 });
         expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['some-user']);
