@@ -19,7 +19,7 @@ const handleErrorAndReturn = (e) => {
     return { statusCode: 500, body: JSON.stringify(e.message) };
 };
 
-const standardReferralCodeColumns = ['referralCode', 'codeType', 'expiryTimeMillis', 'context', 'clientId', 'floatId'];
+const standardCodeColumns = ['referralCode', 'codeType', 'expiryTimeMillis', 'context', 'clientId', 'floatId'];
 
 const fetchReferralCodeDetails = async (rawReferralCode, countryCode, relevantColumns) => {
     if (!rawReferralCode || typeof rawReferralCode !== 'string') {
@@ -29,7 +29,7 @@ const fetchReferralCodeDetails = async (rawReferralCode, countryCode, relevantCo
     const referralCode = rawReferralCode.toUpperCase().trim();
     logger('Verifying transformed referral code: ', referralCode);
     
-    const colsToReturn = relevantColumns ? relevantColumns : standardReferralCodeColumns;
+    const colsToReturn = relevantColumns ? relevantColumns : standardCodeColumns;
     const referralCodeDetails = await dynamo.fetchSingleRow(config.get('tables.activeCodes'), { referralCode, countryCode }, colsToReturn);
     logger('Found referral code in table: ', referralCodeDetails);
     
@@ -72,12 +72,12 @@ module.exports.verify = async (event) => {
         const params = opsUtil.extractParamsFromEvent(event);
         logger('Referral verification params: ', params);
         if (!params.referralCode || typeof params.referralCode !== 'string' || params.referralCode.trim().length === 0) {
-            return { statusCode: status['Not found'], body: JSON.stringify({ result: 'NO_CODE_PROVIDED' })};
+            return { statusCode: status['Not Found'], body: JSON.stringify({ result: 'NO_CODE_PROVIDED' })};
         }
         
         const referralCode = params.referralCode.toUpperCase().trim();
         
-        const colsToReturn = standardReferralCodeColumns;
+        const colsToReturn = [...standardCodeColumns];
         if (params.includeCreatingUserId && !Reflect.has(event, 'httpMethod')) {
             colsToReturn.push('creatingUserId');
         }
@@ -234,7 +234,7 @@ const isValidReferralCode = async (referralCodeDetails, referredUserProfile) => 
     }
 
     if (referralCodeDetails.referralCode !== referredUserProfile.referralCodeUsed) {
-        const previousReferralCodeDetails = await fetchReferralCodeDetails(referredUserProfile.referralCodeUsed, referredUserProfile.countryCode);
+        const previousReferralCodeDetails = await fetchReferralCodeDetails(referredUserProfile.referralCodeUsed, referredUserProfile.countryCode, standardCodeColumns);
         logger('Got details of previously used referral code: ', previousReferralCodeDetails);
         if (['BETA', 'CHANNEL'].includes(previousReferralCodeDetails.codeType) && referralCodeDetails.codeType === 'USER') {
             return true;
@@ -252,6 +252,65 @@ const isValidReferralCode = async (referralCodeDetails, referredUserProfile) => 
     return true;
 };
 
+const triggerBoostForReferralCode = async (userProfile, referralCodeDetails, referralContext) => {
+    const referredUserId = userProfile.systemWideUserId;
+    const boostUserIds = [referredUserId];
+
+    const referralType = referralCodeDetails.codeType;
+    const boostCategory = `${referralType}_CODE_USED`;
+        
+    const redemptionMsgInstructions = [{ systemWideUserId: referredUserId, msgInstructionFlag: 'REFERRAL::REDEEMED::REFERRED' }];
+    const boostAmountPerUser = safeReferralAmountExtract(referralContext);
+    
+    if (referralType === 'USER') {
+        const referringUserId = referralCodeDetails.creatingUserId;
+        redemptionMsgInstructions.push({ systemWideUserId: referringUserId, msgInstructionFlag: 'REFERRAL::REDEEMED::REFERRER' });
+        boostUserIds.push(referringUserId);
+    }
+
+    const boostAudienceSelection = createAudienceConditions(boostUserIds);
+    // time within which the new user has to save in order to claim the bonus
+    const bonusExpiryTime = moment().add(config.get('revocationDefaults.expiryTimeDays'), 'days');
+
+    const statusConditions = assembleStatusConditions(referredUserId, referralContext);
+    logger('Assembled status conditions: ', statusConditions);
+
+    // note : we may at some point want a "system" flag on creating user ID instead of the account opener, but for
+    // now this will allow sufficient tracking, and a simple migration will fix it in the future
+    const boostPayload = {
+        creatingUserId: referredUserId,
+        label: `User referral code`,
+        boostTypeCategory: `REFERRAL::${boostCategory}`,
+        boostAmountOffered: referralContext.boostAmountOffered,
+        boostBudget: boostAmountPerUser * boostUserIds.length,
+        boostSource: referralContext.boostSource,
+        endTimeMillis: bonusExpiryTime.valueOf(),
+        boostAudience: 'INDIVIDUAL',
+        boostAudienceSelection,
+        initialStatus: 'PENDING',
+        statusConditions,
+        messageInstructionFlags: {
+            'REDEEMED': redemptionMsgInstructions
+        }
+    };
+
+    const lambdaInvocation = {
+        FunctionName: config.get('lambda.createBoost'),
+        InvocationType: 'Event',
+        Payload: JSON.stringify(boostPayload)
+    };
+
+    logger('Invoking lambda with payload: ', boostPayload);
+    const resultOfTrigger = await lambda.invoke(lambdaInvocation).promise();
+    logger('Result of firing off lambda invoke: ', resultOfTrigger);
+
+    if (referralType === 'USER') {
+        await publishEventAndUpdateProfile(userProfile, referralContext, referralCodeDetails);
+    }
+
+    return { result: 'BOOST_TRIGGERED' };
+};
+
 // this handles redeeming a referral code, if it is present and includes an amount
 // the method will create a boost in 'PENDING', triggered when the referred user saves
 module.exports.useReferralCode = async (event) => {
@@ -266,86 +325,35 @@ module.exports.useReferralCode = async (event) => {
         const userProfile = await fetchUserProfile(referredUserId);
         logger('Got referred user profile ', userProfile);
     
-        const referralCodeDetails = await fetchReferralCodeDetails(referralCodeUsed, userProfile.countryCode);
+        const relevantColumns = ['creatingUserId', ...standardCodeColumns];
+        const referralCodeDetails = await fetchReferralCodeDetails(referralCodeUsed, userProfile.countryCode, relevantColumns);
         logger('Got referral code details: ', referralCodeDetails);
     
         if (!referralCodeDetails || Object.keys(referralCodeDetails).length === 0) {
             logger('No referral code details provided, exiting');
-            return { statusCode: status('Bad Request') };
+            return opsUtil.wrapResponse({ result: 'CODE_NOT_ALLOWED' });
         }
 
         const validReferralCode = await isValidReferralCode(referralCodeDetails, userProfile);
         if (!validReferralCode) {
-            return { statusCode: status('Forbidden') };
+            return opsUtil.wrapResponse({ result: 'CODE_NOT_ALLOWED' });
         }
 
         const referralContext = await fetchReferralContext(referralCodeDetails);
         if (!referralContext) {
             logger('No referral context to give boost amount etc, exiting');
-            return { statusCode: status('Bad Request') };
+            return opsUtil.wrapResponse({ result: 'CODE_NOT_ALLOWED' });
         }
     
         if (referralHasZeroRedemption(referralContext)) {
             logger('Referral context but amount offered is zero, exiting');
-            return { statusCode: status('OK') };
-        }
-        
-        const referralType = referralCodeDetails.codeType;
-        const boostCategory = `${referralType}_CODE_USED`;
-        
-        const boostUserIds = [referredUserId];
-        const redemptionMsgInstructions = [{ systemWideUserId: referredUserId, msgInstructionFlag: 'REFERRAL::REDEEMED::REFERRED' }];
-        const boostAmountPerUser = safeReferralAmountExtract(referralContext);
-        
-        if (referralType === 'USER') {
-            const referringUserId = referralCodeDetails.creatingUserId;
-            redemptionMsgInstructions.push({ systemWideUserId: referringUserId, msgInstructionFlag: 'REFERRAL::REDEEMED::REFERRER' });
-            boostUserIds.push(referringUserId);
-        }
-    
-        const boostAudienceSelection = createAudienceConditions(boostUserIds);
-        // time within which the new user has to save in order to claim the bonus
-        const bonusExpiryTime = moment().add(config.get('revocationDefaults.expiryTimeDays'), 'days');
-    
-        const statusConditions = assembleStatusConditions(referredUserId, referralContext);
-        logger('Assembled status conditions: ', statusConditions);
-    
-        // note : we may at some point want a "system" flag on creating user ID instead of the account opener, but for
-        // now this will allow sufficient tracking, and a simple migration will fix it in the future
-        const boostPayload = {
-            creatingUserId: referredUserId,
-            label: `User referral code`,
-            boostTypeCategory: `REFERRAL::${boostCategory}`,
-            boostAmountOffered: referralContext.boostAmountOffered,
-            boostBudget: boostAmountPerUser * boostUserIds.length,
-            boostSource: referralContext.boostSource,
-            endTimeMillis: bonusExpiryTime.valueOf(),
-            boostAudience: 'INDIVIDUAL',
-            boostAudienceSelection,
-            initialStatus: 'PENDING',
-            statusConditions,
-            messageInstructionFlags: {
-                'REDEEMED': redemptionMsgInstructions
-            }
-        };
-    
-        const lambdaInvocation = {
-            FunctionName: config.get('lambda.createBoost'),
-            InvocationType: 'Event',
-            Payload: JSON.stringify(boostPayload)
-        };
-    
-        logger('Invoking lambda with payload: ', boostPayload);
-        const resultOfTrigger = await lambda.invoke(lambdaInvocation).promise();
-        logger('Result of firing off lambda invoke: ', resultOfTrigger);
-
-        if (referralType === 'USER') {
-            await publishEventAndUpdateProfile(userProfile, referralContext, referralCodeDetails);
+            return opsUtil.wrapResponse({ result: 'CODE_SET' });
         }
 
-        return { statusCode: status('OK'), body: JSON.stringify({ resultOfTrigger }) };
+        const resultOfTrigger = await triggerBoostForReferralCode(userProfile, referralCodeDetails, referralContext);
+        return opsUtil.wrapResponse(resultOfTrigger);
     } catch (err) {
         logger('FATAL_ERROR: ', err);
-        return { statusCode: 500 };
+        return opsUtil.wrapResponse({ message: err }, 500);
     }
 };

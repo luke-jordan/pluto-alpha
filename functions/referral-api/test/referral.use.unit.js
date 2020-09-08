@@ -88,14 +88,15 @@ describe('*** UNIT TESTING VERIFY REFERRAL CODE ***', () => {
     });
 
     it('Happy path referral code verification, when it exists, normal body', async () => {
-        fetchRowStub.withArgs(activeCodeTable, { countryCode: testCountryCode, referralCode: testBetaCode }, sinon.match(relevantReferralColumns)).resolves(returnedCodeDetails);
-        const resultOfVerification = await handler.verify({ referralCode: testBetaCode, countryCode: testCountryCode });
+        const relevantColumns = [...relevantReferralColumns, 'creatingUserId'];
+        fetchRowStub.withArgs(activeCodeTable, { countryCode: testCountryCode, referralCode: testBetaCode }, relevantColumns).resolves(returnedCodeDetails);
+        const resultOfVerification = await handler.verify({ referralCode: testBetaCode, countryCode: testCountryCode, includeCreatingUserId: true });
         const verificationBody = testHelper.standardOkayChecks(resultOfVerification);
         expect(verificationBody).to.deep.equal({ result: 'CODE_IS_ACTIVE', codeDetails: returnedCodeDetails });
     });
 
     it('Happy path referral code verification, case insensitive', async () => {
-        fetchRowStub.withArgs(activeCodeTable, { countryCode: testCountryCode, referralCode: testBetaCode }, sinon.match(relevantReferralColumns)).resolves(returnedCodeDetails);
+        fetchRowStub.withArgs(activeCodeTable, { countryCode: testCountryCode, referralCode: testBetaCode }, relevantReferralColumns).resolves(returnedCodeDetails);
         const resultOfVerification = await handler.verify({ referralCode: testCodeCases, countryCode: testCountryCode });
         const verificationBody = testHelper.standardOkayChecks(resultOfVerification);
         expect(verificationBody).to.deep.equal({ result: 'CODE_IS_ACTIVE', codeDetails: returnedCodeDetails });
@@ -115,6 +116,12 @@ describe('*** UNIT TESTING VERIFY REFERRAL CODE ***', () => {
         expect(fetchRowStub).to.have.been.calledTwice;
         expect(fetchRowStub).to.have.been.calledWithExactly(activeCodeTable, { referralCode: testBetaCode, countryCode: testCountryCode }, sinon.match(relevantReferralColumns));
         expect(fetchRowStub).to.have.been.calledWithExactly(clientFloatTable, { clientId: 'someClient', floatId: 'someFloat' }, ['user_referral_defaults']);
+    });
+
+    it('Happy path referral code not provided in params', async () => {
+        const resultOfVerification = await handler.verify({ countryCode: testCountryCode });
+        const verificationBody = testHelper.expectedErrorChecks(resultOfVerification, status['Not Found']);
+        expect(verificationBody).to.deep.equal({ result: 'NO_CODE_PROVIDED' });
     });
 
     it('Happy path referral code does not exist / is not active', async () => {
@@ -142,6 +149,8 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
 
     const testRevokeLimit = moment().subtract(30, 'days').valueOf();
     const testEndTime = moment();
+
+    const augmentedCodeColumns = ['creatingUserId', ...relevantReferralColumns];
 
     const testBoostSource = {
         bonusPoolId: 'primary_bonus_pool',
@@ -209,18 +218,13 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         const testEvent = { referralCodeUsed: testReferralCode, referredUserId: testReferredUserId };
 
         const resultOfCode = await handler.useReferralCode(testEvent);
-        expect(resultOfCode).to.exist;
+        const resultBody = testHelper.standardOkayChecks(resultOfCode, true);
 
-        const expectedResult = {
-            statusCode: 200,
-            body: JSON.stringify({ resultOfTrigger: { statusCode: 200 }})
-        };
-
-        expect(resultOfCode).to.deep.equal(expectedResult);
+        expect(resultBody).to.deep.equal({ result: 'BOOST_TRIGGERED' });
 
         expect(fetchRowStub.callCount).to.equal(4);
         expect(fetchRowStub).to.have.been.calledWithExactly('UserProfileTable', { systemWideUserId: testReferredUserId }, relevantProfileColumns);
-        expect(fetchRowStub).to.have.been.calledWithExactly('ActiveReferralCodes', { referralCode: testReferralCode, countryCode: 'USA' }, relevantReferralColumns);
+        expect(fetchRowStub).to.have.been.calledWithExactly('ActiveReferralCodes', { referralCode: testReferralCode, countryCode: 'USA' }, augmentedCodeColumns);
         expect(fetchRowStub).to.have.been.calledWithExactly('ActiveReferralCodes', { referralCode: testBetaCode, countryCode: 'USA' }, relevantReferralColumns);
 
         const referralDefaultsKey = { clientId: 'some_client_id', floatId: 'primary_cash' };
@@ -291,6 +295,12 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
     it('Does not redeem where conditions not met', async () => {
         const testEvent = { referralCodeUsed: 'IAMREFERRED', referredUserId: testReferredUserId };
 
+        const expectedResult = {
+            statusCode: 200,
+            headers: testHelper.expectedHeaders,
+            body: JSON.stringify({ result: 'CODE_NOT_ALLOWED' })
+        };
+
         // On invalid event
         await expect(handler.useReferralCode({ httpMethod: 'POST' })).to.eventually.deep.equal({ statusCode: 403 });
 
@@ -298,7 +308,7 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         fetchRowStub.onSecondCall().resolves();
 
         // On referral code details not found
-        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal({ statusCode: 400 });
+        await expect(handler.useReferralCode({ referredUserId: testReferredUserId })).to.eventually.deep.equal(expectedResult);
         fetchRowStub.reset();
 
         fetchRowStub.onFirstCall().resolves(testUserProfile);
@@ -306,7 +316,7 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         fetchRowStub.onThirdCall().resolves(testBetaCodeDetails);
 
         // On missing referral code context
-        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal({ statusCode: 400 });
+        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal(expectedResult);
         fetchRowStub.reset();
 
         fetchRowStub.onCall(0).resolves(testUserProfile);
@@ -315,8 +325,10 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         fetchRowStub.onCall(2).resolves(testBetaCodeDetails);
         fetchRowStub.onCall(3).resolves({ userReferralDefaults: { } });
 
+        expectedResult.body = JSON.stringify({ result: 'CODE_SET' });
+
         // On zero redemption
-        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal({ statusCode: 200 });
+        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal(expectedResult);
         fetchRowStub.reset();
 
         testReferralCodeDetails.persistedTimeMillis = moment(testRefCodeCreationTime).add(4, 'days').valueOf();
@@ -325,8 +337,10 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         fetchRowStub.onSecondCall().resolves(testReferralCodeDetails);
         fetchRowStub.onThirdCall().resolves({ userReferralDefaults });
 
+        expectedResult.body = JSON.stringify({ result: 'CODE_NOT_ALLOWED' });
+
         // Where used referral code is older than referred user
-        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal({ statusCode: 403 });
+        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal(expectedResult);
         fetchRowStub.reset();
 
         fetchRowStub.onCall(0).resolves(testUserProfile);
@@ -336,7 +350,7 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         fetchRowStub.onCall(3).resolves({ userReferralDefaults });
 
         // Where referral code is out of sequence
-        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal({ statusCode: 403 });
+        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal(expectedResult);
     });
 
 });
