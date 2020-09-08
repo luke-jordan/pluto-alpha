@@ -41,7 +41,7 @@ module.exports.validateRequest = (creationRequest) => {
 
 // helper, just given elevated problems if failures in here
 const isNonEmptyString = (param) => typeof param === 'string' && param.length > 0;
-const stripAccents = (name) => name.normalize('NFD').replace(/[\u0300-\u036f]/gu, '');
+const stripAccents = (name) => name.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').replace('\'', '').replace(' ', '');
 
 // note : possible race conditions means that the ref is composed of three parts:
 // a stem : upper case initial & surname, or JSAVE if none provided

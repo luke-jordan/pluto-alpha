@@ -67,6 +67,7 @@ module.exports.viewSnippet = async (event) => {
             snippetId: snippet.snippetId,
             title: snippet.title,
             body: snippet.body,
+            responseOptions: snippet.responseOptions,
             userCount: sumUsers,
             totalViewCount: sumViews,
             totalFetchCount: sumFetches
