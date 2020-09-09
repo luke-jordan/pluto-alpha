@@ -1,16 +1,12 @@
 'use strict';
 
 const logger = require('debug')('jupiter:account:handler');
-const config = require('config');
 
 const uuid = require('uuid/v4');
 const moment = require('moment');
 const validator = require('validator');
 
 const persistence = require('./persistence/rds');
-
-const AWS = require('aws-sdk');
-const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
 // point of this is to choose whether to use API calls or Lambda invocations
 module.exports.transformEvent = (event) => {
@@ -116,8 +112,6 @@ module.exports.createAccount = async (creationRequest = {
 module.exports.create = async (event) => {
   try {
     if (!event || typeof event !== 'object' || Object.keys(event).length === 0 || event.warmupCall) {
-      logger('Warmup, just keep alive for now, with a lambda gateway open');
-      await lambda.invoke({ FunctionName: config.get('lambda.createBoost'), InvocationType: 'Event', Payload: JSON.stringify({}) }).promise();
       logger('Done keeping gateway open, exiting');
       return { statusCode: 400, body: 'Empty invocation' };
     }
