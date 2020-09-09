@@ -59,8 +59,8 @@ describe('*** TEST BALANCE SELECTION ***', () => {
             creatingUserId: mockUserId,
             conditions: [
                 { op: 'and', children: [
-                    { prop: 'settlement_status', op: 'in', value: ['SETTLED', 'ACCRUED'] },
-                    { prop: 'transaction_type', op: 'in', value: ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'] },
+                    { prop: 'settlement_status', op: 'in', value: ['SETTLED', 'ACCRUED', 'LOCKED'] },
+                    { prop: 'transaction_type', op: 'in', value: ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION', 'LOCKED'] },
                     { prop: 'client_id', op: 'is', value: 'test-client-id' }
                 ]
             }],

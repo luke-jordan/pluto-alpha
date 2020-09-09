@@ -162,8 +162,8 @@ const convertAmountToDefaultUnitQuery = `SUM(
     )`.replace(/\s\s+/g, ' '); // replace just neatens it up and makes consistent in tests etc
 
 module.exports.convertSumBalanceToColumns = (condition) => {
-    const settlementStatusToInclude = ['SETTLED', 'ACCRUED'];
-    const transactionTypesToInclude = ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'];
+    const settlementStatusToInclude = ['SETTLED', 'ACCRUED', 'LOCKED'];
+    const transactionTypesToInclude = ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION', 'LOCKED'];
 
     const columnConditions = [
         { prop: 'settlement_status', op: 'in', value: settlementStatusToInclude },
