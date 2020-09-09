@@ -214,7 +214,7 @@ module.exports.fetchClientFloatDetails = async (event) => {
 // ////////////////////// FLOAT EDITING STARTS HERE ///////////////////////////////////////////////////////////////////
 // ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-const paramsToInclude = ['accrualRateAnnualBps', 'bonusPoolShareOfAccrual', 'clientShareOfAccrual', 'prudentialFactor'];
+const paramsToInclude = ['accrualRateAnnualBps', 'bonusPoolShareOfAccrual', 'clientShareOfAccrual', 'prudentialFactor', 'lockedSaveBonus'];
 
 const stripParamsForFloat = (newParams, existingParams) => paramsToInclude.
     reduce((obj, param) => ({ ...obj, [param]: newParams[param] || existingParams[param]}), {});
