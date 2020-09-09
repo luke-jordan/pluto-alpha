@@ -7,7 +7,7 @@ resource "aws_lambda_function" "referral_verify" {
 
   function_name                  = "${var.referral_verify_lambda_function_name}"
   role                           = "${aws_iam_role.referral_verify_role.arn}"
-  handler                        = "referral-handler.verify"
+  handler                        = "referral-use-handler.verify"
   memory_size                    = 256
   runtime                        = "nodejs12.x"
   timeout                        = 15

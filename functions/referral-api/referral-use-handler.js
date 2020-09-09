@@ -106,7 +106,12 @@ module.exports.verify = async (event) => {
 const createAudienceConditions = (boostUserIds) => ({ conditions: [{ op: 'in', prop: 'systemWideUserId', value: boostUserIds }]});
 
 const referralHasZeroRedemption = (referralContext) => {
-    if (!referralContext.boostAmountOffered || typeof referralContext.boostAmountOffered !== 'string') {
+    const { boostAmountOffered } = referralContext;
+    if (typeof boostAmountOffered === 'object') {
+        return opsUtil.boostAmountOffered(referralContext) || boostAmountOffered.amount === 0;
+    }
+    
+    if (!boostAmountOffered || typeof boostAmountOffered !== 'string') {
         logger('No boost amount offered at all, return true');
         return true;
     }
@@ -261,13 +266,17 @@ const triggerBoostForReferralCode = async (userProfile, referralCodeDetails, ref
     const statusConditions = assembleStatusConditions(referredUserId, referralContext);
     logger('Assembled status conditions: ', statusConditions);
 
+    // a bit nasty but grandfathering in a change, so
+    const boostAmountOffered = typeof referralContext.boostAmountOffered === 'object' 
+        ? opsUtil.convertAmountDictToString(referralContext.boostAmountOffered) : referralContext.boostAmountOffered;
+
     // note : we may at some point want a "system" flag on creating user ID instead of the account opener, but for
-    // now this will allow sufficient tracking, and a simple migration will fix it in the future
+    // now this will allow sufficient tracking, and a simple migration will fix it in the future    
     const boostPayload = {
         creatingUserId: referredUserId,
         label: `User referral code`,
         boostTypeCategory: `REFERRAL::${boostCategory}`,
-        boostAmountOffered: referralContext.boostAmountOffered,
+        boostAmountOffered,
         boostBudget: boostAmountPerUser * boostUserIds.length,
         boostSource: referralContext.boostSource,
         endTimeMillis: bonusExpiryTime.valueOf(),

@@ -31,9 +31,9 @@ module.exports.fetchLogsForTransaction = async (transactionId) => {
 module.exports.checkForDuplicateSave = async ({ accountId, amount, currency, unit }) => {
     const cuttOffTime = moment().subtract(config.get('defaults.duplicate.minuteCutOff'), 'minutes');
     const query = `select * from ${config.get('tables.accountTransactions')} where account_id = $1 and ` +
-        `amount = $2 and currency = $3 and unit = $4 and settlement_status = $5 and ` +
-        `creation_time > $6 order by creation_time desc limit 1`;
-    const dupValues = [accountId, amount, currency, unit, 'INITIATED', cuttOffTime.format()];
+        `amount = $2 and currency = $3 and unit = $4 and settlement_status in ($5, $6) and ` +
+        `creation_time > $7 order by creation_time desc limit 1`;
+    const dupValues = [accountId, amount, currency, unit, 'INITIATED', 'PENDING', cuttOffTime.format()];
     const rows = await rdsConnection.selectQuery(query, dupValues);
     return rows.length > 0 ? camelizeKeys(rows[0]) : null;
 };
