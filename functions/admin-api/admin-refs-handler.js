@@ -268,11 +268,56 @@ const validateCode = async (event) => {
     return resultCode === referralNotFoundCode;
 };
 
+const validateReferralParams = (params) => {
+    const paramKeys = Object.keys(params);
+    const requiredParameters = ['boostAmountOffered', 'boostSource', 'redeemConditionType', 'redeemConditionAmount'];
+
+    requiredParameters.forEach((requiredKey) => {
+        if (!paramKeys.includes(requiredKey)) {
+            throw new Error(`Missing required parameter: ${requiredKey}`);
+        }
+    });
+
+    if (!params.boostSource.clientId || !params.boostSource.floatId) {
+        throw new Error('Invalid boost source. A client id and float id are required');
+    }
+};
+
+const updateReferralContext = async (event) => {
+    const params = opsCommonUtil.extractParamsFromEvent(event);
+
+    validateReferralParams(params);
+
+    const userReferralDefaults = {
+        boostAmountOffered: params.boostAmountOffered,
+        boostSource: params.boostSource,
+        redeemConditionType: params.redeemConditionType,
+        redeemConditionAmount: params.redeemConditionAmount
+    };
+
+    if (params.daysToMaintain && typeof params.daysToMaintain === 'number') {
+        userReferralDefaults.daysToMaintain = params.daysToMaintain;
+    }
+
+    logger('Assembled new referral defaults: ', userReferralDefaults);
+    const { clientId, floatId } = params.boostSource;
+
+    const resultOfUpdate = await dynamo.updateClientFloatVars({ clientId, floatId, newReferralDefaults: userReferralDefaults });
+    logger('Result of updating referral code defaults: ', resultOfUpdate);
+
+    if (resultOfUpdate.result === 'SUCCESS') {
+        return adminUtil.codeOnlyResponse();
+    }
+
+    throw new Error('Failure in updating dynamo with newreferral defaults');
+};
+
 const dispatcher = {
     'list': (event) => listReferralCodes(event),
     'create': (event) => createReferralCode(event),
     'deactivate': (event) => deactivateCode(event),
-    'update': (event) => modifyCode(event)
+    'update': (event) => modifyCode(event),
+    'user': (event) => updateReferralContext(event)
 };
 
 /**

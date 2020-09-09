@@ -1,8 +1,6 @@
 'use strict';
 
-const config = require('config');
 const moment = require('moment');
-const uuid = require('uuid/v4');
 
 const testHelper = require('./boost.test.helper');
 
@@ -55,135 +53,13 @@ const handler = proxyquire('../boost-create-handler', {
     '@noCallThru': true
 });
 
-const resetStubs = () => testHelper.resetStubs(insertBoostStub, findBoostStub, findAccountsStub, updateBoostAccountStub, alterBoostStub, lamdbaInvokeStub, publishMultiStub);
+const resetStubs = () => testHelper.resetStubs(insertBoostStub, findBoostStub, findAccountsStub, 
+    updateBoostAccountStub, alterBoostStub, lamdbaInvokeStub, publishMultiStub, momentStub);
 
 const testStartTime = moment();
-const testAudienceId = uuid();
 
 const testClientId = 'some_client_co';
 const mockBoostSource = { bonusPoolId: 'primary_bonus_pool', clientId: testClientId, floatId: 'primary_cash' };
-
-describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
-
-    const referralWindowEnd = moment().add(3, 'months');
-    
-    const testReferringUser = uuid();
-    const testReferredUser = uuid();
-
-    // IDs for message templates for referrer and referred
-    const testReferringMsgId = uuid();
-    const testReferredMsgId = uuid();
-
-    const testCreatingUserId = uuid();
-
-    // `whole_universe from #{'{"specific_accounts": ["${testReferringUser}","${testReferredUser}"]}'}`
-    const mockBoostToFromPersistence = {
-        creatingUserId: testCreatingUserId,
-        label: 'Referral::Luke::Avish',
-        boostType: 'REFERRAL',
-        boostCategory: 'USER_CODE_USED',
-        boostAmount: 100000,
-        boostUnit: 'HUNDREDTH_CENT',
-        boostCurrency: 'USD',
-        boostBudget: 10000000,
-        fromBonusPoolId: 'primary_bonus_pool',
-        fromFloatId: 'primary_cash',
-        forClientId: 'some_client_co',
-        boostStartTime: testStartTime,
-        boostEndTime: referralWindowEnd,
-        statusConditions: { REDEEMED: [`save_completed_by #{${testReferredUser}}`, `first_save_by #{${testReferredUser}}`] },
-        boostAudienceType: 'INDIVIDUAL',
-        audienceId: testAudienceId,
-        defaultStatus: 'PENDING',
-        messageInstructionIds: [
-            { accountId: testReferringUser, msgInstructionId: testReferringMsgId, status: 'REDEEMED' }, 
-            { accountId: testReferredUser, msgInstructionId: testReferredMsgId, status: 'REDEEMED' }
-        ],
-        flags: ['REDEEM_ALL_AT_ONCE']
-    };
-
-    it('Happy path inserting a referral-based individual boost', async () => {
-        const testPersistedTime = moment();
-        momentStub.withArgs().returns(testStartTime);
-        momentStub.withArgs(referralWindowEnd.valueOf()).returns(referralWindowEnd);
-
-        const testCreatedAudienceId = uuid();
-        lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ 
-            body: JSON.stringify({ audienceId: testCreatedAudienceId })
-        })})});
-
-        findMsgInstructStub.withArgs('REFERRAL::REDEEMED::REFERRER').resolves(testReferringMsgId);
-        findMsgInstructStub.withArgs('REFERRAL::REDEEMED::REFERRED').resolves(testReferredMsgId);
-
-        const expectedFromRds = {
-            boostId: uuid(),
-            persistedTimeMillis: testPersistedTime.valueOf(),
-            numberOfUsersEligible: 2,
-            accountIds: [testReferringUser, testReferredUser]
-        };
-
-        insertBoostStub.resolves(expectedFromRds);
-
-        const testBodyOfEvent = {
-            creatingUserId: testCreatingUserId,
-            label: 'Referral::Luke::Avish',
-            boostTypeCategory: 'REFERRAL::USER_CODE_USED',
-            boostAmountOffered: '100000::HUNDREDTH_CENT::USD',
-            boostBudget: '10000000::HUNDREDTH_CENT::USD',
-            boostSource: mockBoostSource,
-            endTimeMillis: referralWindowEnd.valueOf(),
-            boostAudienceType: 'INDIVIDUAL',
-            boostAudienceSelection: {
-                table: config.get('tables.accountLedger'),
-                conditions: [{ op: 'in', prop: 'account_id', value: `${testReferringUser}, ${testReferredUser}` }]
-            },
-            initialStatus: 'PENDING',
-            statusConditions: { REDEEMED: [`save_completed_by #{${testReferredUser}}`, `first_save_by #{${testReferredUser}}`] },
-            messageInstructionFlags: {
-                'REDEEMED': [
-                    { accountId: testReferringUser, msgInstructionFlag: 'REFERRAL::REDEEMED::REFERRER' }, 
-                    { accountId: testReferredUser, msgInstructionFlag: 'REFERRAL::REDEEMED::REFERRED' }
-                ]
-            }
-        };
-
-        findUserIdsStub.resolves(['user-id-1', 'user-id-2']);
-
-        const resultOfInstruction = await handler.createBoost(testBodyOfEvent);
-        expect(resultOfInstruction).to.deep.equal(expectedFromRds);
-
-        const expectedAudiencePayload = {
-            operation: 'create',
-            params: {
-                clientId: testClientId,
-                creatingUserId: testCreatingUserId,
-                isDynamic: false,
-                conditions: testBodyOfEvent.boostAudienceSelection.conditions
-            }
-        };
-        const wrappedInvoke = testHelper.wrapLambdaInvoc('audience_selection', false, expectedAudiencePayload);
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(wrappedInvoke);
-
-        // const objectToRds = insertBoostStub.getCall(0).args[0];
-        // logger('Sent to RDS: ', objectToRds);
-        const expectedBoost = { ...mockBoostToFromPersistence };
-        expectedBoost.audienceId = testCreatedAudienceId;
-        expect(insertBoostStub).to.have.been.calledWithExactly(expectedBoost);
-
-        expect(findUserIdsStub).to.have.been.calledWithExactly([testReferringUser, testReferredUser]);
-        const expectedBoostAmount = { boostAmount: 100000, boostUnit: 'HUNDREDTH_CENT', boostCurrency: 'USD' };
-
-        const expectedUserLogOptions = {
-            initiator: testCreatingUserId,
-            context: {
-                boostType: 'REFERRAL', boostCategory: 'USER_CODE_USED', boostId: expectedFromRds.boostId, ...expectedBoostAmount,
-                boostStartTime: testStartTime.valueOf(), boostEndTime: referralWindowEnd.valueOf(), gameParams: undefined,
-                rewardParameters: undefined, statusConditions: mockBoostToFromPersistence.statusConditions
-            }
-        };
-        expect(publishMultiStub).to.have.been.calledWithExactly(['user-id-1', 'user-id-2'], 'BOOST_CREATED_REFERRAL', expectedUserLogOptions);
-    });
-});
 
 describe('** UNIT TEST CREATING AN ML DETERMINED BOOST ***', () => {
 
@@ -397,7 +273,6 @@ describe('** UNIT TEST CREATING AN EVENT TRIGGERED BOOST ***', () => {
     });
     
 });
-
 
 describe('** UNIT TEST SOME BOOST VALIDATION ***', () => {
 

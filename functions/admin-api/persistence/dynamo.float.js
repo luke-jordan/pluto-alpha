@@ -170,6 +170,9 @@ module.exports.updateClientFloatVars = async ({ clientId, floatId, newPrincipalV
     
     if (!opsUtil.isObjectEmpty(newReferralDefaults)) {
         logger('Updating referral defaults to: ', newReferralDefaults);
+        const mapToInsert = customDeepDecamelKeys(newReferralDefaults);
+        expressionClauses.push(`user_referral_defaults = :rffdef`);
+        expressionMap[':rffdef'] = mapToInsert;
     }
 
     if (!opsUtil.isObjectEmpty(newComparatorMap)) {
