@@ -12,6 +12,9 @@ module.exports.momentMatcher = (testMoment) => sinon.match((value) => moment.isM
 
 module.exports.anyMoment = sinon.match((value) => moment.isMoment(value));
 
+module.exports.extractErrorMsg = (result) => JSON.parse(result.body).error;
+
+
 module.exports.logNestedMatches = (expectedObj, passedToArgs) => {
     Object.keys(expectedObj).forEach((key) => {
         const doesItMatch = sinon.match(expectedObj[key]).test(passedToArgs[key]);
@@ -36,10 +39,18 @@ module.exports.expectNoCalls = (...stubs) => {
     stubs.forEach((stub) => expect(stub).to.not.have.been.called);
 };
 
-module.exports.standardOkayChecks = (result) => {
+module.exports.expectedHeaders = {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*'
+};
+
+module.exports.standardOkayChecks = (result, includeHeaders) => {
     expect(result).to.exist;
     expect(result).to.have.property('statusCode', 200);
     expect(result).to.have.property('body');
+    if (includeHeaders) {
+        expect(result.headers).to.deep.equal(exports.expectedHeaders);
+    }
     return JSON.parse(result.body);
 };
 

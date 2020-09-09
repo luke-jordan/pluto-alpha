@@ -124,7 +124,6 @@ describe('*** UNIT TEST DYNAMO FLOAT ***', () => {
 
         const updateResult = await dynamo.updateClientFloatVars(params);
         logger('Result of float variables update:', updateResult);
-        logger('args:', docClientUpdateStub.getCall(0).args);
 
         expect(updateResult).to.exist;
         expect(updateResult).to.deep.equal(expectedResult);
@@ -165,7 +164,6 @@ describe('*** UNIT TEST DYNAMO FLOAT ***', () => {
 
         const updateResult = await dynamo.updateClientFloatVars(params);
         logger('Result of float variables update:', updateResult);
-        logger('args:', docClientUpdateStub.getCall(0).args);
 
         expect(updateResult).to.exist;
         expect(updateResult).to.deep.equal(expectedResult);
@@ -214,7 +212,60 @@ describe('*** UNIT TEST DYNAMO FLOAT ***', () => {
 
         const updateResult = await dynamo.updateClientFloatVars(params);
         logger('Result of float variables update:', updateResult);
-        logger('args:', docClientUpdateStub.getCall(0).args);
+
+        expect(updateResult).to.exist;
+        expect(updateResult).to.deep.equal(expectedResult);
+        expect(docClientUpdateStub).to.have.been.calledOnceWithExactly(expectedUpdateArgs);
+    });
+
+    it('Updates user referral defaults', async () => {
+        const newReferralDefaults = {
+            boostAmountOffered: '10000::HUNDREDTH_CENT::USD',
+            redeemConditionType: 'TARGET_BALANCE',
+            redeemConditionAmount: { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+            daysToMaintain: 30,
+            boostSource: {
+                bonusPoolId: 'primary_bonus_pool',
+                clientId: 'test_client_id',
+                floatId: 'primary_cash'
+            }
+        };
+
+        const expectedMap = {
+            'boost_amount_offered': '10000::HUNDREDTH_CENT::USD',
+            'redeem_condition_type': 'TARGET_BALANCE',
+            'redeem_condition_amount': { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+            'days_to_maintain': 30,
+            'boost_source': {
+                'bonus_pool_id': 'primary_bonus_pool',
+                'client_id': 'test_client_id',
+                'float_id': 'primary_cash'
+            }
+        };
+
+        docClientUpdateStub.returns({ promise: () => ({ Attributes: { 'user_referral_defaults': expectedMap } })});
+
+        const params = {
+            clientId: testClientId,
+            floatId: testFloatId,
+            newReferralDefaults
+        };
+
+        const updateResult = await dynamo.updateClientFloatVars(params);
+        logger('Result of float variables update:', updateResult);
+
+        const expectedUpdateArgs = {
+            TableName: config.get('tables.clientFloatTable'),
+            Key: { 'client_id': testClientId, 'float_id': testFloatId },
+            UpdateExpression: 'set user_referral_defaults = :rffdef',
+            ExpressionAttributeValues: { ':rffdef': expectedMap },
+            ReturnValues: 'ALL_NEW'
+        };
+
+        const expectedResult = {
+            result: 'SUCCESS',
+            returnedAttributes: { userReferralDefaults: newReferralDefaults }
+        };
 
         expect(updateResult).to.exist;
         expect(updateResult).to.deep.equal(expectedResult);

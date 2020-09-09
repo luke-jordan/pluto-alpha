@@ -49,11 +49,13 @@ const expectedProfileColumns = [
     'personal_name',
     'family_name',
     'called_name',
-    'emai_adress',
+    'email_adress',
     'phone_number',
     'referral_code',
     'country_code',
-    'user_status'
+    'user_status',
+    'client_id',
+    'float_id'
 ];
 
 describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
@@ -103,11 +105,13 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
 
     it('Fetches user profile from db, given user id', async () => {
         const profileFetchEvent = { systemWideUserId: testSystemId };
-        fetchStub.withArgs(profileTable, profileFetchEvent, expectedProfileColumns).resolves(expectedUserProfile);
+        fetchStub.resolves(expectedUserProfile);
         const resultOfFetch = await persistence.fetchUserProfile(profileFetchEvent);
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal(expectedUserProfile);
+    
         expect(redisGetStub).to.have.been.called;
+        expect(fetchStub).to.have.been.calledOnceWithExactly(profileTable, profileFetchEvent, expectedProfileColumns);
         expect(redisSetStub).to.have.been.calledOnceWithExactly(`FRIEND_PROFILE::${testSystemId}`, JSON.stringify(expectedUserProfile), 'EX', 25200);
     });
 

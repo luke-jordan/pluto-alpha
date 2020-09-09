@@ -17,6 +17,8 @@
         "accountLog": "account_data.account_log",
         "boostMaster": "boost_data.boost",
         "boostJoin": "boost_data.boost_account_status",
+        "pointHeatDefinition": "transaction_data.event_point_list",
+        "heatPointsLedger": "transaction_data.point_log",
         "clientFloatVars": "ClientFloatTable",
         "bankVerification": "BankVerificationTable"
     },

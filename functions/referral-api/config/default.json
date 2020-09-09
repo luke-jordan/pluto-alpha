@@ -8,5 +8,18 @@
         "archivedCodes": "ArchivedReferralCodeTable",
         "userProfile": "UserProfileTable",
         "clientFloatTable": "ClientFloatTable"
+    },
+    "revocationDefaults": {
+        "expiryTimeDays": 7,
+        "withdrawalTime": 30,
+        "balanceBelow": "10::WHOLE_CURRENCY::ZAR"  
+    },
+    "lambda": {
+        "createBoost": "boost_create"
+    },
+    "publishing": {
+        "userEvents": {
+            "topicArn": "<referral code topic>"
+        }
     }
 }

@@ -88,17 +88,17 @@ resource "aws_cloudwatch_log_group" "save_initiate" {
 }
 
 resource "aws_iam_role_policy_attachment" "save_record_client_float_table_access" {
-  role = "${aws_iam_role.save_initiate_role.name}"
-  policy_arn = "${aws_iam_policy.dynamo_table_client_float_table_access.arn}"
+  role = aws_iam_role.save_initiate_role.name
+  policy_arn = aws_iam_policy.dynamo_table_client_float_table_access.arn
 }
 
 resource "aws_iam_role_policy_attachment" "save_initiate_basic_execution_policy" {
-  role = "${aws_iam_role.save_initiate_role.name}"
+  role = aws_iam_role.save_initiate_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
 resource "aws_iam_role_policy_attachment" "save_initiate_vpc_execution_policy" {
-  role = "${aws_iam_role.save_initiate_role.name}"
+  role = aws_iam_role.save_initiate_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
@@ -108,19 +108,19 @@ resource "aws_iam_role_policy_attachment" "save_initiate_user_event_publish_poli
 }
 
 resource "aws_iam_role_policy_attachment" "save_initiate_payment_url_get" {
-  role = "${aws_iam_role.save_initiate_role.name}"
-  policy_arn = "${aws_iam_policy.lambda_invoke_payment_access.arn}"
+  role = aws_iam_role.save_initiate_role.name
+  policy_arn = aws_iam_policy.lambda_invoke_payment_access.arn
 }
 
 resource "aws_iam_role_policy_attachment" "save_initiate_secret_get" {
-  role = "${aws_iam_role.save_initiate_role.name}"
+  role = aws_iam_role.save_initiate_role.name
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_transaction_worker_read"
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
 
 resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_save_initiate" {
-  log_group_name = "${aws_cloudwatch_log_group.save_initiate.name}"
+  log_group_name = aws_cloudwatch_log_group.save_initiate.name
   metric_transformation {
     name = "${var.save_initiate_lambda_function_name}_fatal_api_alarm"
     namespace = "lambda_errors"
@@ -134,16 +134,16 @@ resource "aws_cloudwatch_metric_alarm" "fatal_metric_alarm_save_initiate" {
   alarm_name = "${var.save_initiate_lambda_function_name}_fatal_api_alarm"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods = 1
-  metric_name = "${aws_cloudwatch_log_metric_filter.fatal_metric_filter_save_initiate.name}"
+  metric_name = aws_cloudwatch_log_metric_filter.fatal_metric_filter_save_initiate.name
   namespace = "lambda_errors"
   period = 60
   threshold = 0
   statistic = "Sum"
-  alarm_actions = ["${aws_sns_topic.fatal_errors_topic.arn}"]
+  alarm_actions = [aws_sns_topic.fatal_errors_topic.arn]
 }
 
 resource "aws_cloudwatch_log_metric_filter" "security_metric_filter_save_initiate" {
-  log_group_name = "${aws_cloudwatch_log_group.save_initiate.name}"
+  log_group_name = aws_cloudwatch_log_group.save_initiate.name
   metric_transformation {
     name = "${var.save_initiate_lambda_function_name}_security_api_alarm"
     namespace = "lambda_errors"
@@ -162,5 +162,5 @@ resource "aws_cloudwatch_metric_alarm" "security_metric_alarm_save_initiate" {
   period = 60
   threshold = 0
   statistic = "Sum"
-  alarm_actions = ["${aws_sns_topic.security_errors_topic.arn}"]
+  alarm_actions = [aws_sns_topic.security_errors_topic.arn]
 }
