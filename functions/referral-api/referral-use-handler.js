@@ -220,7 +220,7 @@ const isValidReferralCode = async (referralCodeDetails, referredUserProfile) => 
         return false;
     }
 
-    if (referredUserProfile.referralCodeUsed && referralCodeDetails.referralCode !== referredUserProfile.referralCodeUsed) {
+    if (referredUserProfile.referralCodeUsed && referredUserProfile.referralCodeUsed !== referralCodeDetails.referralCode) {
         const previousReferralCodeDetails = await fetchReferralCodeDetails(referredUserProfile.referralCodeUsed, referredUserProfile.countryCode, standardCodeColumns);
         logger('Got details of previously used referral code: ', previousReferralCodeDetails);
         if (!['BETA', 'CHANNEL'].includes(previousReferralCodeDetails.codeType) && referralCodeDetails.codeType === 'USER') {
