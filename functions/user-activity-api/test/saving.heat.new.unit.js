@@ -1,5 +1,6 @@
 'use strict';
 
+const moment = require('moment');
 const helper = require('./test.helper');
 
 const chai = require('chai');
@@ -8,7 +9,6 @@ chai.use(require('sinon-chai'));
 const { expect } = chai;
 
 const proxyquire = require('proxyquire');
-const moment = require('moment');
 
 const filterEventStub = sinon.stub();
 const obtainPointsStub = sinon.stub();
@@ -28,19 +28,20 @@ const handler = proxyquire('../heat-handler', {
     './persistence/rds.heat': {
         'filterForPointRelevance': filterEventStub,
         'obtainPointsForEvent': obtainPointsStub,
-        'insertPointLog': insertPointLogStub,
+        'insertPointLogs': insertPointLogStub,
         'sumPointsForUsers': sumPointsStub,
         'obtainPointHistory': pointHistoryStub,
         '@noCallThru': true
     },
     'aws-sdk': {
         'Lambda': class {
-            constructor () { this.invoke = lambdaInvokeStub(); }
+            // eslint-disable-next-line
+            constructor () { this.invoke = lambdaInvokeStub; }
         },
         '@noCallThru': true
     },
     'ioredis': class {
-        constructor() {
+        constructor () {
             this.get = redisGetStub;
             this.set = redisSetStub;
         }
@@ -50,19 +51,21 @@ const handler = proxyquire('../heat-handler', {
     }
 });
 
-const resetStubs = () => helper.resetStubs(obtainPointsStub, insertPointLogStub, sumPointsStub, pointHistoryStub);
+const resetStubs = () => helper.resetStubs(obtainPointsStub, insertPointLogStub, sumPointsStub, pointHistoryStub, filterEventStub, lambdaInvokeStub, redisGetStub, redisSetStub, publishEventStub);
 
 describe('*** USER ACTIVITY *** INSERT POINT RECORD', () => {
 
     const mockClientId = 'client-id';
     const mockFloatId = 'float-id';
 
-    const wrapAsSqsBatch = events => ({
+    const wrapAsSqsBatch = (events) => ({
         Records: events.map((event) => ({ body: JSON.stringify({ Message: JSON.stringify(event) }) }))
     });
 
-    const expectedProfileCall = (systemWideUserId) => helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId });
-    const mockProfileResult = helper.mockLambdaResponse({ body: JSON.stringify({ clientId: mockClientId, floatId: mockFloatId } ) });
+    const expectedProfileCall = (systemWideUserId) => helper.wrapLambdaInvoc('profile_fetch', false, { systemWideUserId });
+    
+    const mockProfileStringified = JSON.stringify({ clientId: mockClientId, floatId: mockFloatId });
+    const mockProfileResult = helper.mockLambdaResponse(JSON.stringify({ body: mockProfileStringified }));
     
     const mockPair = (userId, eventType) => ({ userId, eventType });
 
@@ -70,8 +73,11 @@ describe('*** USER ACTIVITY *** INSERT POINT RECORD', () => {
 
     it('Handles single event, found, and insert points, no user cached', async () => {
         filterEventStub.resolves(['SAVING_PAYMENT_SUCCESSFUL']);
-        redisGetStub.resolves(null);
-        lambdaInvokeStub.resolves(mockProfileResult);
+        
+        redisGetStub.onFirstCall().resolves(null);
+        lambdaInvokeStub.returns({ promise: () => mockProfileResult });
+        redisGetStub.onSecondCall().resolves(mockProfileStringified);
+
         obtainPointsStub.resolves({ eventPointMatchId: 'pointJoinId', numberPoints: 7, parameters: {} });
         insertPointLogStub.resolves({ result: 'INSERTED' });
 
@@ -82,14 +88,15 @@ describe('*** USER ACTIVITY *** INSERT POINT RECORD', () => {
 
         expect(filterEventStub).to.have.been.calledOnceWithExactly(['SAVING_PAYMENT_SUCCESSFUL']);
 
-        expect(redisGetStub).to.have.been.calledOnceWithExactly('USER_PROFILE::user1');
+        expect(redisGetStub).to.have.been.calledWithExactly('USER_PROFILE::user1');
         expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(expectedProfileCall('user1'));
         const expectedToCache = JSON.stringify({ clientId: mockClientId, floatId: mockFloatId }); // actually will have more but these relevant
         expect(redisSetStub).to.have.been.calledOnceWithExactly('USER_PROFILE::user1', expectedToCache, 'EX', 25200);
 
         expect(obtainPointsStub).to.have.been.calledOnceWithExactly(mockClientId, mockFloatId, 'SAVING_PAYMENT_SUCCESSFUL');
         
-        const expectedInsertion = { eventPointMatchId: 'pointJoinId', userId: 'user1', numberPoints: 7 };
+        // see note in code on why redundant event type here (it's for publishing logs) 
+        const expectedInsertion = { eventPointMatchId: 'pointJoinId', userId: 'user1', numberPoints: 7, eventType: 'SAVING_PAYMENT_SUCCESSFUL' };
         expect(insertPointLogStub).to.have.been.calledOnceWithExactly([expectedInsertion]);
 
         const expectedContext = { numberPoints: 7, awardedForEvent: 'SAVING_PAYMENT_SUCCESSFUL' }; // for the moment ; also, nb : filter out HEAT_POINTS_AWARDED on SQS sub
@@ -100,7 +107,7 @@ describe('*** USER ACTIVITY *** INSERT POINT RECORD', () => {
         const mockEventType = 'USER_GAME_RESPONSE';
         
         filterEventStub.resolves([mockEventType]);
-        redisGetStub.resolves(JSON.stringify({ clientId: mockClientId, floatId: mockFloatId }));
+        redisGetStub.resolves(mockProfileStringified);
         obtainPointsStub.resolves({ eventPointMatchId: 'pointJoinId', numberPoints: 5, parameters: {} });
         insertPointLogStub.resolves({ result: 'INSERTED' });
 
@@ -122,9 +129,11 @@ describe('*** USER ACTIVITY *** INSERT POINT RECORD', () => {
         ]);
 
         filterEventStub.resolves(['SAVING_PAYMENT_SUCCESSFUL', 'BOOST_REDEEMED', 'USER_GAME_RESPONSE']);
-        redisGetStub.withArgs('USER_PROFILE::user3').resolves(JSON.stringify({ clientId: mockClientId, floatId: mockFloatId }));
-        lambdaInvokeStub.resolves(mockProfileResult);
-        
+        redisGetStub.withArgs('USER_PROFILE::user3').resolves(mockProfileStringified);
+        lambdaInvokeStub.returns({ promise: () => mockProfileResult });
+        redisGetStub.withArgs('USER_PROFILE::userY').onFirstCall().resolves(null).onSecondCall().resolves(mockProfileStringified);
+        redisGetStub.withArgs('USER_PROFILE::userF').onFirstCall().resolves(null).onSecondCall().resolves(mockProfileStringified);
+
         obtainPointsStub.withArgs(mockClientId, mockFloatId, 'SAVING_PAYMENT_SUCCESSFUL').resolves({ numberPoints: 10, eventPointMatchId: 'first' });
         obtainPointsStub.withArgs(mockClientId, mockFloatId, 'BOOST_REDEEMED').resolves({ numberPoints: 5, eventPointMatchId: 'second' });
         // filter is generous in that it allows to pass events that other clients may give points for (otherwise have to fetch all client-float pairs upfront)
@@ -135,12 +144,12 @@ describe('*** USER ACTIVITY *** INSERT POINT RECORD', () => {
         const resultOfHandle = await handler.handleSqsBatch(mockEvent);
         expect(resultOfHandle).to.deep.equal({ statusCode: 200, pointEventsTrigged: 2 });
 
-        expect(redisGetStub).to.have.been.calledThrice;
+        expect(redisGetStub).to.have.callCount(6); // during caching, then execution
         expect(lambdaInvokeStub).to.have.been.calledTwice;
         expect(obtainPointsStub).to.have.been.calledThrice;
         
-        const expectedFirstInsertion = { eventPointMatchId: 'first', userId: 'user3', numberPoints: 10 };
-        const expectedSecondInsertion = { eventPointMatchId: 'second', userId: 'userY', numberPoints: 5 };
+        const expectedFirstInsertion = { eventPointMatchId: 'first', userId: 'user3', numberPoints: 10, eventType: 'SAVING_PAYMENT_SUCCESSFUL' };
+        const expectedSecondInsertion = { eventPointMatchId: 'second', userId: 'userY', numberPoints: 5, eventType: 'BOOST_REDEEMED' };
         expect(insertPointLogStub).to.have.been.calledOnceWithExactly([expectedFirstInsertion, expectedSecondInsertion]);
 
         expect(publishEventStub).to.have.been.calledTwice;
@@ -171,7 +180,8 @@ describe('*** USER ACTIVITY *** FETCH POINTS', () => {
         const resultBody = helper.standardOkayChecks(resultOfHandle);
         expect(resultBody).to.deep.equal({ currentPoints: 105 });
 
-        expect(sumPointsStub).to.have.been.calledOnceWithExactly(['user1']); // also will need a time filter
+        // not super happy about the nulls, but cleanest for now to retain flexibility in here
+        expect(sumPointsStub).to.have.been.calledOnceWithExactly(['user1'], null, null);
     });
 
     it('Sums for multiple users, specified dates', async () => {
@@ -180,8 +190,8 @@ describe('*** USER ACTIVITY *** FETCH POINTS', () => {
 
         const mockEvent = {
             userIds: ['user1', 'user5', 'user10'],
-            startDateMillis: mockStart.valueOf(),
-            endDateMillis: mockEnd.valueOf()
+            startTimeMillis: mockStart.valueOf(),
+            endTimeMillis: mockEnd.valueOf()
         };
 
         const pointSums = { 'user1': 105, 'user5': 200, 'user10': 3 }; 
@@ -190,15 +200,20 @@ describe('*** USER ACTIVITY *** FETCH POINTS', () => {
         const resultOfHandle = await handler.fetchUserHeat(mockEvent);
         const resultBody = helper.standardOkayChecks(resultOfHandle);
         
-        expect(resultBody).to.deep.equal(pointSums);
+        expect(resultBody).to.deep.equal({
+            'user1': { currentPoints: 105 },
+            'user5': { currentPoints: 200 },
+            'user10': { currentPoints: 3 }
+        });
     });
 
-    it('Obtains a user point history', async () => {
+    // not needed yet
+    it.skip('Obtains a user point history', async () => {
         const mockMoments = [moment().subtract(20, 'days'), moment().subtract(5, 'days'), moment().subtract(1, 'days')];
         const mockPointHistory = [
             { creationTime: mockMoments[0], eventType: 'SAVING_PAYMENT_SUCCESSFUL', numberPoints: 10 },
             { creationTime: mockMoments[1], eventType: 'BOOST_REDEEMED', numberPoints: 5 },
-            { creationTime: mockMoments[2], eventType: 'USER_GAME_RESPONSE', numberPoints: 7 },
+            { creationTime: mockMoments[2], eventType: 'USER_GAME_RESPONSE', numberPoints: 7 }
         ];
         
         pointHistoryStub.resolves(mockPointHistory);

@@ -28,12 +28,12 @@ const relevantFloatColumns = [
     'bankDetails'
 ];
 
-const initiateCacheConnection = async (keyPrefix = ) => {
+const initiateCacheConnection = async () => {
     logger('Initiating connection to cache');
     try {
         const connectionToCache = new Redis({ 
             port: config.get('cache.port'), 
-            host: config.get('cache.host'),
+            host: config.get('cache.host')
         });
         logger('Successfully initiated connection to cache');
         return connectionToCache;

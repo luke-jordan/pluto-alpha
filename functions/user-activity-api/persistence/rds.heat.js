@@ -29,7 +29,14 @@ const addOptionalDates = ({ baseQuery, baseValues, startTime, endTime, querySuff
     }
 
     return { query, values };
-}
+};
+
+module.exports.filterForPointRelevance = async (eventTypes) => {
+    const query = `select event_type from ${eventPointTable} where number_points > 0 and active = true` +
+        ` and event_type in (${opsUtil.extractArrayIndices(eventTypes)})`;
+    const resultOfFetch = await rdsConnection.selectQuery(query, eventTypes);
+    return resultOfFetch.map((row) => row['event_type']);  
+};
 
 module.exports.obtainPointsForEvent = async (clientId, floatId, eventType) => {
     const query = `select event_point_match_id, number_points, parameters from ${eventPointTable} ` +

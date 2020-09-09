@@ -20,7 +20,7 @@ class MockRdsConnection {
         this.selectQuery = queryStub;
         this.insertRecords = insertStub;
     }
-};
+}
 
 const savingHeatRds = proxyquire('../persistence/rds.heat', {
     'rds-common': MockRdsConnection,
@@ -29,14 +29,14 @@ const savingHeatRds = proxyquire('../persistence/rds.heat', {
 
 const resetStubs = () => helper.resetStubs(queryStub, insertStub);
 
-describe.only('*** USER ACTIVITY *** SAVING HEAT POINT INSERTION', async () => {
+describe('*** USER ACTIVITY *** SAVING HEAT POINT INSERTION', async () => {
     
     beforeEach(resetStubs);
 
     it('Fetch number of points and parameters for an event', async () => {
         const expectedQuery = 'select event_point_match_id, number_points, parameters from transaction_data.event_point_list ' +
             'where client_id = $1 and float_id = $2 and event_type = $3';
-        queryStub.resolves([{ 'number_points': 10, 'parameters': {} }]);
+        queryStub.resolves([{ 'event_point_match_id': 'somePointJoin', 'number_points': 10, 'parameters': {} }]);
         
         const resultOfQuery = await savingHeatRds.obtainPointsForEvent('client', 'float', 'EVENT_TYPE');
         expect(resultOfQuery).to.deep.equal({ eventPointMatchId: 'somePointJoin', numberPoints: 10, parameters: {} });
@@ -70,7 +70,7 @@ describe.only('*** USER ACTIVITY *** SAVING HEAT POINT INSERTION', async () => {
 
 });
 
-describe.only('*** USER ACTIVITY *** SAVING HEAT SUMMATION', async () => {
+describe('*** USER ACTIVITY *** SAVING HEAT SUMMATION', async () => {
     beforeEach(resetStubs);
 
     it('Sum up number of points, all time, single user', async () => {
@@ -107,7 +107,7 @@ describe.only('*** USER ACTIVITY *** SAVING HEAT SUMMATION', async () => {
 
         // point per event can change over time
         const mockHistory = [mockPointRow(10, 'USER_SAVING_EVENT', 60), mockPointRow(10, 'USER_SAVING_EVENT', 40), 
-            mockPointRow(25, 'REFERRAL_CODE_USED', 12), mockPointRow(5, 'FRIEND_ACCEPTED', 3), mockPointRow(12, 'USER_SAVING_EVENT', 1)]
+            mockPointRow(25, 'REFERRAL_CODE_USED', 12), mockPointRow(5, 'FRIEND_ACCEPTED', 3), mockPointRow(12, 'USER_SAVING_EVENT', 1)];
         
         const expectedQuery = 'select transaction_data.point_log.*, transaction_data.event_point_list.event_type from ' +
             'transaction_data.point_log inner join transaction_data.event_point_list on ' +
