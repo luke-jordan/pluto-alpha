@@ -221,7 +221,7 @@ describe('*** UNIT TEST DYNAMO FLOAT ***', () => {
         expect(docClientUpdateStub).to.have.been.calledOnceWithExactly(expectedUpdateArgs);
     });
 
-    it('Updates locked save balance', async () => {
+    it('Updates locked save bonus', async () => {
         const testPrincipalVars = {
             lockedSaveBonus: { 7: 0.5, 14: 0.7, 30: 1.01, 60: 1.05, 90: 1.1 }
         };

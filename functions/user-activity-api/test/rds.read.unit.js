@@ -126,6 +126,30 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
         expect(balanceResult).to.deep.equal({ amount: 0, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
     });
 
+    it('Fetches account balance, includes pending withdrawals', async () => {
+        const testTime = moment();
+
+        queryStub.onFirstCall().resolves([{ 'unit': 'HUNDREDTH_CENT', 'sum': 40000 }, { 'unit': 'WHOLE_CENT', 'sum': 40000 }]);
+        queryStub.onSecondCall().resolves([{ 'unit': 'HUNDREDTH_CENT', 'sum': -1000 }, { 'unit': 'WHOLE_CENT', 'sum': -1000 }]);
+
+        const balanceResult = await rds.calculateWithdrawalBalance(testAccountId, 'USD', testTime);
+        expect(balanceResult).to.exist;
+        expect(balanceResult).to.deep.equal({ amount: 3939000, unit: 'HUNDREDTH_CENT', currency: 'USD' });
+
+        const expectedTxTypes = ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'];
+
+        const expectedBalanceQuery = 'select sum(amount), unit from transaction_data.core_transaction_ledger where account_id = $1 and ' +
+            'currency = $2 and settlement_status in ($3, $4) and settlement_time < to_timestamp($5) and ' +
+            'transaction_type in ($6, $7, $8, $9, $10) group by unit';
+
+        const expectedWithdrawalsQuery = 'select sum(amount), unit from transaction_data.core_transaction_ledger where account_id = $1 and ' +
+            'currency = $2 and settlement_status = $3 and transaction_type = $4 and group by unit';
+
+        expect(queryStub).to.have.been.calledTwice;
+        expect(queryStub).to.have.been.calledWithExactly(expectedBalanceQuery, [testAccountId, 'USD', 'SETTLED', 'ACCRUED', testTime.unix(), ...expectedTxTypes]);
+        expect(queryStub).to.have.been.calledWithExactly(expectedWithdrawalsQuery, [testAccountId, 'USD', 'PENDING', 'WIHDRAWAL']);
+    });
+
     it('Find an account ID for a user ID, single and multiple', async () => {
         // most recent account first
         const findQuery = 'select account_id from account_data.core_account_ledger where owner_user_id = $1 order by creation_time desc';
@@ -208,8 +232,8 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
 
     it('Fetches prior transactions', async () => {
         const selectQuery = `select * from ${config.get('tables.accountTransactions')} where account_id = $1 ` +
-            `and settlement_status = $2 and transaction_type in ($3, $4, $5, $6, $7, $8) order by creation_time desc`;
-        const selectValues = [testAccountId, 'SETTLED', 'USER_SAVING_EVENT', 'WITHDRAWAL', 'BOOST_REDEMPTION', 'CAPITALIZATION', 'BOOST_POOL_FUNDING', 'LOCKED'];
+            `and settlement_status in ($2, $3) and transaction_type in ($4, $5, $6, $7, $8) order by creation_time desc`;
+        const selectValues = [testAccountId, 'SETTLED', 'LOCKED', 'USER_SAVING_EVENT', 'WITHDRAWAL', 'BOOST_REDEMPTION', 'CAPITALIZATION', 'BOOST_POOL_FUNDING'];
 
         queryStub.resolves([expectedTxRow, expectedTxRow, expectedTxRow]);
         const priorTxs = await rds.fetchTransactionsForHistory(testAccountId);
