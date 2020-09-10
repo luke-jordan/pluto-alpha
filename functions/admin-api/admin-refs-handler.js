@@ -277,7 +277,7 @@ const updateReferralContext = async (event) => {
         boostAmountOffered: userReferralCodeDefaults.boostAmountOffered || {},
         redeemConditionType: userReferralCodeDefaults.redeemConditionType || 'TARGET_BALANCE',
         redeemConditionAmount: userReferralCodeDefaults.redeemConditionAmount || {},
-        boostBonusPoolId: userReferralCodeDefaults.boostBonusPoolId
+        bonusPoolId: userReferralCodeDefaults.bonusPoolId
     };
 
     if (userReferralCodeDefaults.daysToMaintain && typeof userReferralCodeDefaults.daysToMaintain === 'number') {

@@ -250,7 +250,7 @@ describe('*** UNIT TEST RETRIEVING AND TRANSFORMING REFERRAL CODES ***', () => {
                 boostAmountOffered: { amount: 100, unit: 'WHOLE_CURRENCY', currency: 'USD' },
                 redeemConditionAmount: { amount: 20000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
                 daysToMaintain: 60,
-                boostBonusPoolId: 'primary_bonus_pool'                   
+                bonusPoolId: 'primary_bonus_pool'                   
             }
         };
 

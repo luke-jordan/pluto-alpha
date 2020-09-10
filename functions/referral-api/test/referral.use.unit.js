@@ -52,7 +52,7 @@ const activeCodeTable = config.get('tables.activeCodes');
 const clientFloatTable = config.get('tables.clientFloatTable');
 
 const relevantReferralColumns = ['referralCode', 'codeType', 'expiryTimeMillis', 'context', 'clientId', 'floatId'];
-const relevantProfileColumns = ['referral_code_used', 'country_code', 'creation_time_epoch_millis'];
+const relevantProfileColumns = ['system_wide_user_id', 'client_id', 'float_id', 'referral_code_used', 'country_code', 'creation_time_epoch_millis'];
 
 describe('*** UNIT TESTING VERIFY REFERRAL CODE ***', () => {
 
@@ -160,7 +160,7 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
 
     const userReferralDefaults = {
         boostAmountOffered: '100000::HUNDREDTH_CENT::USD',
-        boostSource: testBoostSource,
+        bonusPoolId: 'primary_bonus_pool',
         redeemConditionType: 'SIMPLE_SAVE',
         redeemConditionAmount: { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
         daysToMaintain: 30
@@ -194,12 +194,22 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
 
     const testUserProfile = {
         systemWideUserId: testReferredUserId,
+        clientId: 'some_client_id',
+        floatId: 'primary_cash',
         countryCode: 'USA',
         creationTimeEpochMillis: testProfileCreationTime,
         referralCodeUsed: testBetaCode
     };
 
     beforeEach(() => testHelper.resetStubs(fetchRowStub, updateRowStub, lambdaInvokeStub, momentStub));
+
+    const testBoostCreate = (expectedPayload) => {
+        const passedArgs = lambdaInvokeStub.getCall(0).args[0];
+        expect(passedArgs.FunctionName).to.equal('boost_create');
+        expect(passedArgs.InvocationType).to.equal('Event');
+        const sentPayload = JSON.parse(passedArgs.Payload);
+        expect(sentPayload).to.deep.equal(expectedPayload);
+    };
     
     it('Fetches referral context and redeems boost where all conditions met, simple save', async () => {
 
@@ -263,12 +273,8 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
             messageInstructionFlags: { 'REDEEMED': expectedMsgInstructions }
         };
 
-        const expectedBoostInvocation = {
-            FunctionName: 'boost_create',
-            InvocationType: 'Event',
-            Payload: JSON.stringify(expectedBoostPayload)
-        };
-        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(expectedBoostInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledOnce;
+        testBoostCreate(expectedBoostPayload);
 
         const expectedProfileUpdateParams = {
             tableName: config.get('tables.userProfile'),
@@ -349,13 +355,8 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
             messageInstructionFlags: { 'REDEEMED': expectedMsgInstructions }
         };
 
-        const expectedBoostInvocation = {
-            FunctionName: 'boost_create',
-            InvocationType: 'Event',
-            Payload: JSON.stringify(expectedBoostPayload)
-        };
-        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(expectedBoostInvocation);
-
+        expect(lambdaInvokeStub).to.have.been.calledOnce;
+        testBoostCreate(expectedBoostPayload);
     });
 
     it('Does not redeem where conditions not met', async () => {
@@ -364,11 +365,11 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
 
         const testEvent = { referralCodeUsed: testReferralCode, referredUserId: testReferredUserId };
 
-        const expectedResult = {
+        const expectedResult = (result = 'CODE_NOT_ALLOWED') => ({
             statusCode: 200,
             headers: testHelper.expectedHeaders,
-            body: JSON.stringify({ result: 'CODE_NOT_ALLOWED' })
-        };
+            body: JSON.stringify({ result })
+        });
 
         // On invalid event
         await expect(handler.useReferralCode({ httpMethod: 'POST' })).to.eventually.deep.equal({ statusCode: 403 });
@@ -377,7 +378,7 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         fetchRowStub.onSecondCall().resolves();
 
         // On referral code details not found
-        await expect(handler.useReferralCode({ referredUserId: testReferredUserId })).to.eventually.deep.equal(expectedResult);
+        await expect(handler.useReferralCode({ referredUserId: testReferredUserId })).to.eventually.deep.equal(expectedResult());
         fetchRowStub.reset();
 
         fetchRowStub.onFirstCall().resolves(userProfile);
@@ -385,7 +386,7 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         fetchRowStub.onThirdCall().resolves(testBetaCodeDetails);
 
         // On missing referral code context
-        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal(expectedResult);
+        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal(expectedResult('CODE_SET_NO_BOOST'));
         fetchRowStub.reset();
 
         fetchRowStub.onCall(0).resolves(userProfile);
@@ -394,10 +395,8 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         fetchRowStub.onCall(2).resolves(testBetaCodeDetails);
         fetchRowStub.onCall(3).resolves({ userReferralDefaults: { } });
 
-        expectedResult.body = JSON.stringify({ result: 'CODE_SET' });
-
         // On zero redemption, case 1
-        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal(expectedResult);
+        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal(expectedResult('CODE_SET_NO_BOOST'));
         fetchRowStub.reset();
 
         fetchRowStub.onCall(0).resolves(userProfile);
@@ -406,10 +405,8 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         fetchRowStub.onCall(2).resolves(testBetaCodeDetails);
         fetchRowStub.onCall(3).resolves({ userReferralDefaults: { boostAmountOffered: '0' } });
 
-        expectedResult.body = JSON.stringify({ result: 'CODE_SET' });
-
         // On zero redemption, case 2
-        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal(expectedResult);
+        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal(expectedResult('CODE_SET_NO_BOOST'));
         fetchRowStub.reset();
 
         referralCodeDetails.persistedTimeMillis = moment(testRefCodeCreationTime).add(4, 'days').valueOf();
@@ -419,10 +416,8 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
     
         fetchRowStub.onCall(2).resolves(testBetaCodeDetails);
 
-        expectedResult.body = JSON.stringify({ result: 'CODE_NOT_ALLOWED' });
-
         // Where used referral code is older than referred user
-        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal(expectedResult);
+        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal(expectedResult('CODE_NOT_ALLOWED'));
         fetchRowStub.reset();
 
         referralCodeDetails.persistedTimeMillis = testRefCodeCreationTime;
@@ -434,7 +429,7 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         fetchRowStub.onCall(3).resolves({ userReferralDefaults });
 
         // Where referral code is out of sequence
-        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal(expectedResult);
+        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal(expectedResult('CODE_NOT_ALLOWED'));
         fetchRowStub.reset();
 
         userProfile.referralCodeUsed = testReferralCode;
@@ -443,7 +438,7 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         fetchRowStub.onCall(1).resolves(referralCodeDetails);
     
         // Where referral code has already been used
-        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal(expectedResult);
+        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal(expectedResult('CODE_NOT_ALLOWED'));
     });
 
     it('Catches error where referred user profile not found', async () => {

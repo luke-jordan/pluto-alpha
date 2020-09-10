@@ -45,13 +45,13 @@ const fetchUserReferralDefaults = async (clientId, floatId) => {
     const colsToReturn = ['user_referral_defaults'];
 
     const tableLookUpResult = await dynamo.fetchSingleRow(clientFloatTable, { clientId, floatId }, colsToReturn);
-    logger('Got user referral defaults: ', tableLookUpResult);
+    logger('Got user referral defaults from table: ', tableLookUpResult);
 
-    if (!tableLookUpResult) {
+    if (!tableLookUpResult || opsUtil.isObjectEmpty(tableLookUpResult.userReferralDefaults)) {
         return null;
     }
 
-    return tableLookUpResult.userReferralDefaults;
+    return camelCaseKeys(tableLookUpResult.userReferralDefaults);
 };
 
 /**
@@ -92,8 +92,7 @@ module.exports.verify = async (event) => {
         const codeDetails = tableLookUpResult;
         if (params.includeFloatDefaults) {
             const { clientId, floatId } = tableLookUpResult;
-            const userReferralDefaults = await fetchUserReferralDefaults(clientId, floatId);
-            codeDetails.floatDefaults = camelCaseKeys(userReferralDefaults);
+            codeDetails.floatDefaults = await fetchUserReferralDefaults(clientId, floatId);
         }
         
         logger('Returning lookup result: ', codeDetails);
@@ -108,17 +107,17 @@ const createAudienceConditions = (boostUserIds) => ({ conditions: [{ op: 'in', p
 const referralHasZeroRedemption = (referralContext) => {
     const { boostAmountOffered } = referralContext;
     if (typeof boostAmountOffered === 'object') {
-        return opsUtil.boostAmountOffered(referralContext) || boostAmountOffered.amount === 0;
+        return opsUtil.isObjectEmpty(boostAmountOffered) || boostAmountOffered.amount === 0;
     }
     
     if (!boostAmountOffered || typeof boostAmountOffered !== 'string') {
-        logger('No boost amount offered at all, return true');
+        logger('Boost amount offered must be malformed: ', referralContext.boostAmountOffered);
         return true;
     }
 
-    const splitAmount = parseInt(referralContext.boostAmountOffered.split('::'), 10);
+    const splitAmount = parseInt(boostAmountOffered.split('::'), 10);
     if (!splitAmount || typeof splitAmount !== 'number' || splitAmount === 0) {
-        logger('Boost amount offered must be malformed: ', referralContext.boostAmountOffered);
+        logger('No boost amount offered at all, return true');
         return true;
     }
 
@@ -126,7 +125,7 @@ const referralHasZeroRedemption = (referralContext) => {
 };
 
 const fetchUserProfile = async (systemWideUserId) => {
-    const relevantProfileColumns = ['referral_code_used', 'country_code', 'creation_time_epoch_millis'];
+    const relevantProfileColumns = ['system_wide_user_id', 'client_id', 'float_id', 'referral_code_used', 'country_code', 'creation_time_epoch_millis'];
 
     logger('Fetching profile for user id: ', systemWideUserId);
     const userProfile = await dynamo.fetchSingleRow(config.get('tables.userProfile'), { systemWideUserId }, relevantProfileColumns);
@@ -150,7 +149,8 @@ const updateProfileReferralCode = async (systemWideUserId, referralCodeUsed) => 
 
     try {
         const resultOfUpdate = await dynamo.updateRow(updateParams);
-        return { result: 'SUCCESS', referralCodeUsed: resultOfUpdate.returnedAttributes.referralCodeUsed };
+        logger('Result of update: ', JSON.stringify(resultOfUpdate));
+        return { result: 'SUCCESS' };
     } catch (err) {
         logger('Error updating user profile referral code: ', err);
         throw new Error(err.message);
@@ -242,16 +242,20 @@ const isValidReferralCode = async (referralCodeDetails, referredUserProfile) => 
     return true;
 };
 
-const triggerBoostForReferralCode = async (userProfile, referralCodeDetails, referralContext) => {
+const triggerBoostForReferralCode = async (userProfile, referralCodeDetails, boostParameters) => {
+    logger('Assembling referral code with bonus details: ', boostParameters);
+
     const referredUserId = userProfile.systemWideUserId;
     const boostUserIds = [referredUserId];
 
     const referralType = referralCodeDetails.codeType;
     const boostCategory = `${referralType}_CODE_USED`;
-        
+    
     const redemptionMsgInstructions = [{ systemWideUserId: referredUserId, msgInstructionFlag: 'REFERRAL::REDEEMED::REFERRED' }];
-    const amountArray = referralContext.boostAmountOffered.split('::');
-    const boostAmountPerUser = amountArray[0];
+
+    const { boostAmountOffered, bonusPoolId } = boostParameters;
+    // a bit nasty but grandfathering in a change, so
+    const boostAmountPerUser = typeof boostAmountOffered === 'string' ? opsUtil.convertAmountStringToDict(boostAmountOffered) : boostAmountOffered; 
 
     if (referralType === 'USER') {
         const referringUserId = referralCodeDetails.creatingUserId;
@@ -263,22 +267,20 @@ const triggerBoostForReferralCode = async (userProfile, referralCodeDetails, ref
     // time within which the new user has to save in order to claim the bonus
     const bonusExpiryTime = moment().add(config.get('revocationDefaults.expiryTimeDays'), 'days');
 
-    const statusConditions = assembleStatusConditions(referredUserId, referralContext);
+    const statusConditions = assembleStatusConditions(referredUserId, boostParameters);
     logger('Assembled status conditions: ', statusConditions);
 
-    // a bit nasty but grandfathering in a change, so
-    const boostAmountOffered = typeof referralContext.boostAmountOffered === 'object' 
-        ? opsUtil.convertAmountDictToString(referralContext.boostAmountOffered) : referralContext.boostAmountOffered;
-
-    // note : we may at some point want a "system" flag on creating user ID instead of the account opener, but for
-    // now this will allow sufficient tracking, and a simple migration will fix it in the future    
     const boostPayload = {
         creatingUserId: referredUserId,
         label: `User referral code`,
         boostTypeCategory: `REFERRAL::${boostCategory}`,
-        boostAmountOffered,
-        boostBudget: boostAmountPerUser * boostUserIds.length,
-        boostSource: referralContext.boostSource,
+        boostAmountOffered: opsUtil.convertAmountDictToString(boostAmountPerUser),
+        boostBudget: boostAmountPerUser.amount * boostUserIds.length,
+        boostSource: {
+            clientId: userProfile.clientId,
+            floatId: userProfile.floatId,
+            bonusPoolId
+        },
         endTimeMillis: bonusExpiryTime.valueOf(),
         boostAudience: 'INDIVIDUAL',
         boostAudienceSelection,
@@ -300,7 +302,7 @@ const triggerBoostForReferralCode = async (userProfile, referralCodeDetails, ref
     logger('Result of firing off lambda invoke: ', resultOfTrigger);
 
     if (referralType === 'USER') {
-        await publishEventAndUpdateProfile(userProfile, referralContext, referralCodeDetails);
+        await publishEventAndUpdateProfile(userProfile, boostParameters, referralCodeDetails);
     }
 
     return { result: 'BOOST_TRIGGERED' };
@@ -337,12 +339,12 @@ module.exports.useReferralCode = async (event) => {
         const referralContext = await fetchReferralContext(referralCodeDetails);
         if (!referralContext) {
             logger('No referral context to give boost amount etc, exiting');
-            return opsUtil.wrapResponse({ result: 'CODE_NOT_ALLOWED' });
+            return opsUtil.wrapResponse({ result: 'CODE_SET_NO_BOOST' });
         }
     
         if (referralHasZeroRedemption(referralContext)) {
             logger('Referral context but amount offered is zero, exiting');
-            return opsUtil.wrapResponse({ result: 'CODE_SET' });
+            return opsUtil.wrapResponse({ result: 'CODE_SET_NO_BOOST' });
         }
 
         const resultOfTrigger = await triggerBoostForReferralCode(userProfile, referralCodeDetails, referralContext);

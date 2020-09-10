@@ -99,6 +99,11 @@ resource "aws_iam_role_policy_attachment" "boost_create_msg_invoke_policy" {
   policy_arn = aws_iam_policy.lambda_invoke_msg_instruct_access.arn
 }
 
+resource "aws_iam_role_policy_attachment" "boost_create_audience_invoke" {
+  role = aws_iam_role.boost_create_role.name
+  policy_arn = aws_iam_policy.audience_lambda_invoke_policy.arn
+}
+
 resource "aws_iam_role_policy_attachment" "boost_create_user_event_publish_policy" {
   role = aws_iam_role.boost_create_role.name
   policy_arn = aws_iam_policy.ops_sns_user_event_publish.arn
@@ -154,5 +159,5 @@ resource "aws_cloudwatch_metric_alarm" "security_metric_alarm_boost_create" {
   period = 60
   threshold = 0
   statistic = "Sum"
-  alarm_actions = ["${aws_sns_topic.security_errors_topic.arn}"]
+  alarm_actions = [aws_sns_topic.security_errors_topic.arn]
 }

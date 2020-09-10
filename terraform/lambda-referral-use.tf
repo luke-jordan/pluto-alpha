@@ -95,9 +95,15 @@ resource "aws_iam_role_policy_attachment" "referral_use_boost_create_policy" {
   policy_arn = aws_iam_policy.lambda_invoke_boost_create_access.arn
 }
 
+# should switch these to using lambdas instead of direct read write
 resource "aws_iam_role_policy_attachment" "referral_use_profile_table_policy" {
   role = aws_iam_role.referral_use_role.name
   policy_arn = var.user_profile_table_read_policy_arn[terraform.workspace]
+}
+
+resource "aws_iam_role_policy_attachment" "referral_use_profile_update_policy" {
+  role = aws_iam_role.referral_use_role.name
+  policy_arn = var.user_profile_table_update_policy_arn[terraform.workspace]
 }
 
 resource "aws_iam_role_policy_attachment" "referral_use_event_publish_policy" {
