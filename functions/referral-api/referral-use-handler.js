@@ -171,8 +171,10 @@ const publishReferralCodeEvent = async (referredUserProfile, referralCodeDetails
     const referredUserId = referredUserProfile.systemWideUserId;
     const referringUserId = referralCodeDetails.creatingUserId;
 
-    const [boostAmountOffered, fromUnit] = referralContext.boostAmountOffered.split('::');    
-    const referralAmountForUser = opsUtil.convertToUnit(Number(boostAmountOffered), fromUnit, 'WHOLE_CURRENCY');
+    // as above
+    const { boostAmountOffered } = referralContext;
+    const boostAmountPerUser = typeof boostAmountOffered === 'string' ? opsUtil.convertAmountStringToDict(boostAmountOffered) : boostAmountOffered; 
+    const referralAmountForUser = opsUtil.convertToUnit(boostAmountPerUser.amount, boostAmountPerUser.unit, 'WHOLE_CURRENCY');
      
     const logOptions = {
         initiator: referredUserId,
@@ -219,9 +221,20 @@ const assembleStatusConditions = (referredUserId, referralContext) => {
     return statusConditions;
 };
 
-const isValidReferralCode = async (referralCodeDetails, referredUserProfile) => {
+const canUserUseCode = async (referralCodeDetails, referredUserProfile) => {
     if (referralCodeDetails.referralCode === referredUserProfile.referralCodeUsed) {
         logger('Referral code has already been used, exiting');
+        return false;
+    }
+
+    if (referralCodeDetails.persistedTimeMillis > referredUserProfile.creationTimeEpochMillis) {
+        logger('Referral code younger than referred user, exiting');
+        return false;
+    }
+
+    const cutOffMoment = moment().subtract(config.get('userCodeCutOff.value'), config.get('userCodeCutOff.unit'));
+    if (moment(referredUserProfile.creationTimeEpochMillis).isBefore(cutOffMoment)) {
+        logger('User is too old, exiting');
         return false;
     }
 
@@ -232,11 +245,6 @@ const isValidReferralCode = async (referralCodeDetails, referredUserProfile) => 
             logger('Referral code is out of sequence, exiting');
             return false;
         }
-    }
-
-    if (referralCodeDetails.persistedTimeMillis > referredUserProfile.creationTimeEpochMillis) {
-        logger('Referral code older than referred user, exiting');
-        return false;
     }
 
     return true;
@@ -266,6 +274,7 @@ const triggerBoostForReferralCode = async (userProfile, referralCodeDetails, boo
     const boostAudienceSelection = createAudienceConditions(boostUserIds);
     // time within which the new user has to save in order to claim the bonus
     const bonusExpiryTime = moment().add(config.get('revocationDefaults.expiryTimeDays'), 'days');
+    logger('UGGGGH::::: ***************** ', bonusExpiryTime, ' and: ', bonusExpiryTime);
 
     const statusConditions = assembleStatusConditions(referredUserId, boostParameters);
     logger('Assembled status conditions: ', statusConditions);
@@ -308,42 +317,96 @@ const triggerBoostForReferralCode = async (userProfile, referralCodeDetails, boo
     return { result: 'BOOST_TRIGGERED' };
 };
 
+const getUserOwnReferralData = async (userProfile) => {
+    const { creationTimeEpochMillis, referralCodeUsed, countryCode } = userProfile;
+    
+    const hasUsedReferralCode = typeof referralCodeUsed === 'string' && referralCodeUsed.length > 0;
+    const cutOffMoment = moment().subtract(config.get('userCodeCutOff.value'), config.get('userCodeCutOff.unit'));
+    const isUserRecent = moment(creationTimeEpochMillis).isAfter(cutOffMoment);
+    logger('Is user recent enough to use a code? : ', isUserRecent, ' cut off: ', cutOffMoment, ' and use: ', moment(creationTimeEpochMillis));
+
+    if (!hasUsedReferralCode) {
+        return { hasUsedReferralCode, canUseReferralCode: isUserRecent };
+    }
+
+    const usedCodeDetails = await fetchReferralCodeDetails(referralCodeUsed, countryCode, ['codeType']);
+    const canUseReferralCode = isUserRecent && usedCodeDetails.codeType !== 'USER';
+    return { hasUsedReferralCode, canUseReferralCode };
+};
+
+const getBoostOfferForUserCode = async (userProfile) => {
+    const { clientId, floatId } = userProfile;
+    const userReferralDefaults = await fetchUserReferralDefaults(clientId, floatId);
+
+    if (referralHasZeroRedemption(userReferralDefaults)) {
+        return { boostOnOffer: false };
+    }
+
+    const referralBonusData = {
+        boostAmountOffered: userReferralDefaults.boostAmountOffered,
+        redeemConditionAmount: userReferralDefaults.redeemConditionAmount,
+        daysToMaintain: userReferralDefaults.daysToMaintain
+    };
+
+    return { boostOnOffer: true, referralBonusData };
+};
+
+const assembleReferralData = async (userProfile) => {
+    const [{ hasUsedReferralCode, canUseReferralCode }, { boostOnOffer, referralBonusData }] = await Promise.all([
+        getUserOwnReferralData(userProfile), getBoostOfferForUserCode(userProfile)
+    ]);
+    
+    return { hasUsedReferralCode, canUseReferralCode, boostOnOffer, referralBonusData };
+};
+
 // this handles redeeming a referral code, if it is present and includes an amount
 // the method will create a boost in 'PENDING', triggered when the referred user saves
 module.exports.useReferralCode = async (event) => {
     try {
-        if (!opsUtil.isDirectInvokeAdminOrSelf(event)) {
+        if (!opsUtil.isDirectInvokeAdminOrSelf(event, 'referredUserId')) {
             return { statusCode: status('Forbidden') };
         }
     
-        const { referralCodeUsed, referredUserId } = opsUtil.extractParamsFromEvent(event);
+        const userDetails = opsUtil.extractUserDetails(event);
+        const params = opsUtil.extractParamsFromEvent(event);
+
+        const referredUserId = params.referredUserId || userDetails.systemWideUserId;
+        const { referralCodeUsed } = opsUtil.extractParamsFromEvent(event);
         logger('Got referral code: ', referralCodeUsed, 'And referred user id: ', referredUserId);
 
         const userProfile = await fetchUserProfile(referredUserId);
-        logger('Got referred user profile ', userProfile);
+        
+        // this is for getting details about boost on offer, etc.
+        // note : "status" would in theory be a better place for this, but then would have complexity with authorizer optionality
+        // and this will only be used right before the "use" call, hence
+        if (!referralCodeUsed && params.obtainReferralData) {
+            const referralData = await assembleReferralData(userProfile);
+            return opsUtil.wrapResponse(referralData);
+        }
     
         const relevantColumns = ['creatingUserId', ...standardCodeColumns];
         const referralCodeDetails = await fetchReferralCodeDetails(referralCodeUsed, userProfile.countryCode, relevantColumns);
-        logger('Got referral code details: ', referralCodeDetails);
-    
+        
         if (!referralCodeDetails || Object.keys(referralCodeDetails).length === 0) {
             logger('No referral code details provided, exiting');
-            return opsUtil.wrapResponse({ result: 'CODE_NOT_ALLOWED' });
+            return opsUtil.wrapResponse({ result: 'CODE_NOT_FOUND' });
         }
 
-        const validReferralCode = await isValidReferralCode(referralCodeDetails, userProfile);
+        const validReferralCode = await canUserUseCode(referralCodeDetails, userProfile);
         if (!validReferralCode) {
-            return opsUtil.wrapResponse({ result: 'CODE_NOT_ALLOWED' });
+            return opsUtil.wrapResponse({ result: 'USER_CANNOT_USE' });
         }
 
         const referralContext = await fetchReferralContext(referralCodeDetails);
         if (!referralContext) {
-            logger('No referral context to give boost amount etc, exiting');
+            logger('No referral context to give boost amount etc, set code and exit');
+            await updateProfileReferralCode(referredUserId, referralCodeUsed);
             return opsUtil.wrapResponse({ result: 'CODE_SET_NO_BOOST' });
         }
     
         if (referralHasZeroRedemption(referralContext)) {
             logger('Referral context but amount offered is zero, exiting');
+            await updateProfileReferralCode(referredUserId, referralCodeUsed);
             return opsUtil.wrapResponse({ result: 'CODE_SET_NO_BOOST' });
         }
 

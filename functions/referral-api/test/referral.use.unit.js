@@ -147,8 +147,9 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
     const testProfileCreationTime = moment().valueOf();
     const testRefCodeCreationTime = moment().subtract(2, 'days').valueOf();
 
-    const testRevokeLimit = moment().subtract(30, 'days').valueOf();
-    const testEndTime = moment();
+    const testBaseTime = moment();
+    const testRevokeLimit = testBaseTime.clone().subtract(30, 'days');
+    const testEndTime = testBaseTime.clone().add(config.get('revocationDefaults.expiryTimeDays'), 'days');
 
     const augmentedCodeColumns = ['creatingUserId', ...relevantReferralColumns];
 
@@ -159,10 +160,10 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
     };
 
     const userReferralDefaults = {
-        boostAmountOffered: '100000::HUNDREDTH_CENT::USD',
+        boostAmountOffered: { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
         bonusPoolId: 'primary_bonus_pool',
         redeemConditionType: 'SIMPLE_SAVE',
-        redeemConditionAmount: { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+        redeemConditionAmount: { amount: 100000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
         daysToMaintain: 30
     };
 
@@ -210,11 +211,43 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         const sentPayload = JSON.parse(passedArgs.Payload);
         expect(sentPayload).to.deep.equal(expectedPayload);
     };
-    
-    it('Fetches referral context and redeems boost where all conditions met, simple save', async () => {
 
-        momentStub.onFirstCall().returns({ add: () => testEndTime });
-        momentStub.onSecondCall().returns({ add: () => testRevokeLimit });
+    const setBizarreMomentWeirdness = () => {
+        logger('Test base time: ', testBaseTime, ' end time: ', testEndTime, ' revoke limit: ', testRevokeLimit);
+        // cloning not working, very very weird, but no time now, must be a weird ovrerride somewhere, as of now, this utter madness
+        // am likely to commit some form of homicide for whatever initiated this weirdness
+        momentStub.onCall(0).returns({ subtract: () => moment().subtract(7, 'days') });
+        momentStub.withArgs(testUserProfile.creationTimeEpochMillis).returns(moment(testUserProfile.creationTimeEpochMillis));
+        momentStub.onCall(2).returns({ add: () => testEndTime });
+        momentStub.onCall(3).returns({ add: () => testRevokeLimit });
+    };
+
+    it('Fetches referral code boost and whether use can redeem', async () => {
+        fetchRowStub.onFirstCall().resolves(testUserProfile);
+        fetchRowStub.onSecondCall().resolves(testBetaCodeDetails);
+        fetchRowStub.onThirdCall().resolves({ userReferralDefaults });
+
+        momentStub.returns(moment());
+        momentStub.withArgs(testUserProfile.creationTimeEpochMillis).returns(moment(testUserProfile.creationTimeEpochMillis));
+
+        // const testEvent = { requestContext: { authorizer: { systemWideUserId: testReferredUserId }}};
+        const testEvent = testHelper.wrapQueryParamEvent({ obtainReferralData: true }, testReferredUserId);
+        const resultOfCall = await handler.useReferralCode(testEvent);
+        const resultBody = testHelper.standardOkayChecks(resultOfCall, true);
+
+        expect(resultBody).to.deep.equal({
+            hasUsedReferralCode: true,
+            canUseReferralCode: true,
+            boostOnOffer: true,
+            referralBonusData: {
+                boostAmountOffered: { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+                redeemConditionAmount: { amount: 100000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+                daysToMaintain: 30        
+            }
+        });
+    });
+    
+    it('Fetches referral context and creates boost where all conditions met, simple save', async () => {
 
         fetchRowStub.onCall(0).resolves(testUserProfile);
         fetchRowStub.onCall(1).resolves(testReferralCodeDetails);
@@ -224,6 +257,8 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
 
         updateRowStub.resolves({ returnedAttributes: { referralCodeUsed: testReferralCode }});
         lambdaInvokeStub.returns({ promise: () => ({ statusCode: 200 })});
+
+        setBizarreMomentWeirdness();
 
         const testEvent = { referralCodeUsed: testReferralCode, referredUserId: testReferredUserId };
 
@@ -253,17 +288,17 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
 
         const expectedStatusConditions = {
             REDEEMED: [
-                `save_completed_by #{${testReferredUserId}}`, 'first_save_above #{10000::HUNDREDTH_CENT::USD}'
+                `save_completed_by #{${testReferredUserId}}`, 'first_save_above #{100000::HUNDREDTH_CENT::USD}'
             ],
-            REVOKED: [`withdrawal_before #{${testRevokeLimit}}`]
+            REVOKED: [`withdrawal_before #{${testRevokeLimit.valueOf()}}`]
         };
 
         const expectedBoostPayload = {
             creatingUserId: testReferredUserId,
             label: `User referral code`,
             boostTypeCategory: 'REFERRAL::USER_CODE_USED',
-            boostAmountOffered: '100000::HUNDREDTH_CENT::USD',
-            boostBudget: 200000,
+            boostAmountOffered: '10000::HUNDREDTH_CENT::USD',
+            boostBudget: 20000,
             boostSource: testBoostSource,
             endTimeMillis: testEndTime.valueOf(),
             boostAudience: 'INDIVIDUAL',
@@ -288,7 +323,7 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         const expectedLogOptions = {
             initiator: testReferredUserId,
             context: {
-                referralAmountForUser: 10, // whole currency
+                referralAmountForUser: 1, // whole currency
                 referralContext: userReferralDefaults,
                 referralCode: testReferralCode,
                 refCodeCreationTime: testRefCodeCreationTime,
@@ -306,8 +341,7 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         referralCodeDetails.codeType = 'BETA';
         referralCodeDetails.context = referralDefaults;
 
-        momentStub.onFirstCall().returns({ add: () => testEndTime });
-        momentStub.onSecondCall().returns({ add: () => testRevokeLimit });
+        setBizarreMomentWeirdness();
 
         fetchRowStub.onCall(0).resolves(testUserProfile);
         fetchRowStub.onCall(1).resolves(referralCodeDetails);
@@ -335,17 +369,17 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
 
         const expectedStatusConditions = {
             REDEEMED: [
-                `save_completed_by #{${testReferredUserId}}`, 'balance_crossed_abs_target #{10000::HUNDREDTH_CENT::USD}'
+                `save_completed_by #{${testReferredUserId}}`, 'balance_crossed_abs_target #{100000::HUNDREDTH_CENT::USD}'
             ],
-            REVOKED: [`withdrawal_before #{${testRevokeLimit}}`]
+            REVOKED: [`withdrawal_before #{${testRevokeLimit.valueOf()}}`]
         };
 
         const expectedBoostPayload = {
             creatingUserId: testReferredUserId,
             label: `User referral code`,
             boostTypeCategory: 'REFERRAL::BETA_CODE_USED',
-            boostAmountOffered: '100000::HUNDREDTH_CENT::USD',
-            boostBudget: 100000,
+            boostAmountOffered: '10000::HUNDREDTH_CENT::USD',
+            boostBudget: 10000,
             boostSource: testBoostSource,
             endTimeMillis: testEndTime.valueOf(),
             boostAudience: 'INDIVIDUAL',
@@ -370,7 +404,7 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
             headers: testHelper.expectedHeaders,
             body: JSON.stringify({ result })
         });
-
+        
         // On invalid event
         await expect(handler.useReferralCode({ httpMethod: 'POST' })).to.eventually.deep.equal({ statusCode: 403 });
 
@@ -378,7 +412,7 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         fetchRowStub.onSecondCall().resolves();
 
         // On referral code details not found
-        await expect(handler.useReferralCode({ referredUserId: testReferredUserId })).to.eventually.deep.equal(expectedResult());
+        await expect(handler.useReferralCode({ referredUserId: testReferredUserId })).to.eventually.deep.equal(expectedResult('CODE_NOT_FOUND'));
         fetchRowStub.reset();
 
         fetchRowStub.onFirstCall().resolves(userProfile);
@@ -386,6 +420,7 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         fetchRowStub.onThirdCall().resolves(testBetaCodeDetails);
 
         // On missing referral code context
+        momentStub.returns(moment());
         await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal(expectedResult('CODE_SET_NO_BOOST'));
         fetchRowStub.reset();
 
@@ -417,7 +452,7 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         fetchRowStub.onCall(2).resolves(testBetaCodeDetails);
 
         // Where used referral code is older than referred user
-        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal(expectedResult('CODE_NOT_ALLOWED'));
+        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal(expectedResult('USER_CANNOT_USE'));
         fetchRowStub.reset();
 
         referralCodeDetails.persistedTimeMillis = testRefCodeCreationTime;
@@ -429,7 +464,7 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         fetchRowStub.onCall(3).resolves({ userReferralDefaults });
 
         // Where referral code is out of sequence
-        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal(expectedResult('CODE_NOT_ALLOWED'));
+        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal(expectedResult('USER_CANNOT_USE'));
         fetchRowStub.reset();
 
         userProfile.referralCodeUsed = testReferralCode;
@@ -438,7 +473,7 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         fetchRowStub.onCall(1).resolves(referralCodeDetails);
     
         // Where referral code has already been used
-        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal(expectedResult('CODE_NOT_ALLOWED'));
+        await expect(handler.useReferralCode(testEvent)).to.eventually.deep.equal(expectedResult('USER_CANNOT_USE'));
     });
 
     it('Catches error where referred user profile not found', async () => {
@@ -450,8 +485,7 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
     it('Catches error on referred user profile update failure', async () => {
         Reflect.deleteProperty(testUserProfile, 'referralCodeUsed');
 
-        momentStub.onFirstCall().returns({ add: () => testEndTime });
-        momentStub.onSecondCall().returns({ add: () => testRevokeLimit });
+        setBizarreMomentWeirdness();
 
         fetchRowStub.onCall(0).resolves(testUserProfile);
         fetchRowStub.onCall(1).resolves(testReferralCodeDetails);    

@@ -14,6 +14,16 @@ module.exports.anyMoment = sinon.match((value) => moment.isMoment(value));
 
 module.exports.extractErrorMsg = (result) => JSON.parse(result.body).error;
 
+module.exports.wrapQueryParamEvent = (requestBody, systemWideUserId, role) => ({
+    httpMethod: 'GET',
+    queryStringParameters: requestBody,
+    requestContext: {
+        authorizer: {
+            systemWideUserId,
+            role
+        }
+    }
+});
 
 module.exports.logNestedMatches = (expectedObj, passedToArgs) => {
     Object.keys(expectedObj).forEach((key) => {
