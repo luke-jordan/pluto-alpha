@@ -126,7 +126,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
         expect(balanceResult).to.deep.equal({ amount: 0, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
     });
 
-    it('Fetches account balance, includes pending withdrawals', async () => {
+    it('Fetches balance available for withdrawals', async () => {
         const testTime = moment();
 
         queryStub.onFirstCall().resolves([{ 'unit': 'HUNDREDTH_CENT', 'sum': 40000 }, { 'unit': 'WHOLE_CENT', 'sum': 40000 }]);

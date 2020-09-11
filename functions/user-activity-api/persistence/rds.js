@@ -231,6 +231,7 @@ module.exports.sumAccountBalance = async (accountId, currency, time = moment()) 
     return { amount: totalBalanceInDefaultUnit, unit: DEFAULT_UNIT, currency, lastTxTime };
 };
 
+// Fetches a users available balance for withdrawal. LOCKED saves are excluded in the amount returned.
 module.exports.calculateWithdrawalBalance = async (accountId, currency, time = moment()) => {
     const accountTxTable = config.get('tables.accountTransactions');
 
@@ -242,12 +243,17 @@ module.exports.calculateWithdrawalBalance = async (accountId, currency, time = m
     const sumBalanceQuery = `select sum(amount), unit from ${accountTxTable} where account_id = $1 and currency = $2 and ` +
         `settlement_status in ($3, $4) and settlement_time < to_timestamp($5) and transaction_type in (${transTypeIdxs}) group by unit`; 
 
+    // For obtaining pending withdrawals
     const sumWithdrawalsQuery = `select sum(amount), unit from ${accountTxTable} where account_id = $1 and currency = $2 and ` +
         `settlement_status = $3 and transaction_type = $4 and group by unit`;
 
+    const balanceQueryValues = [accountId, currency, 'SETTLED', 'ACCRUED', time.unix(), ...transTypesToInclude];
+    const withdrawalQueryValues = [accountId, currency, 'PENDING', 'WIHDRAWAL'];
+
+    // Could be done in one query, albiet complexly. Slight performance compromise for readability
     const [summedBalance, summedWithdrawals] = await Promise.all([
-        rdsConnection.selectQuery(sumBalanceQuery, [accountId, currency, 'SETTLED', 'ACCRUED', time.unix(), ...transTypesToInclude]),
-        rdsConnection.selectQuery(sumWithdrawalsQuery, [accountId, currency, 'PENDING', 'WIHDRAWAL'])
+        rdsConnection.selectQuery(sumBalanceQuery, balanceQueryValues),
+        rdsConnection.selectQuery(sumWithdrawalsQuery, withdrawalQueryValues)
     ]);
 
     logger('Got summed balance', summedBalance);

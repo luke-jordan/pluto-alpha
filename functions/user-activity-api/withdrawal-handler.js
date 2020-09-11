@@ -276,7 +276,7 @@ const obtainWithdrawalCardMsg = (clientFloatVars) => {
 
 const calculateAvailableBalance = async (accountId, currency) => {
     const [settledSum, pendingTx] = await Promise.all([
-        persistence.sumAccountBalance(accountId, currency),
+        persistence.calculateWithdrawalBalance(accountId, currency),
         persistence.fetchPendingTransactions(accountId)
     ]);
 
@@ -511,7 +511,7 @@ module.exports.confirmWithdrawal = async (event) => {
         // last, publish this (i.e., so instruction goes out)
         const txProperties = await persistence.fetchTransaction(transactionId);
         logger('Withdrawal TX properties: ', txProperties);
-        const newBalance = await persistence.sumAccountBalance(txProperties.accountId, txProperties.currency);
+        const newBalance = await persistence.calculateWithdrawalBalance(txProperties.accountId, txProperties.currency);
         logger('New account balance: ', newBalance);
         
         const context = {

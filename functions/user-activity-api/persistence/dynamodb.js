@@ -23,7 +23,8 @@ const relevantFloatColumns = [
     'defaultTimezone', 
     'currency', 
     'comparatorRates', 
-    'bankDetails'
+    'bankDetails',
+    'lockedSaveBonus'
 ];
 
 const initiateCacheConnection = async () => {
