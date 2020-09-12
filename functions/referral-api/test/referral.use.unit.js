@@ -52,7 +52,7 @@ const activeCodeTable = config.get('tables.activeCodes');
 const clientFloatTable = config.get('tables.clientFloatTable');
 
 const relevantReferralColumns = ['referralCode', 'codeType', 'expiryTimeMillis', 'context', 'clientId', 'floatId'];
-const relevantProfileColumns = ['system_wide_user_id', 'client_id', 'float_id', 'referral_code_used', 'country_code', 'creation_time_epoch_millis'];
+const relevantProfileColumns = ['system_wide_user_id', 'called_name', 'personal_name', 'family_name', 'client_id', 'float_id', 'referral_code_used', 'country_code', 'creation_time_epoch_millis'];
 
 describe('*** UNIT TESTING VERIFY REFERRAL CODE ***', () => {
 
@@ -195,6 +195,7 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
 
     const testUserProfile = {
         systemWideUserId: testReferredUserId,
+        personalName: 'Used',
         clientId: 'some_client_id',
         floatId: 'primary_cash',
         countryCode: 'USA',
@@ -248,12 +249,12 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
     });
     
     it('Fetches referral context and creates boost where all conditions met, simple save', async () => {
-
         fetchRowStub.onCall(0).resolves(testUserProfile);
         fetchRowStub.onCall(1).resolves(testReferralCodeDetails);
     
         fetchRowStub.onCall(2).resolves(testBetaCodeDetails);
         fetchRowStub.onCall(3).resolves({ userReferralDefaults });
+        fetchRowStub.onCall(4).resolves({ calledName: 'Original person' });
 
         updateRowStub.resolves({ returnedAttributes: { referralCodeUsed: testReferralCode }});
         lambdaInvokeStub.returns({ promise: () => ({ statusCode: 200 })});
@@ -265,9 +266,14 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         const resultOfCode = await handler.useReferralCode(testEvent);
         const resultBody = testHelper.standardOkayChecks(resultOfCode, true);
 
-        expect(resultBody).to.deep.equal({ result: 'BOOST_TRIGGERED' });
+        const expectedBoostResponse = {
+            ...userReferralDefaults,
+            boostEndTimeMillis: testEndTime.valueOf(),
+            codeOwnerName: 'Original person'
+        };
+        expect(resultBody).to.deep.equal({ result: 'BOOST_CREATED', codeBoostDetails: expectedBoostResponse });
 
-        expect(fetchRowStub.callCount).to.equal(4);
+        expect(fetchRowStub.callCount).to.equal(5);
         expect(fetchRowStub).to.have.been.calledWithExactly('UserProfileTable', { systemWideUserId: testReferredUserId }, relevantProfileColumns);
         expect(fetchRowStub).to.have.been.calledWithExactly('ActiveReferralCodes', { referralCode: testReferralCode, countryCode: 'USA' }, augmentedCodeColumns);
         expect(fetchRowStub).to.have.been.calledWithExactly('ActiveReferralCodes', { referralCode: testBetaCode, countryCode: 'USA' }, relevantReferralColumns);
@@ -324,10 +330,11 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
             initiator: testReferredUserId,
             context: {
                 referralAmountForUser: 1, // whole currency
-                referralContext: userReferralDefaults,
+                referralContext: expectedBoostResponse,
                 referralCode: testReferralCode,
                 refCodeCreationTime: testRefCodeCreationTime,
-                referredUserCreationTime: testProfileCreationTime
+                referredUserCreationTime: testProfileCreationTime,
+                referredUserCalledName: 'Used'
             }
         };
         expect(publishStub).to.have.been.calledOnceWithExactly(testReferringUserId, 'REFERRAL_CODE_USED', expectedLogOptions);
@@ -355,7 +362,11 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         const resultOfCode = await handler.useReferralCode(testEvent);
         const resultBody = testHelper.standardOkayChecks(resultOfCode, true);
 
-        expect(resultBody).to.deep.equal({ result: 'BOOST_TRIGGERED' });
+        const expectedBoostResponse = {
+            ...referralDefaults,
+            boostEndTimeMillis: testEndTime.valueOf()
+        };
+        expect(resultBody).to.deep.equal({ result: 'BOOST_CREATED', codeBoostDetails: expectedBoostResponse });
 
         const expectedAudienceSelection = {
             conditions: [
@@ -490,6 +501,7 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         fetchRowStub.onCall(0).resolves(testUserProfile);
         fetchRowStub.onCall(1).resolves(testReferralCodeDetails);    
         fetchRowStub.onCall(2).resolves({ userReferralDefaults });
+        fetchRowStub.onCall(3).resolves({ calledName: 'Bad code owner' });
 
         updateRowStub.throws(new Error('Dynamo update error'));
         lambdaInvokeStub.returns({ promise: () => ({ statusCode: 200 })});

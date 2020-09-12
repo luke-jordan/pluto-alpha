@@ -125,7 +125,17 @@ const referralHasZeroRedemption = (referralContext) => {
 };
 
 const fetchUserProfile = async (systemWideUserId) => {
-    const relevantProfileColumns = ['system_wide_user_id', 'client_id', 'float_id', 'referral_code_used', 'country_code', 'creation_time_epoch_millis'];
+    const relevantProfileColumns = [
+        'system_wide_user_id',
+        'called_name',
+        'personal_name',
+        'family_name',
+        'client_id', 
+        'float_id', 
+        'referral_code_used', 
+        'country_code', 
+        'creation_time_epoch_millis'
+    ];
 
     logger('Fetching profile for user id: ', systemWideUserId);
     const userProfile = await dynamo.fetchSingleRow(config.get('tables.userProfile'), { systemWideUserId }, relevantProfileColumns);
@@ -183,7 +193,8 @@ const publishReferralCodeEvent = async (referredUserProfile, referralCodeDetails
             referralAmountForUser,
             referralCode: referralCodeDetails.referralCode,
             refCodeCreationTime: referralCodeDetails.persistedTimeMillis,
-            referredUserCreationTime: referredUserProfile.creationTimeEpochMillis
+            referredUserCreationTime: referredUserProfile.creationTimeEpochMillis,
+            referredUserCalledName: referredUserProfile.calledName || referredUserProfile.personalName
         }
     };
 
@@ -274,8 +285,6 @@ const triggerBoostForReferralCode = async (userProfile, referralCodeDetails, boo
     const boostAudienceSelection = createAudienceConditions(boostUserIds);
     // time within which the new user has to save in order to claim the bonus
     const bonusExpiryTime = moment().add(config.get('revocationDefaults.expiryTimeDays'), 'days');
-    logger('UGGGGH::::: ***************** ', bonusExpiryTime, ' and: ', bonusExpiryTime);
-
     const statusConditions = assembleStatusConditions(referredUserId, boostParameters);
     logger('Assembled status conditions: ', statusConditions);
 
@@ -310,11 +319,18 @@ const triggerBoostForReferralCode = async (userProfile, referralCodeDetails, boo
     const resultOfTrigger = await lambda.invoke(lambdaInvocation).promise();
     logger('Result of firing off lambda invoke: ', resultOfTrigger);
 
+    const codeBoostDetails = boostParameters;
+    codeBoostDetails.boostEndTimeMillis = bonusExpiryTime.valueOf();
+
     if (referralType === 'USER') {
-        await publishEventAndUpdateProfile(userProfile, boostParameters, referralCodeDetails);
+        const [referringUser] = await Promise.all([
+            await fetchUserProfile(referralCodeDetails.systemWideUserId),
+            await publishEventAndUpdateProfile(userProfile, boostParameters, referralCodeDetails)
+        ]);
+        codeBoostDetails.codeOwnerName = referringUser.calledName || referringUser.personalName;
     }
 
-    return { result: 'BOOST_TRIGGERED' };
+    return { result: 'BOOST_CREATED', codeBoostDetails };
 };
 
 const getUserOwnReferralData = async (userProfile) => {
