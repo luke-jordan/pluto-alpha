@@ -199,7 +199,7 @@ resource "aws_api_gateway_resource" "referral_path_root" {
 
 resource "aws_api_gateway_resource" "referral_verify" {
   rest_api_id = aws_api_gateway_rest_api.api_gateway.id
-  parent_id   = "${aws_api_gateway_resource.referral_path_root.id}"
+  parent_id   = aws_api_gateway_resource.referral_path_root.id
   path_part   = "verify"
 }
 
@@ -231,7 +231,7 @@ resource "aws_api_gateway_integration" "referral_verify" {
 
 resource "aws_api_gateway_resource" "referral_status" {
   rest_api_id = aws_api_gateway_rest_api.api_gateway.id
-  parent_id   = "${aws_api_gateway_resource.referral_path_root.id}"
+  parent_id   = aws_api_gateway_resource.referral_path_root.id
   path_part   = "status"
 }
 
@@ -257,6 +257,39 @@ resource "aws_api_gateway_integration" "referral_status" {
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
   uri                     = "${aws_lambda_function.referral_status.invoke_arn}"
+}
+
+// FOR USING A REFERRAL CODE (INCLUDING GETTING CURRENT STATE)
+
+resource "aws_api_gateway_resource" "referral_use" {
+  rest_api_id = aws_api_gateway_rest_api.api_gateway.id
+  parent_id   = aws_api_gateway_resource.referral_path_root.id
+  path_part   = "use"
+}
+
+resource "aws_api_gateway_method" "referral_use" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  resource_id   = "${aws_api_gateway_resource.referral_use.id}"
+  http_method   = "POST"
+  authorization = "CUSTOM"
+  authorizer_id = aws_api_gateway_authorizer.jwt_authorizer.id
+}
+
+resource "aws_lambda_permission" "referral_use" {
+  action        = "lambda:InvokeFunction"
+  function_name = "${aws_lambda_function.referral_use.function_name}"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:${var.aws_account}:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
+}
+
+resource "aws_api_gateway_integration" "referral_use" {
+  rest_api_id = aws_api_gateway_rest_api.api_gateway.id
+  resource_id = "${aws_api_gateway_method.referral_use.resource_id}"
+  http_method = "${aws_api_gateway_method.referral_use.http_method}"
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = "${aws_lambda_function.referral_use.invoke_arn}"
 }
 
 /////////////// SAVE API LAMBDA (INITIATE & CHECK) //////////////////////////////////////////////////////////////////////////
