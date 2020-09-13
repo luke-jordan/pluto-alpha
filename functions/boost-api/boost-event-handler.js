@@ -44,7 +44,7 @@ const shouldCreateBoostForAccount = (event, boost) => {
 };
 
 const assembleStatusChangeAccountMap = async (boost, initiatingAccountId, newStatus) => {
-    const redeemsAll = boost.flags && boost.flags.indexOf('REDEEM_ALL_AT_ONCE') >= 0;
+    const redeemsAll = ['REDEEMED', 'REVOKED'].includes(newStatus) && boost.flags && boost.flags.indexOf('REDEEM_ALL_AT_ONCE') >= 0;
     const restrictToInitiator = boost.boostAudienceType === 'GENERAL' || !redeemsAll;
     
     // now we fetch the relevant accounts
