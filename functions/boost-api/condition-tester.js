@@ -204,6 +204,11 @@ const checkEventFollows = (parameterValue, eventContext) => {
     return moment(firstOccurenceOfSecondType.timestamp).isBefore(thresholdTime);
 };
 
+const checkReferralEvent = (parameterValue, eventContext) => {
+    const requiredUserId = parameterValue;
+    return requiredUserId === eventContext.referredUserId;
+}
+
 // this one is always going to be complex -- in time maybe split out the switch block further
 // eslint-disable-next-line complexity
 module.exports.testCondition = (event, statusCondition) => {
@@ -296,6 +301,10 @@ module.exports.testCondition = (event, statusCondition) => {
             return checkEventDoesNotFollow(parameterValue, eventContext);
         case 'event_does_follow':
             return checkEventFollows(parameterValue, eventContext);
+
+        // referral conditions
+        case 'referral_code_used_by_user':
+            return checkReferralEvent(parameterValue, eventContext);
 
         default:
             logger('Condition type not supported yet');

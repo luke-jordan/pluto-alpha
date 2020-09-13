@@ -242,8 +242,7 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
         const selectBoostQuery = `select ${expectedColumns}, ${expiryTimeClause} ` +
             `from boost_data.boost inner join boost_data.boost_account_status ` + 
             `on boost_data.boost.boost_id = boost_data.boost_account_status.boost_id where account_id = $1 and ` + 
-            `boost_status not in ($2) and boost_type not in ($3) ` +
-            `order by boost_data.boost_account_status.creation_time desc`;
+            `boost_status not in ($2) order by boost_data.boost_account_status.creation_time desc`;
 
          const expectedValues = [testAccountId, 'CREATED', 'REFERRAL'];
 
@@ -264,7 +263,7 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
     
         const selectBoostQuery = `select ${expectedColumns}, ${expiryTimeClause} from boost_data.boost inner join boost_data.boost_account_status ` + 
             `on boost_data.boost.boost_id = boost_data.boost_account_status.boost_id where account_id = $1 and ` + 
-            `boost_status not in ($2, $3, $4) and boost_type not in ($5) and boost_data.boost_account_status.updated_time > $6 ` +
+            `boost_status not in ($2, $3, $4) and boost_data.boost_account_status.updated_time > $6 ` +
             `order by boost_data.boost_account_status.creation_time desc`;
          const expectedValues = [testAccountId, 'CREATED', 'OFFERED', 'EXPIRED', 'REFERRAL', dummyTime.format()];
 
@@ -286,7 +285,7 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
     
         const selectBoostQuery = `select ${expectedColumns}, ${expiryTimeClause} from boost_data.boost inner join boost_data.boost_account_status ` + 
             `on boost_data.boost.boost_id = boost_data.boost_account_status.boost_id where account_id = $1 and ` + 
-            `boost_status not in ($2, $3, $4, $5) and boost_type not in ($6) and boost_data.boost.flags && $7 ` +
+            `boost_status not in ($2, $3, $4, $5) and boost_data.boost.flags && $7 ` +
             `order by boost_data.boost_account_status.creation_time desc`;
 
          const expectedValues = [testAccountId, 'REDEEMED', 'REVOKED', 'FAILED', 'EXPIRED', 'REFERRAL', ['FRIEND_TOURNAMENT']];

@@ -268,7 +268,7 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
 
         const expectedBoostResponse = {
             ...userReferralDefaults,
-            boostEndTimeMillis: testEndTime.valueOf(),
+            // boostEndTimeMillis: testEndTime.valueOf(),
             codeOwnerName: 'Original person'
         };
         expect(resultBody).to.deep.equal({ result: 'BOOST_CREATED', codeBoostDetails: expectedBoostResponse });
@@ -287,21 +287,17 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
             ]
         };
 
-        const expectedMsgInstructions = [
-            { systemWideUserId: testReferredUserId, msgInstructionFlag: 'REFERRAL::REDEEMED::REFERRED' },
-            { systemWideUserId: testReferringUserId, msgInstructionFlag: 'REFERRAL::REDEEMED::REFERRER' }
-        ];
-
         const expectedStatusConditions = {
+            PENDING: [`referral_code_used_by_user #{${testReferredUserId}}`],
             REDEEMED: [
                 `save_completed_by #{${testReferredUserId}}`, 'first_save_above #{100000::HUNDREDTH_CENT::USD}'
             ],
-            REVOKED: [`withdrawal_before #{${testRevokeLimit.valueOf()}}`]
+            REVOKED: [`withdrawal_by #{${testReferredUserId}}`, `withdrawal_before #{${testRevokeLimit.valueOf()}}`]
         };
 
         const expectedBoostPayload = {
             creatingUserId: testReferredUserId,
-            label: `User referral code`,
+            label: `Referral boost!`,
             boostTypeCategory: 'REFERRAL::USER_CODE_USED',
             boostAmountOffered: '10000::HUNDREDTH_CENT::USD',
             boostBudget: 20000,
@@ -309,9 +305,8 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
             endTimeMillis: testEndTime.valueOf(),
             boostAudience: 'INDIVIDUAL',
             boostAudienceSelection: expectedAudienceSelection,
-            initialStatus: 'PENDING',
-            statusConditions: expectedStatusConditions,
-            messageInstructionFlags: { 'REDEEMED': expectedMsgInstructions }
+            initialStatus: 'UNLOCKED',
+            statusConditions: expectedStatusConditions
         };
 
         expect(lambdaInvokeStub).to.have.been.calledOnce;
@@ -329,6 +324,7 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         const expectedLogOptions = {
             initiator: testReferredUserId,
             context: {
+                referredUserId: testReferredUserId,
                 referralAmountForUser: 1, // whole currency
                 referralContext: expectedBoostResponse,
                 referralCode: testReferralCode,

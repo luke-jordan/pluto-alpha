@@ -176,48 +176,16 @@ const fetchReferralContext = async (referralCodeDetails) => {
     return referralCodeDetails.context;
 };
 
-// Here the user using the code (referred user) is logged as the initator and the referrring user is used as the user id key
-const publishReferralCodeEvent = async (referredUserProfile, referralCodeDetails, referralContext) => {
-    const referredUserId = referredUserProfile.systemWideUserId;
-    const referringUserId = referralCodeDetails.creatingUserId;
-
-    // as above
-    const { boostAmountOffered } = referralContext;
-    const boostAmountPerUser = typeof boostAmountOffered === 'string' ? opsUtil.convertAmountStringToDict(boostAmountOffered) : boostAmountOffered; 
-    const referralAmountForUser = opsUtil.convertToUnit(boostAmountPerUser.amount, boostAmountPerUser.unit, 'WHOLE_CURRENCY');
-     
-    const logOptions = {
-        initiator: referredUserId,
-        context: {
-            referralContext,
-            referralAmountForUser,
-            referralCode: referralCodeDetails.referralCode,
-            refCodeCreationTime: referralCodeDetails.persistedTimeMillis,
-            referredUserCreationTime: referredUserProfile.creationTimeEpochMillis,
-            referredUserCalledName: referredUserProfile.calledName || referredUserProfile.personalName
-        }
-    };
-
-    logger('Publishing referral event with log options: ', logOptions);
-    await publisher.publishUserEvent(referringUserId, 'REFERRAL_CODE_USED', logOptions);
-};
-
-const publishEventAndUpdateProfile = async (userProfile, referralContext, referralCodeDetails) => {
-    const resultOfUpdate = await updateProfileReferralCode(userProfile.systemWideUserId, referralCodeDetails.referralCode);
-    logger('Profile update result: ', resultOfUpdate);
-
-    await publishReferralCodeEvent(userProfile, referralCodeDetails, referralContext);
-};
-
 const assembleStatusConditions = (referredUserId, referralContext) => {
     const { redeemConditionType, redeemConditionAmount, daysToMaintain } = referralContext;
     
     const referralRevokeDays = daysToMaintain ? daysToMaintain : config.get('revocationDefaults.withdrawalTime');
     const referralRevokeLimit = moment().add(referralRevokeDays, 'days').valueOf();
 
+    // save completed by is necessary to ensure this is triggered by the referred user only
     const statusConditions = {
         REDEEMED: [`save_completed_by #{${referredUserId}}`],
-        REVOKED: [`withdrawal_before #{${referralRevokeLimit}}`]
+        REVOKED: [`withdrawal_by #{${referredUserId}}`, `withdrawal_before #{${referralRevokeLimit}}`]
     };
 
     const { amount, unit, currency } = redeemConditionAmount;
@@ -261,26 +229,54 @@ const canUserUseCode = async (referralCodeDetails, referredUserProfile) => {
     return true;
 };
 
-const triggerBoostForReferralCode = async (userProfile, referralCodeDetails, boostParameters) => {
+// Here the user using the code (referred user) is logged as the initator and the referrring user is used as the user id key
+const publishReferralCodeEvent = async (referredUserProfile, referralCodeDetails, referralContext) => {
+    const referredUserId = referredUserProfile.systemWideUserId;
+    const referringUserId = referralCodeDetails.creatingUserId;
+
+    // as above
+    const { boostAmountOffered } = referralContext;
+    const boostAmountPerUser = typeof boostAmountOffered === 'string' ? opsUtil.convertAmountStringToDict(boostAmountOffered) : boostAmountOffered; 
+    const referralAmountForUser = opsUtil.convertToUnit(boostAmountPerUser.amount, boostAmountPerUser.unit, 'WHOLE_CURRENCY');
+     
+    const logOptions = {
+        initiator: referredUserId,
+        context: {
+            referredUserId, // duplicate, but much easier to extract in several places
+            referralContext,
+            referralAmountForUser,
+            referralCode: referralCodeDetails.referralCode,
+            refCodeCreationTime: referralCodeDetails.persistedTimeMillis,
+            referredUserCreationTime: referredUserProfile.creationTimeEpochMillis,
+            referredUserCalledName: referredUserProfile.calledName || referredUserProfile.personalName
+        }
+    };
+
+    logger('Publishing referral event with log options: ', logOptions);
+    await publisher.publishUserEvent(referringUserId, 'REFERRAL_CODE_USED', logOptions);
+};
+
+const publishEventAndUpdateProfile = async (userProfile, referralContext, referralCodeDetails) => {
+    const resultOfUpdate = await updateProfileReferralCode(userProfile.systemWideUserId, referralCodeDetails.referralCode);
+    logger('Profile update result: ', resultOfUpdate);
+
+    await publishReferralCodeEvent(userProfile, referralCodeDetails, referralContext);
+};
+
+const createBoostForReferralCode = async (userProfile, referralCodeDetails, boostParameters) => {
     logger('Assembling referral code with bonus details: ', boostParameters);
 
     const referredUserId = userProfile.systemWideUserId;
+    const referringUserId = referralCodeDetails.creatingUserId;
+
     const boostUserIds = [referredUserId];
 
     const referralType = referralCodeDetails.codeType;
     const boostCategory = `${referralType}_CODE_USED`;
     
-    const redemptionMsgInstructions = [{ systemWideUserId: referredUserId, msgInstructionFlag: 'REFERRAL::REDEEMED::REFERRED' }];
-
     const { boostAmountOffered, bonusPoolId } = boostParameters;
     // a bit nasty but grandfathering in a change, so
     const boostAmountPerUser = typeof boostAmountOffered === 'string' ? opsUtil.convertAmountStringToDict(boostAmountOffered) : boostAmountOffered; 
-
-    if (referralType === 'USER') {
-        const referringUserId = referralCodeDetails.creatingUserId;
-        redemptionMsgInstructions.push({ systemWideUserId: referringUserId, msgInstructionFlag: 'REFERRAL::REDEEMED::REFERRER' });
-        boostUserIds.push(referringUserId);
-    }
 
     const boostAudienceSelection = createAudienceConditions(boostUserIds);
     // time within which the new user has to save in order to claim the bonus
@@ -288,9 +284,15 @@ const triggerBoostForReferralCode = async (userProfile, referralCodeDetails, boo
     const statusConditions = assembleStatusConditions(referredUserId, boostParameters);
     logger('Assembled status conditions: ', statusConditions);
 
+    if (referralType === 'USER') {
+        const referringUserId = referralCodeDetails.creatingUserId;
+        statusConditions.PENDING = [`referral_code_used_by_user #{${referredUserId}}`];
+        boostUserIds.push(referringUserId);
+    }
+
     const boostPayload = {
         creatingUserId: referredUserId,
-        label: `User referral code`,
+        label: `Referral boost!`, // should probably make dynamic at some point
         boostTypeCategory: `REFERRAL::${boostCategory}`,
         boostAmountOffered: opsUtil.convertAmountDictToString(boostAmountPerUser),
         boostBudget: boostAmountPerUser.amount * boostUserIds.length,
@@ -303,10 +305,7 @@ const triggerBoostForReferralCode = async (userProfile, referralCodeDetails, boo
         boostAudience: 'INDIVIDUAL',
         boostAudienceSelection,
         initialStatus: 'PENDING',
-        statusConditions,
-        messageInstructionFlags: {
-            'REDEEMED': redemptionMsgInstructions
-        }
+        statusConditions
     };
 
     const lambdaInvocation = {
@@ -324,7 +323,7 @@ const triggerBoostForReferralCode = async (userProfile, referralCodeDetails, boo
 
     if (referralType === 'USER') {
         const [referringUser] = await Promise.all([
-            await fetchUserProfile(referralCodeDetails.systemWideUserId),
+            await fetchUserProfile(referringUserId),
             await publishEventAndUpdateProfile(userProfile, boostParameters, referralCodeDetails)
         ]);
         codeBoostDetails.codeOwnerName = referringUser.calledName || referringUser.personalName;
@@ -426,7 +425,7 @@ module.exports.useReferralCode = async (event) => {
             return opsUtil.wrapResponse({ result: 'CODE_SET_NO_BOOST' });
         }
 
-        const resultOfTrigger = await triggerBoostForReferralCode(userProfile, referralCodeDetails, referralContext);
+        const resultOfTrigger = await createBoostForReferralCode(userProfile, referralCodeDetails, referralContext);
         return opsUtil.wrapResponse(resultOfTrigger);
     } catch (err) {
         logger('FATAL_ERROR: ', err);

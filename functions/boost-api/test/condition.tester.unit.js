@@ -417,3 +417,35 @@ describe('*** BALANCE MILESTONE CONDITION ***', () => {
     });
 
 });
+
+describe('*** REFERRAL CONDITION ***', () => {
+    
+    it('Returns true when is correct user', () => {
+        const mockReferredUserId = uuid();
+        const condition = [`referral_code_used_by_user #{${mockReferredUserId}}`];
+        
+        const sampleEvent = {
+            userId: uuid(),
+            eventType: 'REFERRAL_CODE_USED',
+            eventContext: { referredUserId: mockReferredUserId }
+        };
+
+        const result = tester.testConditionsForStatus(sampleEvent, condition);
+        expect(result).to.be.true;
+    });
+
+    it('Returns false when different user', () => {
+        const mockReferredUserId = uuid();
+        const condition = [`referral_code_used_by_user #{${mockReferredUserId}}`];
+        
+        const sampleEvent = {
+            userId: uuid(),
+            eventType: 'REFERRAL_CODE_USED',
+            eventContext: { referredUserId: 'some-other-user' }
+        };
+
+        const result = tester.testConditionsForStatus(sampleEvent, condition);
+        expect(result).to.be.false;
+    });
+
+});
