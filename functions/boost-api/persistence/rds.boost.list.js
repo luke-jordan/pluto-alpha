@@ -113,11 +113,11 @@ module.exports.fetchUserBoosts = async (accountId, { excludedStatus, changedSinc
     const typeIndex = statusIndex + excludedStatus.length;
 
     // man but this needs a refactor sometime (just use length of array for index and keep adding to it)
-    const updatedTimeRestriction = changedSinceTime ? `and ${boostAccountJoinTable}.updated_time > $${typeIndex + excludedType.length} ` : '';
-    const flagRestriction = flags ? `and ${boostMainTable}.flags && $${typeIndex + excludedType.length + (changedSinceTime ? 1 : 0)} ` : '';
+    const updatedTimeRestriction = changedSinceTime ? ` and ${boostAccountJoinTable}.updated_time > $${typeIndex + excludedType.length}` : '';
+    const flagRestriction = flags ? ` and ${boostMainTable}.flags && $${typeIndex + excludedType.length + (changedSinceTime ? 1 : 0)}` : '';
     const finalClause = `${updatedTimeRestriction}${flagRestriction}`;
 
-    const selectBoostQuery = `select ${columns}, ${endTimeColumn} ` +
+    const selectBoostQuery = `select ${columns.join(', ')}, ${endTimeColumn} ` +
         `from ${boostMainTable} inner join ${boostAccountJoinTable} ` + 
             `on ${boostMainTable}.boost_id = ${boostAccountJoinTable}.boost_id ` +
         `where account_id = $1 and ` + 

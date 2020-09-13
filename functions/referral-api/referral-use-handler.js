@@ -285,7 +285,6 @@ const createBoostForReferralCode = async (userProfile, referralCodeDetails, boos
     logger('Assembled status conditions: ', statusConditions);
 
     if (referralType === 'USER') {
-        const referringUserId = referralCodeDetails.creatingUserId;
         statusConditions.PENDING = [`referral_code_used_by_user #{${referredUserId}}`];
         boostUserIds.push(referringUserId);
     }
@@ -304,7 +303,7 @@ const createBoostForReferralCode = async (userProfile, referralCodeDetails, boos
         endTimeMillis: bonusExpiryTime.valueOf(),
         boostAudience: 'INDIVIDUAL',
         boostAudienceSelection,
-        initialStatus: 'PENDING',
+        initialStatus: 'UNLOCKED',
         statusConditions
     };
 

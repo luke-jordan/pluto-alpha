@@ -448,4 +448,48 @@ describe('*** REFERRAL CONDITION ***', () => {
         expect(result).to.be.false;
     });
 
+    it('Handles correctly when balance crosses major-amount by correct user', () => {
+        const balanceCond = 'balance_crossed_major_digit #{100::WHOLE_CURRENCY::USD}'; // parameter is minimum
+        const userCond = 'save_completed_by #{referred-user}';
+
+        const sampleEvent = {
+            userId: 'referred-user',
+            accountId: uuid(),
+            eventType: 'SAVING_PAYMENT_SUCCESSFUL',
+            eventContext: {
+                transactionId: uuid(),
+                savedAmount: '50::WHOLE_CURRENCY::USD',
+                firstSave: false,
+                saveCount: 5,
+
+                preSaveBalance: '70::WHOLE_CURRENCY::USD',
+                postSaveBalance: '120::WHOLE_CURRENCY::USD'
+            }
+        };
+
+        expect(tester.testConditionsForStatus(sampleEvent, [balanceCond, userCond])).to.be.true;
+
+        const referringUserTest = { ...sampleEvent };
+        referringUserTest.userId = 'referring-user';
+        expect(tester.testConditionsForStatus(referringUserTest, [balanceCond, userCond])).to.be.false;
+    });
+
+    it('Withdrawal conditions', () => {
+        const timeCond = `withdrawal_before #{${moment().add(1, 'days').valueOf()}}`;
+        const userCond = `withdrawal_by #{referred-user}`;
+
+        const sampleEvent = {
+            userId: 'referred-user',
+            eventType: 'ADMIN_SETTLED_WITHDRAWAL',
+            eventContext: {
+                timeInMillis: moment().valueOf()
+            }
+        };
+
+        expect(tester.testConditionsForStatus(sampleEvent, [timeCond, userCond])).to.be.true;
+
+        const referrerEvent = { ...sampleEvent, userId: 'referring-user' };
+        expect(tester.testConditionsForStatus(referrerEvent, [timeCond, userCond])).to.be.false;
+    });
+
 });

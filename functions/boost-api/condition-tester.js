@@ -24,11 +24,12 @@ const EVENT_BASED_CONDITIONS = [
 
 const EVENT_TYPE_CONDITION_MAP = {
     'SAVING_PAYMENT_SUCCESSFUL': SAVE_CONDITIONS,
-    'WITHDRAWAL_EVENT_CONFIRMED': ['balance_below', 'withdrawal_before'],
+    'ADMIN_SETTLED_WITHDRAWAL': ['balance_below', 'withdrawal_before', 'withdrawal_by'],
     'USER_GAME_COMPLETION': ['number_taps_greater_than', 'percent_destroyed_above', 'number_taps_less_than', 'percent_destroyed_below'],
     'BOOST_EXPIRED': ['number_taps_in_first_N', 'percent_destroyed_in_first_N', 'randomly_chosen_first_N'],
     'FRIEND_REQUEST_INITIATED_ACCEPTED': ['friends_added_since', 'total_number_friends'],
-    'FRIEND_REQUEST_TARGET_ACCEPTED': ['friends_added_since', 'total_number_friends']
+    'FRIEND_REQUEST_TARGET_ACCEPTED': ['friends_added_since', 'total_number_friends'],
+    'REFERRAL_CODE_USED': ['referral_code_used_by_user']
 };
 
 // expects in form AMOUNT::UNIT::CURRENCY
@@ -207,7 +208,7 @@ const checkEventFollows = (parameterValue, eventContext) => {
 const checkReferralEvent = (parameterValue, eventContext) => {
     const requiredUserId = parameterValue;
     return requiredUserId === eventContext.referredUserId;
-}
+};
 
 // this one is always going to be complex -- in time maybe split out the switch block further
 // eslint-disable-next-line complexity
@@ -250,7 +251,7 @@ module.exports.testCondition = (event, statusCondition) => {
             return safeEvaluateAbove(eventContext, 'savedAmount', parameterValue) && currency(eventContext.savedAmount) === currency(parameterValue);
         case 'save_completed_by':
             logger(`Checking if save completed by ${event.accountId} === ${parameterValue}, result: ${event.accountId === parameterValue}`);
-            return event.accountId === parameterValue;
+            return event.accountId === parameterValue || event.userId === parameterValue;
         case 'first_save_by':
             return event.accountId === parameterValue && eventHasContext && eventContext.firstSave;
         case 'first_save_above':
@@ -258,8 +259,6 @@ module.exports.testCondition = (event, statusCondition) => {
         case 'balance_below':
             logger('Checking balance below: ', equalizeAmounts(parameterValue), ' event context: ', equalizeAmounts(eventContext.newBalance));
             return equalizeAmounts(eventContext.newBalance) < equalizeAmounts(parameterValue);
-        case 'withdrawal_before':
-            return safeEvaluateAbove(eventContext, 'withdrawalAmount', 0) && evaluateWithdrawal(parameterValue, event.eventContext);
         case 'balance_crossed_major_digit':
             return evaluateCrossedDigit(parameterValue, eventContext);
         case 'balance_crossed_abs_target':
@@ -305,6 +304,12 @@ module.exports.testCondition = (event, statusCondition) => {
         // referral conditions
         case 'referral_code_used_by_user':
             return checkReferralEvent(parameterValue, eventContext);
+
+        // withdrawal conditions
+        case 'withdrawal_before':
+            return evaluateWithdrawal(parameterValue, event.eventContext);
+        case 'withdrawal_by':
+            return event.accountId === parameterValue || event.userId === parameterValue;
 
         default:
             logger('Condition type not supported yet');

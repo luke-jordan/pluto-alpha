@@ -268,7 +268,7 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
 
         const expectedBoostResponse = {
             ...userReferralDefaults,
-            // boostEndTimeMillis: testEndTime.valueOf(),
+            boostEndTimeMillis: testEndTime.valueOf(),
             codeOwnerName: 'Original person'
         };
         expect(resultBody).to.deep.equal({ result: 'BOOST_CREATED', codeBoostDetails: expectedBoostResponse });
@@ -370,20 +370,16 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
             ]
         };
 
-        const expectedMsgInstructions = [
-            { systemWideUserId: testReferredUserId, msgInstructionFlag: 'REFERRAL::REDEEMED::REFERRED' }
-        ];
-
         const expectedStatusConditions = {
             REDEEMED: [
                 `save_completed_by #{${testReferredUserId}}`, 'balance_crossed_abs_target #{100000::HUNDREDTH_CENT::USD}'
             ],
-            REVOKED: [`withdrawal_before #{${testRevokeLimit.valueOf()}}`]
+            REVOKED: [`withdrawal_by #{${testReferredUserId}}`, `withdrawal_before #{${testRevokeLimit.valueOf()}}`]
         };
 
         const expectedBoostPayload = {
             creatingUserId: testReferredUserId,
-            label: `User referral code`,
+            label: `Referral boost!`,
             boostTypeCategory: 'REFERRAL::BETA_CODE_USED',
             boostAmountOffered: '10000::HUNDREDTH_CENT::USD',
             boostBudget: 10000,
@@ -391,9 +387,8 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
             endTimeMillis: testEndTime.valueOf(),
             boostAudience: 'INDIVIDUAL',
             boostAudienceSelection: expectedAudienceSelection,
-            initialStatus: 'PENDING',
-            statusConditions: expectedStatusConditions,
-            messageInstructionFlags: { 'REDEEMED': expectedMsgInstructions }
+            initialStatus: 'UNLOCKED',
+            statusConditions: expectedStatusConditions
         };
 
         expect(lambdaInvokeStub).to.have.been.calledOnce;

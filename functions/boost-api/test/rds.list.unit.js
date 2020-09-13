@@ -237,14 +237,14 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
             `boost_data.boost.boost_id`, 'boost_status', 'label', 'start_time', 'boost_data.boost_account_status.updated_time', 
             'active', 'boost_type', 'boost_category', 'boost_amount', 'boost_unit', 'boost_currency', 'from_float_id',
             'status_conditions', 'message_instruction_ids', 'game_params', 'reward_parameters', 'boost_data.boost.flags'
-        ];
+        ].join(', ');
     
         const selectBoostQuery = `select ${expectedColumns}, ${expiryTimeClause} ` +
             `from boost_data.boost inner join boost_data.boost_account_status ` + 
             `on boost_data.boost.boost_id = boost_data.boost_account_status.boost_id where account_id = $1 and ` + 
-            `boost_status not in ($2) order by boost_data.boost_account_status.creation_time desc`;
+            `boost_status not in ($2)  order by boost_data.boost_account_status.creation_time desc`;
 
-         const expectedValues = [testAccountId, 'CREATED', 'REFERRAL'];
+         const expectedValues = [testAccountId, 'CREATED'];
 
         const result = await rds.fetchUserBoosts(testAccountId);
         expect(result).to.deep.equal([camelizeKeys(boostFromPersistence), camelizeKeys(boostFromPersistence)]);
@@ -259,13 +259,13 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
             `boost_data.boost.boost_id`, 'boost_status', 'label', 'start_time', 'boost_data.boost_account_status.updated_time', 'active',
             'boost_type', 'boost_category', 'boost_amount', 'boost_unit', 'boost_currency', 'from_float_id',
             'status_conditions', 'message_instruction_ids', 'game_params', 'reward_parameters', 'boost_data.boost.flags'
-        ];
+        ].join(', ');
     
         const selectBoostQuery = `select ${expectedColumns}, ${expiryTimeClause} from boost_data.boost inner join boost_data.boost_account_status ` + 
             `on boost_data.boost.boost_id = boost_data.boost_account_status.boost_id where account_id = $1 and ` + 
-            `boost_status not in ($2, $3, $4) and boost_data.boost_account_status.updated_time > $6 ` +
+            `boost_status not in ($2, $3, $4)  and boost_data.boost_account_status.updated_time > $5 ` +
             `order by boost_data.boost_account_status.creation_time desc`;
-         const expectedValues = [testAccountId, 'CREATED', 'OFFERED', 'EXPIRED', 'REFERRAL', dummyTime.format()];
+         const expectedValues = [testAccountId, 'CREATED', 'OFFERED', 'EXPIRED', dummyTime.format()];
 
         const result = await rds.fetchUserBoosts(testAccountId, { changedSinceTime: dummyTime, excludedStatus: ['CREATED', 'OFFERED', 'EXPIRED'] });
    
@@ -281,14 +281,14 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
             `boost_data.boost.boost_id`, 'boost_status', 'label', 'start_time', 'boost_data.boost_account_status.updated_time', 'active',
             'boost_type', 'boost_category', 'boost_amount', 'boost_unit', 'boost_currency', 'from_float_id',
             'status_conditions', 'message_instruction_ids', 'game_params', 'reward_parameters', 'boost_data.boost.flags'
-        ];
+        ].join(', ');
     
         const selectBoostQuery = `select ${expectedColumns}, ${expiryTimeClause} from boost_data.boost inner join boost_data.boost_account_status ` + 
             `on boost_data.boost.boost_id = boost_data.boost_account_status.boost_id where account_id = $1 and ` + 
-            `boost_status not in ($2, $3, $4, $5) and boost_data.boost.flags && $7 ` +
+            `boost_status not in ($2, $3, $4, $5)  and boost_data.boost.flags && $6 ` +
             `order by boost_data.boost_account_status.creation_time desc`;
 
-         const expectedValues = [testAccountId, 'REDEEMED', 'REVOKED', 'FAILED', 'EXPIRED', 'REFERRAL', ['FRIEND_TOURNAMENT']];
+         const expectedValues = [testAccountId, 'REDEEMED', 'REVOKED', 'FAILED', 'EXPIRED', ['FRIEND_TOURNAMENT']];
         
         const fetchParams = { excludedStatus: ['REDEEMED', 'REVOKED', 'FAILED', 'EXPIRED'], flags: ['FRIEND_TOURNAMENT'] };
         const result = await rds.fetchUserBoosts(testAccountId, fetchParams);

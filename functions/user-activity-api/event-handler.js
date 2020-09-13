@@ -81,7 +81,7 @@ const EVENT_DISPATCHER = {
     FRIEND_REQUEST_TARGET_ACCEPTED: friendEventHandler.handleFriendshipConnectedEvent,
     FRIEND_REQUEST_INITIATED_ACCEPTED: friendEventHandler.handleFriendshipConnectedEvent,
     // some events just need to be routed, as with this one, for now
-    REFERRAL_CODE_USED: ({ eventBody, publisher }) => genericDispatchHelper.sendEventToBoostProcessing(eventBody, publisher),
+    REFERRAL_CODE_USED: ({ eventBody }) => genericDispatchHelper.sendEventToBoostProcessing(eventBody, publisher)
 };
 
 const EVENT_REQUIRES_CONTACT = {
@@ -97,7 +97,7 @@ const EVENT_REQUIRES_CONTACT = {
     BOOST_REDEEMED: { requiresProfile: false },
     FRIEND_REQUEST_TARGET_ACCEPTED: { requiresProfile: false },
     FRIEND_REQUEST_INITIATED_ACCEPTED: { requiresProfile: false },
-    REFERRAL_CODE_USED: { requiresProfile:  false }
+    REFERRAL_CODE_USED: { requiresProfile: false }
 };
 
 /**
