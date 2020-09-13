@@ -23,8 +23,10 @@ const findBoostStub = sinon.stub();
 const findAccountsStub = sinon.stub();
 const updateBoostAccountStub = sinon.stub();
 const fetchUncreatedBoostsStub = sinon.stub();
+const getAccountIdStub = sinon.stub();
 
 const redemptionHandlerStub = sinon.stub();
+const updateBoostRedeemedStub = sinon.stub();
 
 const queryStub = sinon.stub();
 const multiTableStub = sinon.stub();
@@ -57,10 +59,15 @@ const boostEventHandler = proxyquire('../boost-event-handler', {
         'findBoost': findBoostStub,
         'findAccountsForBoost': findAccountsStub,
         'updateBoostAccountStatus': updateBoostAccountStub,
-        'fetchUncreatedActiveBoostsForAccount': fetchUncreatedBoostsStub
+        'fetchUncreatedActiveBoostsForAccount': fetchUncreatedBoostsStub,
+        'getAccountIdForUser': getAccountIdStub,
+        'updateBoostAmountRedeemed': updateBoostRedeemedStub
     },
     './boost-redemption-handler': {
         'redeemOrRevokeBoosts': redemptionHandlerStub
+    },
+    'publish-common': {
+        'publishMultiUserEvent': publishMultiStub
     },
     'moment': momentStub,
     '@noCallThru': true
@@ -325,6 +332,84 @@ describe('*** UNIT TEST BOOST PROCESSING *** Individual or limited users', () =>
         logger('Result of record: ', resultOfEventRecord);
 
         expect(resultOfEventRecord).to.exist;
+    });
+
+    it('Handles withdrawal based revocation', async () => {
+        const testBoostId = 'mock-boost-id';
+        const testEvent = {
+            userId: 'referred-user-id',
+            eventType: 'ADMIN_SETTLED_WITHDRAWAL',
+            eventContext: {
+                timeInMillis: moment().valueOf(),
+                resultPayload: { }
+            }
+        };
+
+        const boostFromPersistence = JSON.parse(JSON.stringify(mockBoostToFromPersistence));
+        boostFromPersistence.boostId = testBoostId;
+        boostFromPersistence.statusConditions.REVOKED = [
+            'withdrawal_by #{referred-user-id}', 
+            `withdrawal_before #{${moment().add(1, 'days').valueOf()}}`
+        ];
+        boostFromPersistence.flags = ['REDEEM_ALL_AT_ONCE'];
+        
+        // we could write a query for this, but we only call it if the event is withdrawal (at present), so this route works for now
+        const revokeKey = { accountId: [testReferredUser], boostStatus: ['REDEEMED'] };
+
+        getAccountIdStub.withArgs('referred-user-id').resolves(testReferredUser);
+        findBoostStub.resolves([]);
+        findBoostStub.withArgs(revokeKey).resolves([boostFromPersistence]);
+        fetchUncreatedBoostsStub.resolves([]);
+        
+        findAccountsStub.withArgs({ boostIds: [testBoostId], status: ['REDEEMED'] }).resolves([{ 
+            boostId: 'mock-boost-id',
+            accountUserMap: {
+                [testReferredUser]: { userId: 'referred-user-id', status: 'REDEEMED' },
+                [testReferringUser]: { userId: 'referring-user-id', status: 'REDEEMED' }
+            }
+        }]);
+
+        // then we update the boost statuses
+        const updateProcessedTime = moment();
+        const testUpdateInstruction = [{
+            boostId: testBoostId,
+            accountIds: [testReferredUser, testReferringUser],
+            newStatus: 'REVOKED',
+            stillActive: false,
+            logType: 'STATUS_CHANGE',
+            logContext: { newStatus: 'REVOKED', boostAmount: 100000, transactionId: uuid() }
+        }];
+        // logger('Expecting update instructions: ', testUpdateInstruction);
+        updateBoostAccountStub.withArgs(testUpdateInstruction).resolves([{ boostId: testBoostId, updatedTime: updateProcessedTime }]);
+        
+        // then we hand over to the boost redemption handler, which does a lot of stuff
+        redemptionHandlerStub.resolves({ [testBoostId]: { result: 'SUCCESS' }});
+
+        const resultOfEventRecord = await boostEventHandler.handleBatchOfQueuedEvents(wrapEventAsSqs(testEvent));
+        logger('Result of record: ', resultOfEventRecord);
+
+        expect(resultOfEventRecord).to.exist;
+        // expect(resultOfEventRecord).to.deep.equal({ statusCode: 200 });
+
+        const mockRedemptionMap = { 
+            [testReferredUser]: { userId: 'referred-user-id', status: 'REDEEMED', newStatus: 'REVOKED' },
+            [testReferringUser]: { userId: 'referring-user-id', status: 'REDEEMED', newStatus: 'REVOKED' } 
+        };
+
+        const expectedRedemptionCall = { 
+            redemptionBoosts: [], 
+            revocationBoosts: [boostFromPersistence], 
+            affectedAccountsDict: { [testBoostId]: mockRedemptionMap },
+            event: { ...testEvent, accountId: testReferredUser }
+        };
+
+        expect(redemptionHandlerStub).to.have.been.calledOnce;
+        expect(redemptionHandlerStub).to.have.been.calledOnceWithExactly(expectedRedemptionCall);
+        expect(updateBoostRedeemedStub).to.have.been.calledOnceWithExactly([testBoostId]);
+
+        expect(fetchUncreatedBoostsStub).to.have.been.calledOnceWithExactly(testReferredUser);
+        
+        expect(publishMultiStub).to.have.been.calledOnceWith(['referred-user-id', 'referring-user-id'], 'REFERRAL_BOOST_REVOKED');
     });
 
 });

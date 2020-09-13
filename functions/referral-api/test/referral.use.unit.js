@@ -303,7 +303,7 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
             boostBudget: 20000,
             boostSource: testBoostSource,
             endTimeMillis: testEndTime.valueOf(),
-            boostAudience: 'INDIVIDUAL',
+            boostAudienceType: 'INDIVIDUAL',
             boostAudienceSelection: expectedAudienceSelection,
             initialStatus: 'UNLOCKED',
             statusConditions: expectedStatusConditions
@@ -385,7 +385,7 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
             boostBudget: 10000,
             boostSource: testBoostSource,
             endTimeMillis: testEndTime.valueOf(),
-            boostAudience: 'INDIVIDUAL',
+            boostAudienceType: 'INDIVIDUAL',
             boostAudienceSelection: expectedAudienceSelection,
             initialStatus: 'UNLOCKED',
             statusConditions: expectedStatusConditions

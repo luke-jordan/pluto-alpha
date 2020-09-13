@@ -301,7 +301,7 @@ const createBoostForReferralCode = async (userProfile, referralCodeDetails, boos
             bonusPoolId
         },
         endTimeMillis: bonusExpiryTime.valueOf(),
-        boostAudience: 'INDIVIDUAL',
+        boostAudienceType: 'INDIVIDUAL',
         boostAudienceSelection,
         initialStatus: 'UNLOCKED',
         statusConditions

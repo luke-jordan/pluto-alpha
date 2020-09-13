@@ -48,7 +48,8 @@ const assembleStatusChangeAccountMap = async (boost, initiatingAccountId, newSta
     const restrictToInitiator = boost.boostAudienceType === 'GENERAL' || !redeemsAll;
     
     // now we fetch the relevant accounts
-    const findAccountsParams = { boostIds: [boost.boostId], status: util.ACTIVE_BOOST_STATUS };
+    const statusFilter = newStatus === 'REVOKED' ? ['REDEEMED'] : util.ACTIVE_BOOST_STATUS; 
+    const findAccountsParams = { boostIds: [boost.boostId], status: statusFilter };
     if (restrictToInitiator) {
         findAccountsParams.accountIds = [initiatingAccountId];
     }
@@ -234,6 +235,17 @@ const publishWithdrawalLog = async (boost, newStatus, accountMap) => {
     await publisher.publishMultiUserEvent(userIds, eventType, { context: logContext });
 };
 
+const publishReferralRevokeLog = async (revokedReverralBoosts, affectedAccountsDict) => {
+    const publishPromises = revokedReverralBoosts.map((boost) => {
+        const eventType = 'REFERRAL_BOOST_REVOKED';
+        const accountMap = affectedAccountsDict[boost.boostId];
+        const userIds = Object.values(accountMap).map(({ userId }) => userId);
+        const logContext = util.constructBoostContext(boost);
+        return publisher.publishMultiUserEvent(userIds, eventType, { context: logContext });
+    });
+    await Promise.all(publishPromises);
+};
+
 const fetchHistoryFromLogs = async (startTime, eventsOfInterest, thisEvent) => {
     const { eventType, userId, timeInMillis: timestamp } = thisEvent;
     const historyPayload = { userId, eventTypes: eventsOfInterest, startDate: startTime.valueOf(), excludeContext: true };
@@ -280,16 +292,34 @@ const obtainEventHistoryForBoosts = async (boosts, event) => {
     return fetchHistoryFromLogs(earliestBoost[0].boostStartTime, allSequenceEvents, event);
 };
 
+const checkForRevocationBoosts = async (event) => {
+    if (!util.REVOKE_EVENTS.includes(event.eventType)) {
+        return [];
+    }
+
+    logger('Event is revoke-relevant, conduct checks');
+
+    const { accountId } = event;
+    // if it is not redeemed, no point thinking about revoking
+    const allPossibleBoosts = await persistence.findBoost({ accountId: [accountId], boostStatus: ['REDEEMED'] });
+    // as noted in tests, may be able to do this in RDS with new method/query, but for now just doing it here
+    const boostsWithRevoke = allPossibleBoosts.filter(({ statusConditions }) => statusConditions.REVOKED && statusConditions.REVOKED.length > 0);
+    logger('Have boosts with revoke conditions: ', JSON.stringify(boostsWithRevoke));
+    return boostsWithRevoke;
+};
+
 const processEventForExistingBoosts = async (event) => {
-    const offeredOrPendingBoosts = await persistence.findBoost(extractFindBoostKey(event));
+    const [offeredOrPendingBoosts, possibleRevokeBoosts] = await Promise.all([
+        persistence.findBoost(extractFindBoostKey(event)), checkForRevocationBoosts(event)]);
+    const boostsToConsider = [...offeredOrPendingBoosts, ...possibleRevokeBoosts];
     // logger('Processing event for existing boosts, current pending or offered: ', JSON.stringify(offeredOrPendingBoosts, null, 2));
 
-    if (!offeredOrPendingBoosts || offeredOrPendingBoosts.length === 0) {
+    if (!boostsToConsider || boostsToConsider.length === 0) {
         logger('Well, nothing found, so just return');
         return { statusCode: statusCodes('Ok'), body: JSON.stringify({ boostsTriggered: 0 })};
     }
 
-    const boostsWithIntervalOrSequenceConditions = offeredOrPendingBoosts.filter((boost) => util.hasTimeBasedConditions(boost));
+    const boostsWithIntervalOrSequenceConditions = boostsToConsider.filter((boost) => util.hasTimeBasedConditions(boost));
     logger('How many boosts have time based conditions: ', boostsWithIntervalOrSequenceConditions.length);
     if (boostsWithIntervalOrSequenceConditions.length > 0) {
         logger('Enriching event with user history, if applicable');
@@ -300,12 +330,12 @@ const processEventForExistingBoosts = async (event) => {
     // for each offered or pending boost, we check if the event triggers a status change, and hence compose an object
     // whose keys are the boost IDs and whose values are the lists of statuses whose conditions have been met
     const boostStatusChangeDict = { };
-    offeredOrPendingBoosts.forEach((boost) => {
+    boostsToConsider.forEach((boost) => {
         boostStatusChangeDict[boost.boostId] = conditionTester.extractStatusChangesMet(event, boost);
     });
     logger('Map of status changes triggered: ', boostStatusChangeDict);
     
-    const boostsForStatusChange = offeredOrPendingBoosts.filter((boost) => boostStatusChangeDict[boost.boostId].length !== 0);
+    const boostsForStatusChange = boostsToConsider.filter((boost) => boostStatusChangeDict[boost.boostId].length !== 0);
     // logger('These boosts were triggered: ', boostsForStatusChange);
 
     if (!boostsForStatusChange || boostsForStatusChange.length === 0) {
@@ -358,15 +388,20 @@ const processEventForExistingBoosts = async (event) => {
         persistence.updateBoostAmountRedeemed(boostsToUpdateRedemption);        
     }
 
-    const withdrawalRelatedBoosts = boostsForStatusChange.filter((boost) => boost.flags && boost.flags.includes('WITHDRAWAL_HALTING'));
-    if (withdrawalRelatedBoosts.length > 0) {
-        await Promise.all(withdrawalRelatedBoosts.map((boost) => publishWithdrawalLog(boost, boostStatusChangeDict[boost.boostId][0], affectedAccountsDict[boost.boostId])));
+    const withdrawalPreventBoosts = boostsForStatusChange.filter((boost) => boost.flags && boost.flags.includes('WITHDRAWAL_HALTING'));
+    if (withdrawalPreventBoosts.length > 0) {
+        await Promise.all(withdrawalPreventBoosts.map((boost) => publishWithdrawalLog(boost, boostStatusChangeDict[boost.boostId][0], affectedAccountsDict[boost.boostId])));
     }
 
     const nonRedemptionBoosts = boostsForStatusChange.filter((boost) => !boostStatusChangeDict[boost.boostId].includes('REDEEMED'));
     if (nonRedemptionBoosts.length > 0) {
         logger('Completed processing, publish status changes made');
         await publishStatusLogs(nonRedemptionBoosts, boostStatusChangeDict, affectedAccountsDict);    
+    }
+
+    const revokedReverralBoosts = boostsToRevoke.filter((boost) => boost.boostType === 'REFERRAL');
+    if (revokedReverralBoosts.length > 0) {
+        await publishReferralRevokeLog(revokedReverralBoosts, affectedAccountsDict);
     }
 
     return {
