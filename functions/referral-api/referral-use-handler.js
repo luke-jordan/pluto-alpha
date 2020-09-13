@@ -238,6 +238,10 @@ const publishReferralCodeEvent = async (referredUserProfile, referralCodeDetails
     const { boostAmountOffered } = referralContext;
     const boostAmountPerUser = typeof boostAmountOffered === 'string' ? opsUtil.convertAmountStringToDict(boostAmountOffered) : boostAmountOffered; 
     const referralAmountForUser = opsUtil.convertToUnit(boostAmountPerUser.amount, boostAmountPerUser.unit, 'WHOLE_CURRENCY');
+
+    const messageParameters = {
+        referredUserCalledName: referredUserProfile.calledName || referredUserProfile.personalName
+    };
      
     const logOptions = {
         initiator: referredUserId,
@@ -248,7 +252,7 @@ const publishReferralCodeEvent = async (referredUserProfile, referralCodeDetails
             referralCode: referralCodeDetails.referralCode,
             refCodeCreationTime: referralCodeDetails.persistedTimeMillis,
             referredUserCreationTime: referredUserProfile.creationTimeEpochMillis,
-            referredUserCalledName: referredUserProfile.calledName || referredUserProfile.personalName
+            messageParameters
         }
     };
 

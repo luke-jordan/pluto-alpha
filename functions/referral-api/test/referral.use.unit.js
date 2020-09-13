@@ -330,7 +330,7 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
                 referralCode: testReferralCode,
                 refCodeCreationTime: testRefCodeCreationTime,
                 referredUserCreationTime: testProfileCreationTime,
-                referredUserCalledName: 'Used'
+                messageParameters: { referredUserCalledName: 'Used' }
             }
         };
         expect(publishStub).to.have.been.calledOnceWithExactly(testReferringUserId, 'REFERRAL_CODE_USED', expectedLogOptions);
