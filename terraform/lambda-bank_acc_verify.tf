@@ -121,5 +121,5 @@ resource "aws_cloudwatch_metric_alarm" "security_metric_alarm_bank_account_verif
   period = 60
   threshold = 0
   statistic = "Sum"
-  alarm_actions = ["${aws_sns_topic.security_errors_topic.arn}"]
+  alarm_actions = [aws_sns_topic.security_errors_topic.arn]
 }

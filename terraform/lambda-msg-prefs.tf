@@ -150,5 +150,5 @@ resource "aws_cloudwatch_metric_alarm" "security_metric_alarm_message_preference
   period = 60
   threshold = 0
   statistic = "Sum"
-  alarm_actions = ["${aws_sns_topic.security_errors_topic.arn}"]
+  alarm_actions = [aws_sns_topic.security_errors_topic.arn]
 }

@@ -20,6 +20,7 @@ const paramRegex = /#{(?<paramName>[^}]*)}/g;
 const STANDARD_PARAMS = [
     'user_first_name',
     'user_full_name',
+    'user_referral_code',
     'current_balance',
     'opened_date',
     'total_interest',
@@ -35,7 +36,7 @@ const UNIT_DIVISORS = {
     'WHOLE_CURRENCY': 1 
 };
 
-const PROFILE_COLS = ['system_wide_user_id', 'personal_name', 'family_name', 'called_name', 'creation_time_epoch_millis', 'default_currency'];
+const PROFILE_COLS = ['system_wide_user_id', 'personal_name', 'family_name', 'called_name', 'referral_code', 'creation_time_epoch_millis', 'default_currency'];
 
 const getSubParamOrDefault = (paramSplit, defaultValue) => (paramSplit.length > 1 ? paramSplit[1] : defaultValue);
 
@@ -129,6 +130,9 @@ const retrieveParamValue = async (param, destinationUserId, userProfile) => {
         const userId = getSubParamOrDefault(paramSplit, destinationUserId, userProfile);
         logger('Fetching username with ID: ', userId);
         return fetchUserName(userId, userProfile, false);
+    } else if (paramName === 'user_referral_code') {
+        const { referralCode } = userProfile;
+        return referralCode;
     } else if (paramName === 'opened_date') {
         const specifiedDateFormat = getSubParamOrDefault(paramSplit, config.get('picker.defaults.dateFormat'));
         return fetchAccountOpenDates(userProfile, specifiedDateFormat);

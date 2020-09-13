@@ -194,10 +194,8 @@ describe('createAccountMethod and wrapper', () => {
         expect(response.persistedTimeMillis).to.equal(expectedMillis);
         
         expect(countRefStemStub).to.have.been.calledOnceWithExactly('LJORDAN');
-        expect(getAccountIdForUserStub).to.have.been.calledTwice;
-        expect(getAccountIdForUserStub).to.have.been.calledWithExactly(testUserId);
-        expect(getAccountIdForUserStub).to.have.been.calledWithExactly(testReferringUserId);
-        expect(lambdaInvokeStub).to.have.been.calledOnce;
+        expect(getAccountIdForUserStub).to.have.been.calledOnceWithExactly(testUserId);
+        expect(lambdaInvokeStub).to.have.not.been.called;
         
         testInsertArgs();
     });
@@ -216,9 +214,7 @@ describe('createAccountMethod and wrapper', () => {
         expect(response.persistedTimeMillis).to.equal(expectedMillis);
 
         expect(countRefStemStub).to.have.been.calledOnceWithExactly('LJORDAN');
-        expect(getAccountIdForUserStub).to.have.been.calledTwice;
-        expect(getAccountIdForUserStub).to.have.been.calledWith(testUserId);
-        expect(getAccountIdForUserStub).to.have.been.calledWith(testReferringUserId);
+        expect(getAccountIdForUserStub).to.have.been.calledOnceWithExactly(testUserId);
         expect(lambdaInvokeStub).to.have.not.been.called;
         
         testInsertArgs();
@@ -239,7 +235,7 @@ describe('createAccountMethod and wrapper', () => {
 
         expect(countRefStemStub).to.have.been.calledOnceWithExactly('LJORDAN');
         expect(getAccountIdForUserStub).to.have.been.calledOnceWith(testUserId);
-        expect(lambdaInvokeStub).to.have.been.calledOnce;
+        expect(lambdaInvokeStub).to.have.not.been.called;
         
         testInsertArgs();
     });
@@ -263,7 +259,7 @@ describe('createAccountMethod and wrapper', () => {
     });
 
     // a number of systems do not like these
-    it('End to end, all same, but strips accents from human ref', async () => {
+    it('End to end, all same, but strips accents and apostrophes from human ref', async () => {
         getAccountIdForUserStub.withArgs(testUserId).resolves(null);
         countRefStemStub.resolves(1);
         insertRecordStub.resolves(testAccountOpeningResult);
@@ -271,18 +267,18 @@ describe('createAccountMethod and wrapper', () => {
         getAccountIdForUserStub.withArgs(testReferringUserId).resolves(testReferringAccId);
         lambdaInvokeStub.returns({ promise: () => ({ statusCode: 200 })});
         
-        const testRequest = { ...testCreationRequest, personalName: 'Öller', familyName: 'COETZÉ' };
+        const testRequest = { ...testCreationRequest, personalName: 'Öller', familyName: 'DE C\'OETZÉ' };
         const response = await accountHandler.createAccount(testRequest);
         
         expect(response).to.exist;
         expect(response.accountId).to.be.a.uuid('v4');
         expect(response.persistedTimeMillis).to.equal(expectedMillis);
         
-        expect(countRefStemStub).to.have.been.calledOnceWithExactly('OCOETZE');
+        expect(countRefStemStub).to.have.been.calledOnceWithExactly('ODECOETZE');
         expect(getAccountIdForUserStub).to.have.been.calledOnceWithExactly(testUserId);
-        expect(lambdaInvokeStub).to.have.been.calledOnce;
+        expect(lambdaInvokeStub).to.have.not.been.called;
         
-        testInsertArgs('OCOETZE2X');
+        testInsertArgs('ODECOETZE2X');
     });
 
     it('Handles errors in accordance with standards', async () => {

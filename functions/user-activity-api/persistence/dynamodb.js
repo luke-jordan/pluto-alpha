@@ -12,6 +12,8 @@ const dynamoCommon = require('dynamo-common');
 
 const Redis = require('ioredis');
 
+const clientFloatVariablePrefix = config.get('cache.keyPrefixes.clientFloat');
+
 const CACHE_TTL_IN_SECONDS = config.get('cache.ttls.clientFloat');
 const HASH_ALGORITHM = config.get('bank.hash');
 
@@ -29,12 +31,9 @@ const relevantFloatColumns = [
 const initiateCacheConnection = async () => {
     logger('Initiating connection to cache');
     try {
-        // TODO: change `retryStrategy` to default when redis-connection is set
         const connectionToCache = new Redis({ 
             port: config.get('cache.port'), 
-            host: config.get('cache.host'), 
-            retryStrategy: () => `dont retry`, 
-            keyPrefix: `${config.get('cache.keyPrefixes.clientFloat')}::`
+            host: config.get('cache.host')
         });
         logger('Successfully initiated connection to cache');
         return connectionToCache;
@@ -43,6 +42,10 @@ const initiateCacheConnection = async () => {
         return null;
     }
 };
+
+// ///////////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////// FETCHING CLIENT-FLOAT VARS /////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 const fetchFloatVarsForBalanceCalcFromDB = async (clientId, floatId) => {
     logger(`Fetching 'float vars for balance calc' from database`);
@@ -65,7 +68,7 @@ const fetchFloatVarsForBalanceCalcFromCache = async (cacheKeyWithoutPrefixForFlo
         return { cache: null, responseFromCache: null };
     }
 
-    const responseFromCache = await cache.get(cacheKeyWithoutPrefixForFloatVars);
+    const responseFromCache = await cache.get(`${clientFloatVariablePrefix}::${cacheKeyWithoutPrefixForFloatVars}`);
     return { cache, responseFromCache };
 };
 
@@ -102,10 +105,11 @@ module.exports.fetchFloatVarsForBalanceCalc = async (clientId, floatId) => {
     return fetchFloatVarsForBalanceCalcFromCacheOrDB(clientId, floatId);
 };
 
-/**
- * These functions handle storing the fact that a set of bank account details have been verified (or not)
- */
+// ///////////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////// HANDLING BANK VERIFICATION /////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+// These functions handle storing the fact that a set of bank account details have been verified (or not)
 const hashBankDetails = (bankDetails) => crypto.createHash(HASH_ALGORITHM).update(JSON.stringify({
     bankName: bankDetails.bankName,
     accountNumber: bankDetails.accountNumber,

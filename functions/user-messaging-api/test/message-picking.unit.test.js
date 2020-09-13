@@ -61,7 +61,15 @@ const handler = proxyquire('../message-picking-handler', {
 
 describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
 
-    const relevantProfileCols = ['system_wide_user_id', 'personal_name', 'family_name', 'called_name', 'creation_time_epoch_millis', 'default_currency'];
+    const relevantProfileCols = [
+        'system_wide_user_id', 
+        'personal_name', 
+        'family_name', 
+        'called_name', 
+        'referral_code',
+        'creation_time_epoch_millis', 
+        'default_currency'
+    ];
 
     const minimalMsgFromTemplate = (template, priority, followsPriorMsg = false) => ({
         messageId: uuid(),
@@ -84,7 +92,8 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
             personalName: 'Luke', 
             familyName: 'Jordan', 
             creationTimeEpochMillis: testOpenMoment.valueOf(), 
-            defaultCurrency: 'USD'
+            defaultCurrency: 'USD',
+            referralCode: 'REFCODE123'
         });
     });
 
@@ -167,6 +176,18 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
         expect(filledMessage[0].body).to.equal(expectedMessage);
 
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(assembleLambdaInvoke('last_saved_amount::USD'));
+    });
+
+    it('Fills in referral code properly', async () => {
+        // in time, could also obtain current float details and hence automate (e.g., after account sign up) -- do if enough pull
+        const expectedMessage = 'Hello Luke Jordan. We are offering a referral bonus of $10. Give someone REFCODE123 as your code';
+        const msgBody = minimalMsgFromTemplate(
+            'Hello #{user_full_name}. We are offering a referral bonus of $10. Give someone #{user_referral_code} as your code'
+        );
+        lamdbaInvokeStub.returns({ promise: () => 'UNNECESSARY_HERE' }); // avoiding spurious errors
+
+        const filledMessage = await handler.assembleMessage(msgBody);
+        expect(filledMessage.body).to.equal(expectedMessage);
     });
 
     it('Fills in account balances properly', async () => {

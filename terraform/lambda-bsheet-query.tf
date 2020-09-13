@@ -127,5 +127,5 @@ resource "aws_cloudwatch_metric_alarm" "security_metric_alarm_balance_sheet_quer
   period = 60
   threshold = 0
   statistic = "Sum"
-  alarm_actions = ["${aws_sns_topic.security_errors_topic.arn}"]
+  alarm_actions = [aws_sns_topic.security_errors_topic.arn]
 }

@@ -1,16 +1,12 @@
 'use strict';
 
 const logger = require('debug')('jupiter:account:handler');
-const config = require('config');
 
 const uuid = require('uuid/v4');
 const moment = require('moment');
 const validator = require('validator');
 
 const persistence = require('./persistence/rds');
-
-const AWS = require('aws-sdk');
-const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
 // point of this is to choose whether to use API calls or Lambda invocations
 module.exports.transformEvent = (event) => {
@@ -39,130 +35,9 @@ module.exports.validateRequest = (creationRequest) => {
   return true;
 };
 
-// note : psql handles uuids without quotes (and that will throw an error without a uuid cast)
-const createAudienceConditions = (boostAccounts) => ({
-    table: config.get('tables.accountData'),
-    conditions: [{ op: 'in', prop: 'account_id', value: boostAccounts.join(', ') }]
-});
-
-const referralHasZeroRedemption = (referralContext) => {
-    if (!referralContext.boostAmountOffered || typeof referralContext.boostAmountOffered !== 'string') {
-      logger('No boost amount offered at all, return true');
-      return true;
-    }
-
-    try {
-      const splitAmount = parseInt(referralContext.boostAmountOffered.split('::'), 10);
-      return splitAmount === 0;
-    } catch (err) {
-      logger('Boost amount offered must be malformed: ', err);
-      return true;
-    }
-};
-
-const safeReferralAmountExtract = (referralContext, key = 'boostAmountOffered') => {
-  if (!referralContext || typeof referralContext[key] !== 'string') {
-    return 0;
-  }
-
-  const amountArray = referralContext[key].split('::');
-  if (!amountArray || amountArray.length === 0) {
-    return 0;
-  }
-
-  return amountArray[0];
-};
-
-const getReferralRevocationConditions = (referralContext) => {
-  const referralRevokeDays = Reflect.has(referralContext, 'daysForRevocation') ? parseInt(referralContext.daysForRevocation, 10) 
-    : parseInt(config.get('referral.withdrawalTime'), 10);
-  const referralRevokeLimit = moment().subtract(referralRevokeDays, 'days').valueOf();
-  const balanceLimit = Reflect.has(referralContext, 'balanceLimitForRevocation') ? referralContext.balanceLimitForRevocation 
-    : config.get('referral.balanceBelow');
-  return { referralRevokeLimit, balanceLimit };
-};
-
-// this handles redeeming a referral code, if it is present and includes an amount
-// the method will create a boost in 'PENDING', triggered when the referred user saves
-const handleReferral = async (newAccountId, ownerUserId, referralCodeDetails) => {
-  if (!referralCodeDetails || Object.keys(referralCodeDetails).length === 0) {
-    logger('No referral code details provided, exiting');
-    return;
-  }
-
-  const referralContext = referralCodeDetails.context;
-  if (!referralContext) {
-    logger('No referral context to give boost amount etc, exiting');
-    return;
-  }
-
-  if (referralHasZeroRedemption(referralContext)) {
-    logger('Referral context but amount offered is zero, exiting');
-    return;
-  }
-  
-  const referralType = referralCodeDetails.codeType;
-  const boostCategory = `${referralType}_CODE_USED`;
-  
-  const boostAccounts = [newAccountId];
-  const redemptionMsgInstructions = [{ accountId: newAccountId, msgInstructionFlag: 'REFERRAL::REDEEMED::REFERRED' }];
-
-  const boostAmountPerUser = safeReferralAmountExtract(referralContext);
-  
-  if (referralType === 'USER') {
-    const referringUserId = referralCodeDetails.creatingUserId;
-    const referringAccountId = await persistence.getAccountIdForUser(referringUserId);
-    if (!referringAccountId) {
-      logger('INCONSISTENCY_ERROR: referring user has no account ID');
-      return;
-    }
-
-    redemptionMsgInstructions.push({ accountId: referringAccountId, msgInstructionFlag: 'REFERRAL::REDEEMED::REFERRER' });
-    boostAccounts.push(referringAccountId);
-  }
-
-  const boostAudienceSelection = createAudienceConditions(boostAccounts);
-  // time within which the new user has to save in order to claim the bonus
-  const bonusExpiryTime = moment().add(config.get('referral.expiryTimeDays'), 'days');
-
-  const { balanceLimit, referralRevokeLimit } = getReferralRevocationConditions(referralContext);
-
-  // note : we may at some point want a "system" flag on creating user ID instead of the account opener, but for
-  // now this will allow sufficient tracking, and a simple migration will fix it in the future
-  const boostPayload = {
-    creatingUserId: ownerUserId,
-    label: `User referral code`,
-    boostTypeCategory: `REFERRAL::${boostCategory}`,
-    boostAmountOffered: referralContext.boostAmountOffered,
-    boostBudget: boostAmountPerUser * boostAccounts.length,
-    boostSource: referralContext.boostSource,
-    endTimeMillis: bonusExpiryTime.valueOf(),
-    boostAudience: 'INDIVIDUAL',
-    boostAudienceSelection,
-    initialStatus: 'PENDING',
-    statusConditions: {
-      'REDEEMED': [`save_completed_by #{${newAccountId}}`, `first_save_by #{${newAccountId}}`],
-      'REVOKED': [`balance_below #{${balanceLimit}}`, `withdrawal_before #{${referralRevokeLimit}}`]
-    },
-    messageInstructionFlags: {
-      'REDEEMED': redemptionMsgInstructions
-    }
-  };
-
-  const lambdaInvocation = {
-    FunctionName: config.get('lambda.createBoost'),
-    InvocationType: 'Event',
-    Payload: JSON.stringify(boostPayload)
-  };
-
-  logger('Invoking lambda with payload: ', boostPayload);
-  const resultOfTrigger = await lambda.invoke(lambdaInvocation).promise();
-  logger('Result of firing off lambda invoke: ', resultOfTrigger);
-};
-
 // helper, just given elevated problems if failures in here
 const isNonEmptyString = (param) => typeof param === 'string' && param.length > 0;
-const stripAccents = (name) => name.normalize('NFD').replace(/[\u0300-\u036f]/gu, '');
+const stripAccents = (name) => name.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').replace('\'', '').replace(' ', '');
 
 // note : possible race conditions means that the ref is composed of three parts:
 // a stem : upper case initial & surname, or JSAVE if none provided
@@ -224,8 +99,6 @@ module.exports.createAccount = async (creationRequest = {
 
   const persistenceMoment = moment(persistenceResult.persistedTime);
   
-  await handleReferral(persistenceResult.accountId, creationRequest.ownerUserId, creationRequest.referralCodeDetails);
-
   return { accountId: persistenceResult.accountId, persistedTimeMillis: persistenceMoment.valueOf() };
 };
 
@@ -239,8 +112,6 @@ module.exports.createAccount = async (creationRequest = {
 module.exports.create = async (event) => {
   try {
     if (!event || typeof event !== 'object' || Object.keys(event).length === 0 || event.warmupCall) {
-      logger('Warmup, just keep alive for now, with a lambda gateway open');
-      await lambda.invoke({ FunctionName: config.get('lambda.createBoost'), InvocationType: 'Event', Payload: JSON.stringify({}) }).promise();
       logger('Done keeping gateway open, exiting');
       return { statusCode: 400, body: 'Empty invocation' };
     }

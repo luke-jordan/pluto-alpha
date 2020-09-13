@@ -70,7 +70,7 @@ const settleUserTx = async ({ params, lambda, publisher, persistence }) => {
     
     const resultPayload = JSON.parse(settleResponse['Payload']);
     if (settleResponse['StatusCode'] === 200) {
-        const logContext = { settleInstruction: settlePayload, resultPayload };
+        const logContext = { settleInstruction: settlePayload, resultPayload, timeInMillis: moment().valueOf() };
         const transactionType = resultPayload.transactionDetails[0].accountTransactionType;
         const eventType = transactionType === 'USER_SAVING_EVENT' ? 'ADMIN_SETTLED_SAVE' : `ADMIN_SETTLED_${transactionType}`;
         

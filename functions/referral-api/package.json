@@ -4,13 +4,14 @@
   "description": "Lambdas for handling referral creation, verification",
   "main": "referral-handler.js",
   "scripts": {
-    "test": "DEBUG=jupiter:* nyc mocha",
+    "test": "DEBUG=jupiter:*:test nyc mocha",
     "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
     "lint": "eslint ."
   },
   "author": "Luke Jordan",
   "license": "ISC",
   "dependencies": {
+    "aws-sdk": "^2.739.0",
     "camelcase-keys": "^6.0.1",
     "config": "^3.2.2",
     "debug": "^4.1.1",

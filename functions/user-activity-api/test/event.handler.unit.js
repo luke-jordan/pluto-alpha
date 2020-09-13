@@ -602,6 +602,23 @@ describe('*** UNIT TEST WITHDRAWAL, FRIENDSHIP, BOOST EVENTS ***', () => {
         expect(sendEventToQueueStub).to.have.been.calledWithExactly('boost_process_queue', [boostProcessPayload], true);
     });
 
+    it('Dispatches referral event to boost handling properly', async () => {
+        const mockTimeNow = moment().valueOf();
+        const mockContext = { referredUserId: 'some-new-user' };
+        const sqsBatch = wrapEventSqs({ userId: mockUserId, eventType: 'REFERRAL_CODE_USED', timestamp: mockTimeNow, context: mockContext });
+        const resultOfHandle = await eventHandler.handleBatchOfQueuedEvents(sqsBatch);
+        expect(resultOfHandle).to.deep.equal([{ statusCode: 200 }]);
+
+        const boostProcessPayload = {
+            userId: mockUserId,
+            eventType: 'REFERRAL_CODE_USED',
+            timeInMillis: mockTimeNow,
+            eventContext: { referredUserId: 'some-new-user' } // as above, just making sure passed along
+        };
+
+        expect(sendEventToQueueStub).to.have.been.calledOnceWithExactly('boost_process_queue', [boostProcessPayload], true);
+    });
+
     it('Catches thrown errors, sends failed processes to DLQ', async () => {
         const testAccountId = uuid();
         const timeNow = moment().valueOf();
