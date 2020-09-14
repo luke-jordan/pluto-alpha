@@ -16,7 +16,7 @@ const persistenceWrite = require('./persistence/write.friends');
 const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
-const ALLOWED_USER_STATUS = ['USER_HAS_SAVED', 'USER_HAS_WITHDRAWN'];
+const ALLOWED_USER_STATUS = ['ACCOUNT_OPEN', 'USER_HAS_INITIATED_SAVE', 'USER_HAS_SAVED', 'USER_HAS_WITHDRAWN'];
 
 const invokeLambda = (functionName, payload, sync = true) => ({
     FunctionName: functionName,

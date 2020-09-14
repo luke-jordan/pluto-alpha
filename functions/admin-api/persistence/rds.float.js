@@ -31,7 +31,7 @@ const aggregateFloatTotals = (resultRows) => {
         const thisUnit = row['unit'];
         const thisAmountInDefaultUnit = opsUtil.convertToUnit(sumForThisUnit, thisUnit, defaultUnit);
 
-        logger(`For float ${thisFloatId}, in ${thisCurrency}, converted ${sumForThisUnit} from unit ${thisUnit}, to become ${thisAmountInDefaultUnit}`);
+        // logger(`For float ${thisFloatId}, in ${thisCurrency}, converted ${sumForThisUnit} from unit ${thisUnit}, to become ${thisAmountInDefaultUnit}`);
 
         currencySum.amount += thisAmountInDefaultUnit;
         floatSumDict[thisCurrency] = currencySum;
