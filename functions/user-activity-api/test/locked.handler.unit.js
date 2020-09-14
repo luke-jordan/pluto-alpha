@@ -57,4 +57,15 @@ describe('*** UNIT TEST LOCKED SAVE BONUS PREVIEW ***', () => {
         expect(resultBody).to.deep.equal(expectedResult);
         expect(fetchFloatVarsStub).to.have.been.calledOnceWithExactly('some_client', 'primary_cash');
     });
+
+    it('Handles invalid events and thrown errors', async () => {
+        await expect(handler.previewBonus({ })).to.eventually.deep.equal({ statusCode: 400, body: 'Empty invocation' });
+        await expect(handler.previewBonus({ clientId: 'some_client' })).to.eventually.deep.equal({ statusCode: 403 });
+
+        fetchFloatVarsStub.throws(new Error('Dynamo error'));
+        const testEvent = testHelper.wrapEvent({ clientId: 'some_client' }, testSystemId, 'ORDINARY_USER');
+        const expectedResult = { statusCode: 500, headers: testHelper.expectedHeaders, body: JSON.stringify({ error: 'Dynamo error' }) };
+        
+        await expect(handler.previewBonus(testEvent)).to.eventually.deep.equal(expectedResult);
+    });
 });
