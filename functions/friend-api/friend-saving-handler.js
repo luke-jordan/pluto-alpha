@@ -276,7 +276,7 @@ const updateSavingPool = async ({ systemWideUserId }, params) => {
     // could send multiple of these in time, so doing this way for now
     const userEventPublishPromises = [];
 
-    if (params.friendshipsToAdd) {
+    if (params.friendshipsToAdd && params.friendshipsToAdd.length > 0) {
         const friendshipIds = params.friendshipsToAdd;
         const friendUserIds = await persistenceRead.obtainFriendIds(systemWideUserId, friendshipIds);
         persistenceArgs.friendshipsToAdd = friendUserIds;
@@ -290,6 +290,8 @@ const updateSavingPool = async ({ systemWideUserId }, params) => {
         const { friendUserId, eventPromises } = await handleRemovingFriend(systemWideUserId, savingPoolId, params.friendshipToRemove);
         persistenceArgs.friendshipsToRemove = friendUserId;
         userEventPublishPromises.push(...eventPromises);
+    } else {
+        return { result: 'NOTHING_TO_DO' };
     }
 
     logger('Updating in persistence with: ', persistenceArgs);
