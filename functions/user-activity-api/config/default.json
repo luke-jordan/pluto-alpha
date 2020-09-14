@@ -121,6 +121,7 @@
         },
         "duplicate": {
             "minuteCutOff": 15
-        }
+        },
+        "lockedSaveMultiplier": 1
     }
 }

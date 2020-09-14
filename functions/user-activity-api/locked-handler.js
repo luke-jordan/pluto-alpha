@@ -2,57 +2,58 @@
 
 const logger = require('debug')('jupiter:locked-saves:main');
 const config = require('config');
-const moment = require('moment');
-
-const interestHelper = require('./interest-helper');
 
 const opsUtil = require('ops-util-common');
 const dynamo = require('./persistence/dynamodb');
 
-const AWS = require('aws-sdk');
-AWS.config.update({ region: config.get('aws.region') });
+const interestHelper = require('./interest-helper');
 
-const lambda = new AWS.Lambda();
+// Finds lowest "days" key in lockedSaveBonus that is smaller than passed in "days" and 
+// returns the multipler associated with the days found.
+const roundDays = (days, lockedSaveBonus) => {
+    const availableDays = Object.keys(lockedSaveBonus).filter((duration) => duration < days);
+    if (!availableDays || availableDays.length === 0) {
+        return config.get('defaults.lockedSaveMultiplier');
+    }
 
-const extractLambdaBody = (lambdaResult) => JSON.parse(JSON.parse(lambdaResult['Payload']).body);
-
-const wrapLambdaInvoc = (functionName, async, payload) => ({
-    FunctionName: functionName,
-    InvocationType: async ? 'Event' : 'RequestResponse',
-    Payload: JSON.stringify(payload)
-});
-
-const fetchUserProfile = async (systemWideUserId) => {
-    const profileFetchLambdaInvoke = wrapLambdaInvoc(config.get('lambdas.fetchProfile'), { systemWideUserId });
-    const profileFetchResult = await lambda.invoke(profileFetchLambdaInvoke).promise();
-    logger('Result of profile fetch: ', profileFetchResult);
-
-    return extractLambdaBody(profileFetchResult);
+    const roundedDays = Math.max(...availableDays);
+    return lockedSaveBonus[roundedDays];
 };
 
-const obtainUserBalance = async (userProfile) => {
-    const balancePayload = {
-        userId: userProfile.systemWideUserId,
-        currency: userProfile.defaultCurrency,
-        atEpochMillis: moment().valueOf(),
-        timezone: userProfile.defaultTimezone,
-        clientId: userProfile.clientId,
-        daysToProject: 0
-    };
+const mapLockedSaveDaysToInterest = (lockedSaveBonus, accrualRate, daysToPreview) => {
+    const lockedSaveInterestMap = daysToPreview.map((days) => {
+        if (opsUtil.isObjectEmpty(lockedSaveBonus)) {
+            return { [days]: config.get('defaults.lockedSaveMultiplier') * accrualRate };
+        }
 
-    logger('Balance payload: ', balancePayload);
-    const balanceLambdaInvocation = wrapLambdaInvoc(config.get('lambdas.fetchUserBalance'), balancePayload);
+        if (Object.keys(lockedSaveBonus).includes(days.toString())) {
+            return { [days]: lockedSaveBonus[days] * accrualRate };
+        }
 
-    const userBalanceResult = await lambda.invoke(balanceLambdaInvocation).promise();
-    return extractLambdaBody(userBalanceResult);
+        return { [days]: roundDays(days, lockedSaveBonus) * accrualRate };
+    });
+
+    return lockedSaveInterestMap;
+};
+
+const calculateBonusForLockedSave = (lockedSaveInterestMap, amountDetails) => {
+    const resultOfCalculation = lockedSaveInterestMap.map((daysAndInterest) => {
+        const interestRate = Object.values(daysAndInterest)[0];
+        const daysToCalculate = Object.keys(daysAndInterest)[0];
+        const calculatedInterestEarned = interestHelper.calculateEstimatedInterestEarned({ ...amountDetails, daysToCalculate }, 'HUNDREDTH_CENT', interestRate);
+        return { [daysToCalculate]: calculatedInterestEarned };
+    });
+
+    return resultOfCalculation;
 };
 
 /**
- * 
+ * Calculates the locked saved bonus for each duration passed in the daysToPreview array.
  * @param {object} event 
- * @property {string} floatId
- * @property {string} clientId
- * @property {array} daysToPreview
+ * @property {string} floatId The float from which to read the accrual rate and locked save multipliers.
+ * @property {string} clientId The client id used in conjunction with the float id above from which to read the relevant client-float vars.
+ * @property {string} amountDetails An amount dict on which to perform the interest projections.
+ * @property {array} daysToPreview The number of days to project locked save interest on. Multiple days may be passed in.
  */
 module.exports.previewBonus = async (event) => {
     try {
@@ -60,40 +61,27 @@ module.exports.previewBonus = async (event) => {
             return { statusCode: 400, body: 'Empty invocation' };
         }
 
-        const userDetails = event.requestContext ? event.requestContext.authorizer : null;
+        const userDetails = opsUtil.extractUserDetails(event);
         if (!userDetails || !Reflect.has(userDetails, 'systemWideUserId')) {
             return { statusCode: 403 };
         }
 
-        const systemWideUserId = userDetails.systemWideUserId;
-
-        const { clientId, floatId, daysToPreview } = opsUtil.extractParamsFromEvent(event);
+        const { clientId, floatId, amountDetails, daysToPreview } = opsUtil.extractParamsFromEvent(event);
         logger('Previewing locked save bonus for client id: ', clientId, ' and float id: ', floatId);
 
-        const userProfile = await fetchUserProfile(systemWideUserId);
-        logger('Got user profile: ', userProfile);
+        const { accrualRateAnnualBps, lockedSaveBonus } = await dynamo.fetchFloatVarsForBalanceCalc(clientId, floatId);
+        logger('Got accrual rate: ', accrualRateAnnualBps, 'And locked save bonus details: ', lockedSaveBonus);
 
-        const floatProjectionVars = await dynamo.fetchFloatVarsForBalanceCalc(clientId, floatId);
-        logger('Got client-float vars: ', floatProjectionVars);
-
-        const { accrualRateAnnualBps, lockedSaveBonus } = floatProjectionVars;
-        const lockedSaveInterestMap = daysToPreview.map((days) => ({ [days]: lockedSaveBonus[days] * accrualRateAnnualBps }));
+        const lockedSaveInterestMap = mapLockedSaveDaysToInterest(lockedSaveBonus, accrualRateAnnualBps, daysToPreview);
         logger('Mapped days to preview to corresponding multipliers: ', lockedSaveInterestMap);
 
-        const { currentBalance } = await obtainUserBalance(userProfile);
-        logger('Got user balance: ', currentBalance);
+        const calculatedLockedSaveBonus = calculateBonusForLockedSave(lockedSaveInterestMap, amountDetails);
+        logger('Calculated locked save bonus for recieved days: ', calculatedLockedSaveBonus);
+        
+        const resultObject = calculatedLockedSaveBonus.reduce((obj, daysAndInterest) => ({ ...obj, ...daysAndInterest }), {});
+        logger('Returning final result: ', resultObject);
 
-        const calculatedLockedSaveBonus = lockedSaveInterestMap.map((daysAndInterest) => {
-            const interestRate = Object.values(daysAndInterest)[0];
-            const daysToCalculate = Object.keys(daysAndInterest)[0];
-            const calculatedInterestEarned = interestHelper.calculateEstimatedInterestEarned({ ...currentBalance, daysToCalculate }, 'HUNDREDTH_CENT', interestRate);
-            return { [daysToCalculate]: calculatedInterestEarned };
-        });
-
-        // todo; reduce to single object
-
-        logger('Returning final result: ', calculatedLockedSaveBonus);
-        return opsUtil.wrapResponse(calculatedLockedSaveBonus);
+        return opsUtil.wrapResponse(resultObject);
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return opsUtil.wrapResponse({ error: err.message }, 500);
