@@ -31,3 +31,6 @@ create table transaction_data.point_log (
 );
 
 create index if not exists idx_user_point_id on transaction_data.point_log(owner_user_id);
+
+grant select, insert, update on transaction_data.event_point_list to save_tx_api_worker;
+grant select, insert on transaction_data.point_log to save_tx_api_worker;

@@ -114,7 +114,7 @@ const sumOverSettledTransactionTypes = async (params, systemWideUserId, transTyp
 };
 
 const earningsQuery = async (params, systemWideUserId) => {
-    const transTypesToInclude = ['ACCRUAL', 'CAPITALIZATION', 'BOOST_REDEMPTION'];
+    const transTypesToInclude = ['ACCRUAL', 'CAPITALIZATION', 'BOOST_REDEMPTION', 'BOOST_REVOCATION'];
     logger('Calling generic sum over settled, from earnings query, including: ', transTypesToInclude);
     return sumOverSettledTransactionTypes(params, systemWideUserId, transTypesToInclude);
 };

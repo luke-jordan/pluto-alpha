@@ -83,13 +83,13 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
     const testBalanceCents = Math.round(testBalance);
 
     const txTable = config.get('tables.accountTransactions');
-        const transTypes = ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'];
-        const txIndices = '$6, $7, $8, $9, $10';
-        const sumQuery = `select sum(amount), unit from ${txTable} where account_id = $1 and currency = $2 and ` +
-            `settlement_status in ($3, $4) and settlement_time < to_timestamp($5) and transaction_type in (${txIndices}) group by unit`;
-        // on this one we leave out the accrued
-        const latestTxQuery = `select creation_time from ${txTable} where account_id = $1 and currency = $2 and settlement_status = 'SETTLED' ` +
-            `and creation_time < to_timestamp($3) order by creation_time desc limit 1`;
+    const transTypes = ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION', 'BOOST_REVOCATION'];
+    const txIndices = '$6, $7, $8, $9, $10, $11';
+    const sumQuery = `select sum(amount), unit from ${txTable} where account_id = $1 and currency = $2 and ` +
+        `settlement_status in ($3, $4) and settlement_time < to_timestamp($5) and transaction_type in (${txIndices}) group by unit`;
+    // on this one we leave out the accrued
+    const latestTxQuery = `select creation_time from ${txTable} where account_id = $1 and currency = $2 and settlement_status = 'SETTLED' ` +
+        `and creation_time < to_timestamp($3) order by creation_time desc limit 1`;
 
     beforeEach(() => resetStubs());
 
@@ -208,8 +208,8 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
 
     it('Fetches prior transactions', async () => {
         const selectQuery = `select * from ${config.get('tables.accountTransactions')} where account_id = $1 ` +
-            `and settlement_status = $2 and transaction_type in ($3, $4, $5, $6, $7) order by creation_time desc`;
-        const selectValues = [testAccountId, 'SETTLED', 'USER_SAVING_EVENT', 'WITHDRAWAL', 'BOOST_REDEMPTION', 'CAPITALIZATION', 'BOOST_POOL_FUNDING'];
+            `and settlement_status = $2 and transaction_type in ($3, $4, $5, $6, $7, $8) order by creation_time desc`;
+        const selectValues = [testAccountId, 'SETTLED', 'USER_SAVING_EVENT', 'WITHDRAWAL', 'BOOST_REDEMPTION', 'CAPITALIZATION', 'BOOST_POOL_FUNDING', 'BOOST_REVOCATION'];
 
         queryStub.resolves([expectedTxRow, expectedTxRow, expectedTxRow]);
         const priorTxs = await rds.fetchTransactionsForHistory(testAccountId);

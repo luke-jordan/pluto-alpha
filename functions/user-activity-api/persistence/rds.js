@@ -39,7 +39,7 @@ module.exports.checkForDuplicateSave = async ({ accountId, amount, currency, uni
 };
 
 module.exports.fetchTransactionsForHistory = async (accountId) => {
-    const txTypes = ['USER_SAVING_EVENT', 'WITHDRAWAL', 'BOOST_REDEMPTION', 'CAPITALIZATION', 'BOOST_POOL_FUNDING'];
+    const txTypes = ['USER_SAVING_EVENT', 'WITHDRAWAL', 'BOOST_REDEMPTION', 'CAPITALIZATION', 'BOOST_POOL_FUNDING', 'BOOST_REVOCATION'];
     const query = `select * from ${config.get('tables.accountTransactions')} where account_id = $1 ` +
         `and settlement_status = $2 and transaction_type in (${opsUtil.extractArrayIndices(txTypes, 3)}) order by creation_time desc`;
     const rows = await rdsConnection.selectQuery(query, [accountId, 'SETTLED', ...txTypes]);
@@ -202,7 +202,7 @@ module.exports.getMinimalFriendListForUser = async (systemWideUserId) => {
 module.exports.sumAccountBalance = async (accountId, currency, time = moment()) => {
     const tableToQuery = config.get('tables.accountTransactions');
     
-    const transTypesToInclude = ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'];
+    const transTypesToInclude = ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION', 'BOOST_REVOCATION'];
     const preTransParamCount = 5;
     
     const transTypeIdxs = opsUtil.extractArrayIndices(transTypesToInclude, preTransParamCount + 1);
