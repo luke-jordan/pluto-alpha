@@ -12,7 +12,7 @@ create table transaction_data.event_point_list (
     number_points int not null,
     creation_time timestamp with time zone not null default current_timestamp,
     updated_time timestamp with time zone not null default current_timestamp,
-    parameters jsonb default {},
+    parameters jsonb default '{}',
     unique (client_id, float_id, event_type)
 );
 
@@ -27,7 +27,7 @@ create table transaction_data.point_log (
     event_point_match_id uuid not null references transaction_data.event_point_list (event_point_match_id), 
     number_points int not null,
     transaction_id uuid references transaction_data.core_transaction_ledger (transaction_id), -- can be null, because eg friend activity can adjust
-    contextual_record jsonb,
+    contextual_record jsonb
 );
 
 create index if not exists idx_user_point_id on transaction_data.point_log(owner_user_id);

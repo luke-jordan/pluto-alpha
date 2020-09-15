@@ -300,4 +300,105 @@ describe('*** UNIT TEST FLOAT TRANSFER TO BONUS AND COMPANY ***', () => {
         expect(allocateUserStub).to.have.not.been.called;
     });
 
+    it('Allocation from user to bonus (boost revocation)', async () => {
+        const mockBoostId = 'some-boost-log-id';
+        const mockRevokeInstruction = (fromUserAccountId, amount) => ({
+            allocState: 'SETTLED',
+            allocType: 'BOOST_REVOCATION',
+            allocatedToType: 'BONUS_POOL',
+            allocatedToId: 'some_bonus_pool_used',            
+            clientId: 'za_client_co',
+            currency: 'ZAR',
+            floatId: 'zar_mmkt_float',
+            fromId: fromUserAccountId,
+            fromType: 'END_USER_ACCOUNT',
+            identifier: mockBoostId,
+            recipients: [{
+                recipientId: 'some_bonus_pool_used',
+                amount,
+                recipientType: 'BONUS_POOL'
+            }],
+            referenceAmounts: {
+                amountToBonus: amount,
+                boostAmount: amount
+            },
+            relatedEntityType: 'BOOST_REVOCATION',
+            relatedEntityId: mockBoostId,
+            settlementStatus: 'SETTLED',
+            transactionType: 'BOOST_REVOCATION',
+            unit: 'WHOLE_CURRENCY'
+        });
+
+        const expectedUserAlloc = (fromUserAccountId, amount) => ({
+            amount: amount,
+            unit: 'WHOLE_CURRENCY',
+            currency: 'ZAR',
+            accountId: fromUserAccountId,
+            allocType: 'BOOST_REVOCATION',
+            allocState: 'SETTLED',
+            settlementStatus: 'SETTLED',
+            relatedEntityType: 'BOOST_REVOCATION',
+            relatedEntityId: mockBoostId
+        });
+        
+        // in time probably want to make related entity in here the user account number
+        const expectedBoostAlloc = (amount) => ({
+            amount,
+            allocatedToType: 'BONUS_POOL',
+            allocatedToId: 'some_bonus_pool_used',
+            unit: 'WHOLE_CURRENCY',
+            currency: 'ZAR',
+            transactionType: 'BOOST_REVOCATION',
+            relatedEntityType: 'BOOST_REVOCATION',
+            relatedEntityId: mockBoostId
+        });
+
+        // two float transactions for each instruction (minus from user, plus to boost)
+        // two account transactions (one for each instruction/user)
+
+        const mockFloatTxId = (stem) => `${stem}-float-tx-id`;
+        const userAllocResult = (userAccountId) => ({
+            floatTxIds: [mockFloatTxId(`${userAccountId}-from-user`)],
+            accountTxIds: [`${userAccountId}-account-tx-id`]
+        });
+            
+        allocatePoolStub.onFirstCall().resolves([{ 'id': mockFloatTxId('referring-user-to-bonus') }]);
+        allocatePoolStub.onSecondCall().resolves([{ 'id': mockFloatTxId('referred-user-to-bonus') }]);
+        
+        allocateUserStub.onFirstCall().resolves(userAllocResult('referring-user'));
+        allocateUserStub.onSecondCall().resolves(userAllocResult('referred-user'));
+
+        redisGetStub.resolves(null); // cache
+        redisSetStub.resolves('OK'); // cache
+
+        const mockInstructions = [mockRevokeInstruction('referring-user', 15), mockRevokeInstruction('referred-user', 15)];
+        const resultOfTransfer = await handler.floatTransfer({ instructions: mockInstructions });
+
+        const expectedResultDict = (user) => ({ 
+            result: 'SUCCESS', 
+            floatTxIds: [mockFloatTxId(`${user}-to-bonus`), mockFloatTxId(`${user}-from-user`)], 
+            accountTxIds: [`${user}-account-tx-id`] 
+        });
+
+        const expectedResult = { 
+            [mockBoostId]: {
+                result: 'SUCCESS',
+                floatTxIds: [...expectedResultDict('referring-user').floatTxIds, ...expectedResultDict('referred-user').floatTxIds],
+                accountTxIds: [...expectedResultDict('referring-user').accountTxIds, ...expectedResultDict('referred-user').accountTxIds]
+            }
+        };
+
+        expect(resultOfTransfer).to.have.property('body');
+        expect(JSON.parse(resultOfTransfer.body)).to.deep.equal(expectedResult);
+        
+        expect(allocatePoolStub).to.have.been.calledTwice;
+        expect(allocatePoolStub).to.have.been.calledWith('za_client_co', 'zar_mmkt_float', [expectedBoostAlloc(15)]); // 'referring-user', 
+        expect(allocatePoolStub).to.have.been.calledWith('za_client_co', 'zar_mmkt_float', [expectedBoostAlloc(15)]); // 'referred-user', 
+
+        expect(allocateUserStub).to.have.been.calledTwice;
+        expect(allocateUserStub).to.have.been.calledWith('za_client_co', 'zar_mmkt_float', [expectedUserAlloc('referring-user', -15)]);
+        expect(allocateUserStub).to.have.been.calledWith('za_client_co', 'zar_mmkt_float', [expectedUserAlloc('referred-user', -15)]);
+    });
+
+
 });

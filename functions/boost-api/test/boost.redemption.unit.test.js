@@ -271,54 +271,37 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
 
     it('Handles revocation', async () => {
         const testUserId = uuid();
-        const testAccountId = uuid();
+        
         const testAmount = 20 * 100 * 100;
 
-        const expectedAllocationInvocation = testHelper.wrapLambdaInvoc('float_transfer', false, {
-            instructions: [{
-                identifier: testBoostId,
-                floatId: testFloatId,
-                fromId: testBonusPoolId,
-                fromType: 'BONUS_POOL',
-                transactionType: 'BOOST_REVOCATION',
-                relatedEntityType: 'BOOST_REVOCATION',
-                currency: 'USD',
-                unit: 'HUNDREDTH_CENT',
-                settlementStatus: 'SETTLED',
-                allocType: 'BOOST_REVOCATION',
-                allocState: 'SETTLED',
-                recipients: [
-                    { recipientId: testAccountId, amount: -testAmount, recipientType: 'END_USER_ACCOUNT' }
-                ],
-                referenceAmounts: { boostAmount: testAmount, amountFromBonus: testAmount }
-            }]
+        const mockInstruction = (userAccountId) => ({
+            identifier: testBoostId,
+            floatId: testFloatId,
+            fromId: userAccountId,
+            fromType: 'END_USER_ACCOUNT',
+            transactionType: 'BOOST_REVOCATION',
+            relatedEntityType: 'BOOST_REVOCATION',
+            relatedEntityId: testBoostId,
+            currency: 'USD',
+            unit: 'HUNDREDTH_CENT',
+            settlementStatus: 'SETTLED',
+            allocType: 'BOOST_REVOCATION',
+            allocState: 'SETTLED',
+            recipients: [
+                { recipientId: testBonusPoolId, amount: testAmount, recipientType: 'BONUS_POOL' }
+            ],
+            referenceAmounts: { boostAmount: testAmount, amountToBonus: testAmount * 2 }
         });
 
+        const mockInstructions = [mockInstruction('referred-user'), mockInstruction('referring-user')];
+        const expectedAllocationInvocation = testHelper.wrapLambdaInvoc('float_transfer', false, { instructions: mockInstructions });
+
+        // assumes that the transfer handler will knit these together (unfortunate, but cleanest way _at present_)
         const mockTransferResult = {
-            [testBoostId]: {
-                result: 'SUCCESS',
-                floatTxIds: [uuid(), uuid()],
-                accountTxIds: [uuid()]
-            }
+            [testBoostId]: { result: 'SUCCESS', floatTxIds: [uuid(), uuid(), uuid(), uuid()], accountTxIds: [uuid(), uuid()] }
         };
 
         lamdbaInvokeStub.returns({ promise: () => testHelper.mockLambdaResponse(mockTransferResult) });
-
-        // then we do a user log, on each side (tested via the expect call underneath)
-        const publishOptions = {
-            initiator: testUserId,
-            context: {
-                accountId: testAccountId,
-                boostAmount: '-100000::HUNDREDTH_CENT::USD',
-                boostId: testBoostId,
-                boostType: 'SIMPLE',
-                boostCategory: 'SIMPLE_SAVE',
-                boostUpdateTimeMillis: moment().valueOf(),
-                transferResults: mockTransferResult[testBoostId],
-                triggeringEventContext: 'SAVING_EVENT_COMPLETED'
-            }
-        };
-        publishStub.withArgs(testUserId, 'BOOST_REVOKED', sinon.match(publishOptions)).resolves({ result: 'SUCCESS' });
 
         const mockBoost = {
             boostId: testBoostId,
@@ -327,20 +310,22 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             boostCurrency: 'USD',
             fromFloatId: testFloatId,
             fromBonusPoolId: testBonusPoolId,
-            messageInstructions: [],
-            flags: []    
+            boostType: 'REFERRAL',
+            boostCategory: 'USER_CODE',
+            flags: ['REDEEM_ALL_AT_ONCE']
         };
 
         const mockAccountMap = {
             [testBoostId]: {
-                [testAccountId]: { userId: testUserId, newStatus: 'REDEEMED' }
+                'referred-user': { userId: testUserId, status: 'REDEEMED', newStatus: 'REVOKED' },
+                'referring-user': { userId: 'other-user', status: 'REDEEMED', newStatus: 'REVOKED' }
             }
         };
 
         const mockEvent = { 
-            revocationBoosts: [mockBoost], 
+            revocationBoosts: [mockBoost],
             affectedAccountsDict: mockAccountMap, 
-            event: { accountId: testAccountId, eventType: 'WITHDRAWAL_EVENT_COMPLETED' }
+            event: { accountId: 'referred-user', eventType: 'ADMIN_SETTLED_WITHDRAWAL', eventContext: 'ADMIN_SETTLED_WITHDRAWAL' }
         };
 
         momentStub.returns(moment());
@@ -350,7 +335,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             [testBoostId]: {
                 ...mockTransferResult[testBoostId],
                 boostAmount: testAmount,
-                amountFromBonus: testAmount,
+                amountToBonus: testAmount * 2,
                 unit: 'HUNDREDTH_CENT'
             }
         };
@@ -358,8 +343,27 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
         expect(resultOfRedemption).to.exist;
         expect(resultOfRedemption).to.deep.equal(expectedResult);
 
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedAllocationInvocation);
+        testHelper.testLambdaInvoke(lamdbaInvokeStub, expectedAllocationInvocation);
 
+        // then we do a user log, on each side (tested via the expect call underneath)
+        const publishOptions = {
+            initiator: testUserId,
+            context: {
+                accountId: 'referred-user',
+                amountToBonus: '400000::HUNDREDTH_CENT::USD',
+                boostAmount: '-200000::HUNDREDTH_CENT::USD',
+                boostId: testBoostId,
+                boostType: 'REFERRAL',
+                boostCategory: 'USER_CODE',
+                boostUpdateTimeMillis: sinon.match.number,
+                transferResults: { ...mockTransferResult[testBoostId], amountToBonus: 400000, boostAmount: 200000, unit: 'HUNDREDTH_CENT' },
+                triggeringEventContext: 'ADMIN_SETTLED_WITHDRAWAL'
+            }
+        };
+        publishStub.resolves({ result: 'SUCCESS' });
+        
+        expect(publishStub).to.have.been.calledTwice;
+        expect(publishStub).to.have.been.calledWith(testUserId, 'BOOST_REVOKED', publishOptions);
     });
 
 });
