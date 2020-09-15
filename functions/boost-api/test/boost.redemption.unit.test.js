@@ -280,12 +280,12 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
                 floatId: testFloatId,
                 fromId: testBonusPoolId,
                 fromType: 'BONUS_POOL',
-                transactionType: 'BOOST_REVERSAL',
-                relatedEntityType: 'BOOST_REVERSAL',
+                transactionType: 'BOOST_REVOCATION',
+                relatedEntityType: 'BOOST_REVOCATION',
                 currency: 'USD',
                 unit: 'HUNDREDTH_CENT',
                 settlementStatus: 'SETTLED',
-                allocType: 'BOOST_REVERSAL',
+                allocType: 'BOOST_REVOCATION',
                 allocState: 'SETTLED',
                 recipients: [
                     { recipientId: testAccountId, amount: -testAmount, recipientType: 'END_USER_ACCOUNT' }

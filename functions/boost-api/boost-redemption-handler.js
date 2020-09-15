@@ -311,7 +311,7 @@ const generateFloatTransferInstructions = async (affectedAccountDict, boost, rev
     }
 
     const amount = revoke ? -boostAmount : boostAmount;
-    const transactionType = revoke ? 'BOOST_REVERSAL' : 'BOOST_REDEMPTION';
+    const transactionType = revoke ? 'BOOST_REVOCATION' : 'BOOST_REDEMPTION';
     
     const recipients = recipientAccounts.map((recipientId) => ({ 
         recipientId, amount, recipientType: 'END_USER_ACCOUNT'
