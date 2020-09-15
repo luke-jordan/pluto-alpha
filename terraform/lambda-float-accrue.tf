@@ -8,7 +8,7 @@ resource "aws_lambda_function" "float_accrue" {
   function_name                  = "${var.float_accrue_lambda_function_name}"
   role                           = aws_iam_role.float_accrue_role.arn
   handler                        = "accrual-handler.accrue"
-  memory_size                    = 256
+  memory_size                    = 512
   runtime                        = "nodejs12.x"
   timeout                        = 900
   tags                           = {"environment"  = "${terraform.workspace}"}

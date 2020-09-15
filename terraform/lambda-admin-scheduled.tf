@@ -1,6 +1,6 @@
 variable "ops_admin_scheduled_lambda_function_name" {
   default = "ops_admin_scheduled"
-  type = "string"
+  type = string
 }
 
 resource "aws_lambda_function" "ops_admin_scheduled" {
@@ -187,4 +187,29 @@ resource "aws_lambda_permission" "allow_cloudwatch_daytime_to_call_ops_admin_sch
     function_name = aws_lambda_function.ops_admin_scheduled.function_name
     principal = "events.amazonaws.com"
     source_arn = aws_cloudwatch_event_rule.ops_admin_daytime.arn
+}
+
+/////////////////// ALARM FILTERS AND METRICS //////////////////////////////////////
+
+resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_admin_scheduled" {
+  log_group_name = aws_cloudwatch_log_group.ops_admin_scheduled.name
+  metric_transformation {
+    name = "${var.ops_admin_scheduled_lambda_function_name}_fatal_api_alarm"
+    namespace = "lambda_errors"
+    value = "1"
+  }
+  name = "${var.ops_admin_scheduled_lambda_function_name}_fatal_api_alarm"
+  pattern = "FATAL_ERROR"
+}
+
+resource "aws_cloudwatch_metric_alarm" "fatal_metric_alarm_admin_scheduled" {
+  alarm_name = "${var.ops_admin_scheduled_lambda_function_name}_fatal_api_alarm"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods = 1
+  metric_name = aws_cloudwatch_log_metric_filter.fatal_metric_filter_admin_scheduled.name
+  namespace = "lambda_errors"
+  period = 60
+  threshold = 0
+  statistic = "Sum"
+  alarm_actions = [aws_sns_topic.fatal_errors_topic.arn]
 }

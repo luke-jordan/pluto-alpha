@@ -227,6 +227,22 @@ const handleInstruction = async (instruction) => {
     return finalResult;
 };
 
+// just in case we have duplicate identifiers (sometimes happens with reversals)
+const knitResult = (priorObj, thisResult) => {
+    if (!priorObj[thisResult.id]) {
+        return thisResult.details;
+    }
+
+    const priorResult = priorObj[thisResult.id];
+    const theseDetails = thisResult.details;
+
+    return {
+        result: theseDetails.result === 'SUCCESS' && priorResult.result === 'SUCCESS' ? 'SUCCESS' : 'MIXED',
+        floatTxIds: [...priorResult.floatTxIds, ...theseDetails.floatTxIds],
+        accountTxIds: [...priorResult.accountTxIds, ...theseDetails.accountTxIds]
+    };
+};
+
 /**
  * This function handles float transfer instructions. Event properties are described below.
  * @param {array} instructions An array containing transfer instruction objects.
@@ -240,7 +256,7 @@ module.exports.floatTransfer = async (event) => {
 
     const resultOfTransfers = await Promise.all(promiseList);
     
-    const assembledResult = resultOfTransfers.reduce((obj, result) => ({ ...obj, [result.id]: result.details }), {});
+    const assembledResult = resultOfTransfers.reduce((obj, result) => ({ ...obj, [result.id]: knitResult(obj, result) }), {});
     // logger('Here is what we have: ', assembledResult);
 
     return {
