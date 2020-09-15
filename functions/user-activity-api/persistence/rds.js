@@ -744,3 +744,12 @@ module.exports.updateTxSettlementStatus = async ({ transactionId, settlementStat
 
     return Array.isArray(resultOfUpdate) && resultOfUpdate.length > 0 ? moment(resultOfUpdate[0]['updated_time']) : null; 
 };
+
+/**
+ * Sets a transactions lock_until_time property.
+ * @param {string} transactionId The transaction on which to set the lock duration.
+ * @param {number} daysToLock The lock duration in days.
+ */
+// module.exports.setTxLockDuration = async (transactionId, daysToLock) => {
+
+// };

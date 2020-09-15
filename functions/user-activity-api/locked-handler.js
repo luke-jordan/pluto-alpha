@@ -3,13 +3,15 @@
 const logger = require('debug')('jupiter:locked-saves:main');
 const config = require('config');
 
-const opsUtil = require('ops-util-common');
+const persistence = require('./persistence/rds');
 const dynamo = require('./persistence/dynamodb');
+
+const opsUtil = require('ops-util-common');
 
 const interestHelper = require('./interest-helper');
 
 // Finds lowest "days" key in lockedSaveBonus that is smaller than passed in "days" and 
-// returns the multipler associated with the days found.
+// returns the multiplier associated with the days found.
 const roundDays = (days, lockedSaveBonus) => {
     const availableDays = Object.keys(lockedSaveBonus).filter((duration) => duration < days);
     if (!availableDays || availableDays.length === 0) {
@@ -36,11 +38,11 @@ const mapLockedSaveDaysToInterest = (lockedSaveBonus, accrualRate, daysToPreview
     return lockedSaveInterestMap;
 };
 
-const calculateBonusForLockedSave = (lockedSaveInterestMap, amountDetails) => {
+const calculateBonusForLockedSave = (lockedSaveInterestMap, baseAmount) => {
     const resultOfCalculation = lockedSaveInterestMap.map((daysAndInterest) => {
         const interestRate = Object.values(daysAndInterest)[0];
         const daysToCalculate = Object.keys(daysAndInterest)[0];
-        const calculatedInterestEarned = interestHelper.calculateEstimatedInterestEarned({ ...amountDetails, daysToCalculate }, 'HUNDREDTH_CENT', interestRate);
+        const calculatedInterestEarned = interestHelper.calculateEstimatedInterestEarned({ ...baseAmount, daysToCalculate }, 'HUNDREDTH_CENT', interestRate);
         return { [daysToCalculate]: calculatedInterestEarned };
     });
 
@@ -49,10 +51,11 @@ const calculateBonusForLockedSave = (lockedSaveInterestMap, amountDetails) => {
 
 /**
  * Calculates the locked saved bonus for each duration passed in the daysToPreview array.
+ * Returns the projected interest exclusive of the user balance.
  * @param {object} event 
  * @property {string} floatId The float from which to read the accrual rate and locked save multipliers.
  * @property {string} clientId The client id used in conjunction with the float id above from which to read the relevant client-float vars.
- * @property {string} amountDetails An amount dict on which to perform the interest projections.
+ * @property {string} baseAmount An amount dict on which to perform the interest projections.
  * @property {array} daysToPreview The number of days to project locked save interest on. Multiple days may be passed in.
  */
 module.exports.previewBonus = async (event) => {
@@ -66,7 +69,7 @@ module.exports.previewBonus = async (event) => {
             return { statusCode: 403 };
         }
 
-        const { clientId, floatId, amountDetails, daysToPreview } = opsUtil.extractParamsFromEvent(event);
+        const { clientId, floatId, baseAmount, daysToPreview } = opsUtil.extractParamsFromEvent(event);
         logger('Previewing locked save bonus for client id: ', clientId, ' and float id: ', floatId);
 
         const { accrualRateAnnualBps, lockedSaveBonus } = await dynamo.fetchFloatVarsForBalanceCalc(clientId, floatId);
@@ -75,15 +78,115 @@ module.exports.previewBonus = async (event) => {
         const lockedSaveInterestMap = mapLockedSaveDaysToInterest(lockedSaveBonus, accrualRateAnnualBps, daysToPreview);
         logger('Mapped days to preview to corresponding multipliers: ', lockedSaveInterestMap);
 
-        const calculatedLockedSaveBonus = calculateBonusForLockedSave(lockedSaveInterestMap, amountDetails);
-        logger('Calculated locked save bonus for recieved days: ', calculatedLockedSaveBonus);
+        const calculatedLockedSaveBonus = calculateBonusForLockedSave(lockedSaveInterestMap, baseAmount);
+        logger('Calculated locked save bonus for receive days: ', calculatedLockedSaveBonus);
         
-        const resultObject = calculatedLockedSaveBonus.reduce((obj, daysAndInterest) => ({ ...obj, ...daysAndInterest }), {});
+        const resultObject = calculatedLockedSaveBonus.reduce((obj, daysBonusMap) => ({ ...obj, ...daysBonusMap }), {});
         logger('Returning final result: ', resultObject);
 
         return opsUtil.wrapResponse(resultObject);
     } catch (err) {
         logger('FATAL_ERROR:', err);
-        return opsUtil.wrapResponse({ error: err.message }, 500);
+        return opsUtil.wrapResponse({ message: err.message }, 500);
     }
 };
+
+const isValidTxForLock = (transactionToLock) => {
+    if (transactionToLock.transactionType !== 'USER_SAVING_EVENT') {
+        logger('Attempted to lock a non-saving event, exiting');
+        return false;
+    }
+
+    if (transactionToLock.settlementStatus !== 'SETTLED') {
+        logger('Attempted to lock a non-settled transaction, exiting');
+        return false;
+    }
+
+    return true;
+};
+
+const isUserTxAccountOwner = async (systemWideUserId, transactionToLock) => {
+    const userAccountIds = await persistence.findAccountsForUser(systemWideUserId);
+    logger('Got account ids for user: ', userAccountIds);
+    
+    if (!userAccountIds.includes(transactionToLock.accountId)) {
+        logger('User does not own the account with the transaction to be locked, exiting');
+        return false;
+    }
+
+    return true;
+};
+
+/**
+ * 
+ * @param {object} event 
+ * @property {string} transactionId
+ * @property {object} lockBonusAmount
+ * @property {number} daysToLock
+ */
+module.exports.lockSettledSave = async (event) => {
+    try {
+        if (!opsUtil.isDirectInvokeAdminOrSelf(event)) {
+            return { statusCode: 403 };
+        }
+    
+        // test behaviour on multiple event types
+        const { systemWideUserId } = opsUtil.extractUserDetails(event);
+        const { transactionId, lockBonusAmount, daysToLock } = opsUtil.extractParamsFromEvent(event);
+    
+        const transactionToLock = await persistence.fetchTransaction(transactionId);
+        logger('Got transaction: ', transactionToLock);
+
+        if (!transactionToLock) {
+            logger('No transaction found for received transaction id');
+            return { statusCode: 400 };
+        }
+    
+        if (opsUtil.isApiCall(event)) {
+            const isValidUser = await isUserTxAccountOwner(systemWideUserId, transactionToLock);
+            if (!isValidUser) {
+                return { statusCode: 403 };
+            }
+        }
+
+       if (!isValidTxForLock(transactionToLock)) {
+           return { statusCode: 400 };
+       }
+    
+        const bonusAmountString = opsUtil.convertAmountDictToString(lockBonusAmount);
+
+        const logToInsert = {
+            systemWideUserId,
+            accountId: transactionToLock.accountId,
+            logContext: {
+                transactionId: transactionToLock.transactionId,
+                lockBonusAmount,
+                daysToLock,
+                reasonToLog: 'User saving event locked'
+            }
+        };
+    
+        const resultOfUpdates = await Promise.all([
+            persistence.updateTxSettlementStatus({ transactionId, settlementStatus: 'LOCKED', logToInsert }),
+            persistence.updateTxTags(transactionId, `LOCK_BONUS::${bonusAmountString}`),
+            persistence.setTxLockDuration(transactionId, daysToLock)
+        ]);
+
+        logger('Result of locked-tx updates: ', resultOfUpdates);
+
+        // todo: result validations
+        
+        return opsUtil.wrapResponse({ result: 'SUCCESS' });
+    } catch (err) {
+        logger('FATAL_ERROR:', err);
+        return opsUtil.wrapResponse({ message: err.message }, 500);
+    }
+};
+
+/**
+ * 
+ * @param {object} event 
+ */
+// module.exports.checkForExpiredLocks = async (event) => {
+
+// };
