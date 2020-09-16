@@ -83,13 +83,13 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
     const testBalanceCents = Math.round(testBalance);
 
     const txTable = config.get('tables.accountTransactions');
-        const transTypes = ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'];
-        const txIndices = '$6, $7, $8, $9, $10';
-        const sumQuery = `select sum(amount), unit from ${txTable} where account_id = $1 and currency = $2 and ` +
-            `settlement_status in ($3, $4) and settlement_time < to_timestamp($5) and transaction_type in (${txIndices}) group by unit`;
-        // on this one we leave out the accrued
-        const latestTxQuery = `select creation_time from ${txTable} where account_id = $1 and currency = $2 and settlement_status = 'SETTLED' ` +
-            `and creation_time < to_timestamp($3) order by creation_time desc limit 1`;
+    const transTypes = ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION', 'BOOST_REVOCATION'];
+    const txIndices = '$6, $7, $8, $9, $10, $11';
+    const sumQuery = `select sum(amount), unit from ${txTable} where account_id = $1 and currency = $2 and ` +
+        `settlement_status in ($3, $4) and settlement_time < to_timestamp($5) and transaction_type in (${txIndices}) group by unit`;
+    // on this one we leave out the accrued
+    const latestTxQuery = `select creation_time from ${txTable} where account_id = $1 and currency = $2 and settlement_status = 'SETTLED' ` +
+        `and creation_time < to_timestamp($3) order by creation_time desc limit 1`;
 
     beforeEach(() => resetStubs());
 
@@ -230,10 +230,10 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
         expect(result).to.deep.equal([{ logId: 'some-log', logType: 'ADMIN_SETTLED_SAVE' }]);
     });
 
-    it('Fetches prior transactions', async () => {
+    it.only('Fetches prior transactions', async () => {
         const selectQuery = `select * from ${config.get('tables.accountTransactions')} where account_id = $1 ` +
-            `and settlement_status in ($2, $3) and transaction_type in ($4, $5, $6, $7, $8) order by creation_time desc`;
-        const selectValues = [testAccountId, 'SETTLED', 'LOCKED', 'USER_SAVING_EVENT', 'WITHDRAWAL', 'BOOST_REDEMPTION', 'CAPITALIZATION', 'BOOST_POOL_FUNDING'];
+            `and settlement_status in ($2, $3) and transaction_type in ($4, $5, $6, $7, $8, $9) order by creation_time desc`;
+        const selectValues = [testAccountId, 'SETTLED', 'LOCKED', 'USER_SAVING_EVENT', 'WITHDRAWAL', 'BOOST_REDEMPTION', 'CAPITALIZATION', 'BOOST_POOL_FUNDING', 'BOOST_REVOCATION'];
 
         queryStub.resolves([expectedTxRow, expectedTxRow, expectedTxRow]);
         const priorTxs = await rds.fetchTransactionsForHistory(testAccountId);
@@ -350,10 +350,10 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
 
     it('Checks for duplicate saves', async () => {
         const selectQuery = `select * from ${config.get('tables.accountTransactions')} where account_id = $1 and ` +
-            `amount = $2 and currency = $3 and unit = $4 and settlement_status = $5 and ` +
-            `creation_time > $6 order by creation_time desc limit 1`;
+            `amount = $2 and currency = $3 and unit = $4 and settlement_status in ($5, $6) and ` +
+            `creation_time > $7 order by creation_time desc limit 1`;
 
-        const selectValues = [testAccountId, testSaveAmount, 'ZAR', 'HUNDREDTH_CENT', 'INITIATED', sinon.match.string];
+        const selectValues = [testAccountId, testSaveAmount, 'ZAR', 'HUNDREDTH_CENT', 'INITIATED', 'PENDING', sinon.match.string];
 
         queryStub.resolves([expectedTxRow]);
 

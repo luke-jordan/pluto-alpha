@@ -16,7 +16,6 @@ AWS.config.update({
     region: config.get('aws.region'),
     maxRetries: 5,
     httpOptions: {
-        timeout: 5000,
         connectTimeout: 2000
     }
 });

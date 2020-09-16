@@ -13,7 +13,7 @@ module.exports.sendEventToBoostProcessing = async (eventBody, publisher) => {
         eventContext: eventBody.context
     };
 
-    if (eventBody.context) {
+    if (eventBody.context && eventBody.context.accountId) {
         eventPayload.accountId = eventBody.context.accountId;
     }
 

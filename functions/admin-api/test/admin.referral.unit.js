@@ -17,6 +17,7 @@ const findCountryStub = sinon.stub();
 const listRefCodesStub = sinon.stub();
 const putAdminLogStub = sinon.stub();
 const verifyOtpStub = sinon.stub();
+const updateClientFloatVarsStub = sinon.stub();
 
 class MockLambdaClient {
     constructor () {
@@ -26,6 +27,7 @@ class MockLambdaClient {
 
 const handler = proxyquire('../admin-refs-handler', {
     './persistence/dynamo.float': {
+        'updateClientFloatVars': updateClientFloatVarsStub,
         'findCountryForClientFloat': findCountryStub,
         'listReferralCodes': listRefCodesStub,
         'putAdminLog': putAdminLogStub,
@@ -239,12 +241,63 @@ describe('*** UNIT TEST RETRIEVING AND TRANSFORMING REFERRAL CODES ***', () => {
         expect(resultOfSecond).to.deep.equal({ statusCode: 409, headers: helper.expectedHeaders });
     });
 
-    // it('Should reject an unauthorized request', async () => {
-    //     const apiGwEvent = helper.wrapQueryParamEvent({ clientId: testClientId, floatId: testFloatId }, testAdminId);
-    // });
+    it('Updates user referral defaults', async () => {
+        const testInboundEvent = {
+            clientId: 'a_client_id',
+            floatId: 'primary_cash',
+            userReferralCodeDefaults: {
+                redeemConditionType: 'TARGET_BALANCE',
+                boostAmountOffered: { amount: 100, unit: 'WHOLE_CURRENCY', currency: 'USD' },
+                redeemConditionAmount: { amount: 20000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+                daysToMaintain: 60,
+                bonusPoolId: 'primary_bonus_pool'                   
+            }
+        };
 
-    // it('Should reject a malformed request', async () => {
+        updateClientFloatVarsStub.resolves({ result: 'SUCCESS' });
 
-    // });
+        const apiGwEvent = helper.wrapPathEvent(testInboundEvent, testAdminId, 'user');
+
+        const resultOfUpdate = await handler.manageReferralCodes(apiGwEvent);
+        helper.standardOkayChecks(resultOfUpdate, true);
+
+        const expectedClientFloatVars = {
+            clientId: 'a_client_id',
+            floatId: 'primary_cash',
+            newReferralDefaults: testInboundEvent.userReferralCodeDefaults
+        };
+
+        expect(updateClientFloatVarsStub).to.have.been.calledOnceWithExactly(expectedClientFloatVars);
+    });
+
+    // may bring this back when code settles down enough to bring back validation
+    it.skip('Update on referral defaults fails on missing required parameters', async () => {
+        const testInboundEvent = {
+            // boostAmountOffered: '10000::HUNDREDTH_CENT::USD',
+            redeemConditionType: 'SIMPLE_SAVE',
+            redeemConditionAmount: { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+            daysToMaintain: 21,
+            boostSource: {
+                bonusPoolId: 'primary_bonus_pool',
+                clientId: 'a_client_id',
+                floatId: 'primary_cash'
+            }
+        };
+
+        updateClientFloatVarsStub.resolves({ result: 'SUCCESS' });
+
+        const apiGwEvent = helper.wrapPathEvent(testInboundEvent, testAdminId, 'user');
+
+        const resultOfUpdate = await handler.manageReferralCodes(apiGwEvent);
+
+        expect(resultOfUpdate).to.exist;
+        expect(resultOfUpdate).to.have.property('statusCode', 500);
+        expect(resultOfUpdate).to.have.property('body');
+        expect(resultOfUpdate).to.have.property('headers');
+        expect(resultOfUpdate.headers).to.deep.equal(helper.expectedHeaders);
+
+        const expectedBody = JSON.stringify('Missing required parameter: boostAmountOffered');
+        expect(resultOfUpdate.body).to.deep.equal(expectedBody);
+    });
 
 });

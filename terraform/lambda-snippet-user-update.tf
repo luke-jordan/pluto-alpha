@@ -1,6 +1,6 @@
 variable "snippet_user_update_lambda_function_name" {
   default = "snippet_user_update"
-  type = "string"
+  type = string
 }
 
 resource "aws_lambda_function" "snippet_user_update" {

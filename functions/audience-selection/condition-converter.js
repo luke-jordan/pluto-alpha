@@ -163,7 +163,7 @@ const convertAmountToDefaultUnitQuery = `SUM(
 
 module.exports.convertSumBalanceToColumns = (condition) => {
     const settlementStatusToInclude = ['SETTLED', 'ACCRUED', 'LOCKED'];
-    const transactionTypesToInclude = ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'];
+    const transactionTypesToInclude = ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION', 'BOOST_REVOCATION'];
 
     const columnConditions = [
         { prop: 'settlement_status', op: 'in', value: settlementStatusToInclude },

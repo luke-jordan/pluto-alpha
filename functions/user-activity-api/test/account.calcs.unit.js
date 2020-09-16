@@ -100,8 +100,8 @@ describe('*** UNIT TEST USER ACCOUNT BALANCE EXTRACTION ***', async () => {
         const expectedEarningsQuery = `select sum(amount), unit from ${userAccountTable} ` +
             `inner join ${txTable} on ${userAccountTable}.account_id = ${txTable}.account_id ` +
             `where owner_user_id = $1 and currency = $2 and settlement_status = $3 and creation_time > $4 and ` +
-            `creation_time < 5 and transaction_type in ($6, $7, $8) group by unit`;
-        const expectedValues = [testUserId, 'WHOLE_CURRENCY', 'SETTLED', moment(testStartTimeMillis).format(), moment(testEndTimeMillis).format(), 'ACCRUAL', 'CAPITALIZATION', 'BOOST_REDEMPTION'];
+            `creation_time < 5 and transaction_type in ($6, $7, $8, $9) group by unit`;
+        const expectedValues = [testUserId, 'WHOLE_CURRENCY', 'SETTLED', moment(testStartTimeMillis).format(), moment(testEndTimeMillis).format(), 'ACCRUAL', 'CAPITALIZATION', 'BOOST_REDEMPTION', 'BOOST_REVOCATION'];
 
         queryStub.resolves([{ sum: 10, unit: 'WHOLE_CURRENCY' }, { sum: 100000, unit: 'HUNDREDTH_CENT' }]);
         const resultOfEarnings = await accountCalculator.getUserAccountFigure({ systemWideUserId: testUserId, operation: `total_earnings::HUNDREDTH_CENT::WHOLE_CURRENCY::${testStartTimeMillis}::${testEndTimeMillis}`});

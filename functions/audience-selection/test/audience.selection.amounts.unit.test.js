@@ -60,7 +60,7 @@ describe('*** TEST BALANCE SELECTION ***', () => {
             conditions: [
                 { op: 'and', children: [
                     { prop: 'settlement_status', op: 'in', value: ['SETTLED', 'ACCRUED', 'LOCKED'] },
-                    { prop: 'transaction_type', op: 'in', value: ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'] },
+                    { prop: 'transaction_type', op: 'in', value: ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION', 'BOOST_REVOCATION'] },
                     { prop: 'client_id', op: 'is', value: 'test-client-id' }
                 ]
             }],

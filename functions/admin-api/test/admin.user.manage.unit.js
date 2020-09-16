@@ -88,7 +88,8 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
         fetchTxDetailsStub.resolves({ accountId: testAccountId, humanReference: 'JSAVE111', amount: 100000, unit: 'HUNDREDTH_CENT', currency: 'USD', tags: [] });
         countSettledTxStub.resolves(1);
 
-        const expectedLogContext = {
+        const expectedAdminLogContext = {
+            timeInMillis: sinon.match.number, // slightly redundant but used elsewhere
             settleInstruction: {
                 transactionId: testTxId,
                 paymentRef: 'Saving event completed',
@@ -111,13 +112,13 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
                 saveCount: 1,
                 firstSave: true,
                 transactionTags: [],
-                logContext: expectedLogContext
+                logContext: expectedAdminLogContext
             }
         };
 
         const expectedAdminSettledLog = {
             initiator: testUserId,
-            context: expectedLogContext
+            context: expectedAdminLogContext
         };
 
         const expectedAccountLog = {
@@ -125,6 +126,7 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
             adminUserId: testUserId,
             logType: 'ADMIN_SETTLED_SAVE',
             logContext: {
+                timeInMillis: sinon.match.number, // slightly redundant but minimal loss and makes other processing simpler
                 settleInstruction: {
                     transactionId: testTxId,
                     paymentRef: 'Saving event completed',

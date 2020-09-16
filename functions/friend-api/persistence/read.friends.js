@@ -35,11 +35,13 @@ const relevantProfileColumns = [
     'personal_name',
     'family_name',
     'called_name',
-    'emai_adress',
+    'email_adress',
     'phone_number',
     'referral_code',
     'country_code',
-    'user_status'
+    'user_status',
+    'client_id',
+    'float_id'
 ];
 
 const safeRedisGet = async (key) => {

@@ -31,15 +31,15 @@ module.exports.fetchLogsForTransaction = async (transactionId) => {
 module.exports.checkForDuplicateSave = async ({ accountId, amount, currency, unit }) => {
     const cuttOffTime = moment().subtract(config.get('defaults.duplicate.minuteCutOff'), 'minutes');
     const query = `select * from ${config.get('tables.accountTransactions')} where account_id = $1 and ` +
-        `amount = $2 and currency = $3 and unit = $4 and settlement_status = $5 and ` +
-        `creation_time > $6 order by creation_time desc limit 1`;
-    const dupValues = [accountId, amount, currency, unit, 'INITIATED', cuttOffTime.format()];
+        `amount = $2 and currency = $3 and unit = $4 and settlement_status in ($5, $6) and ` +
+        `creation_time > $7 order by creation_time desc limit 1`;
+    const dupValues = [accountId, amount, currency, unit, 'INITIATED', 'PENDING', cuttOffTime.format()];
     const rows = await rdsConnection.selectQuery(query, dupValues);
     return rows.length > 0 ? camelizeKeys(rows[0]) : null;
 };
 
 module.exports.fetchTransactionsForHistory = async (accountId) => {
-    const txTypes = ['USER_SAVING_EVENT', 'WITHDRAWAL', 'BOOST_REDEMPTION', 'CAPITALIZATION', 'BOOST_POOL_FUNDING'];
+    const txTypes = ['USER_SAVING_EVENT', 'WITHDRAWAL', 'BOOST_REDEMPTION', 'CAPITALIZATION', 'BOOST_POOL_FUNDING', 'BOOST_REVOCATION'];
     const query = `select * from ${config.get('tables.accountTransactions')} where account_id = $1 ` +
         `and settlement_status in ($2, $3) and transaction_type in (${opsUtil.extractArrayIndices(txTypes, 4)}) order by creation_time desc`;
     const rows = await rdsConnection.selectQuery(query, [accountId, 'SETTLED', 'LOCKED', ...txTypes]);
@@ -202,7 +202,7 @@ module.exports.getMinimalFriendListForUser = async (systemWideUserId) => {
 module.exports.sumAccountBalance = async (accountId, currency, time = moment()) => {
     const tableToQuery = config.get('tables.accountTransactions');
     
-    const transTypesToInclude = ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'];
+    const transTypesToInclude = ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION', 'BOOST_REVOCATION'];
     const preTransParamCount = 5;
     
     const transTypeIdxs = opsUtil.extractArrayIndices(transTypesToInclude, preTransParamCount + 1);

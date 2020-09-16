@@ -19,6 +19,8 @@ module.exports.COMPLETE_BOOST_STATUS = ['REDEEMED', 'REVOKED', 'FAILED', 'EXPIRE
 // note: keep an eye on sort order of final statusses, but at present this seems right
 module.exports.ALL_BOOST_STATUS_SORTED = ['CREATED', 'OFFERED', 'UNLOCKED', 'PENDING', 'REDEEMED', 'REVOKED', 'EXPIRED', 'FAILED'];
 
+module.exports.REVOKE_EVENTS = ['ADMIN_SETTLED_WITHDRAWAL'];
+
 module.exports.extractUserDetails = (event) => (event.requestContext ? event.requestContext.authorizer : null);
 
 module.exports.extractEventBody = (event) => (event.body ? JSON.parse(event.body) : event);

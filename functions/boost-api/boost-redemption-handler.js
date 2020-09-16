@@ -199,12 +199,10 @@ const triggerFloatTransfers = async (transferInstructions) => {
     }
 
     const transferResults = JSON.parse(resultOfTransfer.body);
-    
-    // what a code smell but things are just too rough right now, at some point there will be sleep and this will have to get cleaned up
-    const findInstruction = (boostId) => transferInstructions.find((instruction) => instruction.identifier === boostId);
-    const summaizeResult = (boostId) => ({ ...transferResults[boostId], ...findInstruction(boostId).referenceAmounts, unit: findInstruction(boostId).unit });
-    const resultsWithReferenceAmounts = Object.keys(transferResults).reduce((obj, boostId) => 
-        ({ ...obj, [boostId]: summaizeResult(boostId) }), {});
+    const normalizedInstructions = transferInstructions.reduce((obj, instruction) => (
+        { ...obj, [instruction.identifier]: { ...instruction.referenceAmounts, unit: instruction.unit } }), {});    
+    const resultsWithReferenceAmounts = Object.keys(transferResults).reduce((obj, identifier) => 
+        ({ ...obj, [identifier]: { ...transferResults[identifier], ...normalizedInstructions[identifier] } }), {});
 
     return resultsWithReferenceAmounts;
 };
@@ -285,9 +283,43 @@ const handleTransferToBonusPool = async (affectedAccountDict, boost, pooledContr
     return { resultOfTransfer, resultOfPublish };
 };
 
+
+// note: for the moment does _not_ work with random boosts (but no revoke-users in there)
+const generateRevokeInstructions = (affectedAccountDict, boost) => {
+    const accountUserMap = affectedAccountDict[boost.boostId];
+    const accountFilter = (accountId) => accountUserMap[accountId].status === 'REDEEMED' && accountUserMap[accountId].newStatus === 'REVOKED';
+    const accountsToInclude = Object.keys(accountUserMap).filter(accountFilter);
+    logger('Generating revoke instructions for accounts: ', accountsToInclude);
+    if (!accountsToInclude || accountsToInclude.length === 0) {
+        return null;
+    }
+
+    const instructionForAccount = (accountId) => ({
+        floatId: boost.fromFloatId,
+        clientId: boost.forClientId,
+        fromId: accountId,
+        fromType: 'END_USER_ACCOUNT',
+        currency: boost.boostCurrency,
+        unit: boost.boostUnit,
+        identifier: boost.boostId,
+        relatedEntityType: 'BOOST_REVOCATION',
+        relatedEntityId: boost.boostId,
+        allocType: 'BOOST_REVOCATION',
+        transactionType: 'BOOST_REVOCATION',
+        allocState: 'SETTLED',
+        settlementStatus: 'SETTLED',
+        recipients: [{ recipientId: boost.fromBonusPoolId, amount: boost.boostAmount, recipientType: 'BONUS_POOL' }],
+        referenceAmounts: { boostAmount: boost.boostAmount, amountToBonus: boost.boostAmount * accountsToInclude.length }
+    });
+
+    const revokeInstructions = accountsToInclude.map(instructionForAccount);
+    logger('Revoke instructions: ', JSON.stringify(revokeInstructions));
+    return revokeInstructions; 
+};
+
 // note: this is only called for redeemed boosts, by definition. also means it is 'settled' by definition. it redeemes, no matter prior status
 // further note: if this is a revocation, the negative will work as required on sums, but test the hell out of this (and viz transfer-handler)
-const generateFloatTransferInstructions = async (affectedAccountDict, boost, revoke, pooledContributionMap = {}, event = {}) => {
+const generateFloatTransferInstructions = async (affectedAccountDict, boost, pooledContributionMap = {}, event = {}) => {
     // if pooled reward handle initial transfers from accounts to bonus pool
     if (boost.rewardParameters && boost.rewardParameters.rewardType === 'POOLED') {
         const resultOfInitialTransfer = await handleTransferToBonusPool(affectedAccountDict, boost, pooledContributionMap, event);
@@ -310,12 +342,10 @@ const generateFloatTransferInstructions = async (affectedAccountDict, boost, rev
         return null;
     }
 
-    const amount = revoke ? -boostAmount : boostAmount;
-    const transactionType = revoke ? 'BOOST_REVERSAL' : 'BOOST_REDEMPTION';
+    const amount = boostAmount;
+    const transactionType = 'BOOST_REDEMPTION';
     
-    const recipients = recipientAccounts.map((recipientId) => ({ 
-        recipientId, amount, recipientType: 'END_USER_ACCOUNT'
-    }));
+    const recipients = recipientAccounts.map((recipientId) => ({ recipientId, amount, recipientType: 'END_USER_ACCOUNT' }));
 
     return {
         floatId: boost.fromFloatId,
@@ -421,10 +451,15 @@ const executeEventPublication = async (parameters) => {
             boostCategory: boost.boostCategory,
             boostUpdateTimeMillis,
             boostAmount: `${boostAmount}::${boost.boostUnit}::${boost.boostCurrency}`,
-            amountFromBonus: `${transferResults.amountFromBonus}::${transferResults.unit}::${boost.boostCurrency}`,
             transferResults,
             triggeringEventContext: event.eventContext
         };
+
+        if (newStatus === 'REVOKED') {
+            context.amountToBonus = `${transferResults.amountToBonus}::${transferResults.unit}::${boost.boostCurrency}`;
+        } else {
+            context.amountFromBonus = `${transferResults.amountFromBonus}::${transferResults.unit}::${boost.boostCurrency}`;
+        }
 
         if (transferResults.consolationAmount) {
             context.consolationAmount = `${transferResults.consolationAmount}::${transferResults.unit}::${boost.boostCurrency}`;
@@ -444,12 +479,12 @@ const executeEventPublication = async (parameters) => {
     return publicationResult;
 };
 
-const knitConsolationResults = (resultOfWinnerTransfers, resultOfConsolations) => Object.keys(resultOfWinnerTransfers).map((boostId) => {
+const knitConsolationResults = (primaryTransferResults, resultOfConsolations) => Object.keys(primaryTransferResults).map((boostId) => {
     if (!Object.keys(resultOfConsolations).includes(boostId)) {
-        return { boostId, result: resultOfWinnerTransfers[boostId] };
+        return { boostId, result: primaryTransferResults[boostId] };
     }
 
-    const boostResult = resultOfWinnerTransfers[boostId];
+    const boostResult = primaryTransferResults[boostId];
     const consolationResult = resultOfConsolations[boostId];
 
     // const totalAmount = opsUtil.convertToUnit(boostResult.boostAmount, boostResult.unit, DEFAULT_UNIT) + 
@@ -484,13 +519,13 @@ module.exports.redeemOrRevokeBoosts = async ({ redemptionBoosts, revocationBoost
     const boostsToRevoke = revocationBoosts || [];
     
     logger('Boosts to redeem: ', boostsToRedeem);
-    const redeemInstructions = (await Promise.all(boostsToRedeem.map((boost) => generateFloatTransferInstructions(affectedAccountsDict, boost, false, pooledContributionMap, event)))).
+    const redeemInstructions = (await Promise.all(boostsToRedeem.map((boost) => generateFloatTransferInstructions(affectedAccountsDict, boost, pooledContributionMap, event)))).
             filter((instruction) => instruction !== null);
 
     logger('***** Transfer instructions: ', redeemInstructions);
 
-    const revokeInstructions = (await Promise.all(boostsToRevoke.map((boost) => generateFloatTransferInstructions(affectedAccountsDict, boost, true)))).
-            filter((instruction) => instruction !== null);
+    const revokeInstructions = (await Promise.all(boostsToRevoke.map((boost) => generateRevokeInstructions(affectedAccountsDict, boost)))).
+            filter((instructions) => instructions !== null).reduce((cumlist, instructions) => [...cumlist, ...instructions], []);
 
     logger('***** Revoke instructions: ', revokeInstructions);
 

@@ -165,27 +165,35 @@ const invokeAccrualAndPublish = async (clientFloatInfo) => {
     logger('Accrual invocation: ', accrualInvocation);
 
     const accrualResult = await lambda.invoke(accrualInvocation).promise();
+    logger('Accrual result from lambda: ', accrualResult);
 
-    const accrualParamsAndResults = assembleAccrualData(accrualInvocation, accrualResult);
+    try {
+        const accrualParamsAndResults = assembleAccrualData(accrualInvocation, accrualResult);
     
-    const eventOptions = { initiator: 'scheduled_daily_system_job', context: accrualParamsAndResults };
-    await publisher.publishUserEvent(`${clientFloatInfo.clientId}::${clientFloatInfo.floatId}`, 'FLOAT_ACCRUAL', eventOptions);
-
-    // todo: consider using a single email and/or extracting admin from client-float pair
-    const accrualEmailDetails = extractParamsForFloatAccrualEmail(accrualParamsAndResults);
-
-    if (config.get('email.accrualResult.enabled')) {
-        const emailResult = await publisher.sendSystemEmail({
-            subject: 'Daily float accrual results',
-            toList: config.get('email.accrualResult.toList'),
-            bodyTemplateKey: config.get('email.accrualResult.templateKey'),
-            templateVariables: accrualEmailDetails
-        });
+        const eventOptions = { initiator: 'scheduled_daily_system_job', context: accrualParamsAndResults };
+        await publisher.publishUserEvent(`${clientFloatInfo.clientId}::${clientFloatInfo.floatId}`, 'FLOAT_ACCRUAL', eventOptions);
+    
+        // todo: consider using a single email and/or extracting admin from client-float pair
+        const accrualEmailDetails = extractParamsForFloatAccrualEmail(accrualParamsAndResults);
+    
+        if (config.get('email.accrualResult.enabled')) {
+            const emailResult = await publisher.sendSystemEmail({
+                subject: 'Daily float accrual results',
+                toList: config.get('email.accrualResult.toList'),
+                bodyTemplateKey: config.get('email.accrualResult.templateKey'),
+                templateVariables: accrualEmailDetails
+            });
+            
+            logger('Result of email send: ', emailResult);
+        }
         
-        logger('Result of email send: ', emailResult);
+        return accrualEmailDetails;    
+    } catch (err) {
+        // since the above are not essential (just notifications), we do not want to trigger a rerun of everything
+        // but do need a notification, so do so here 
+        logger('FATAL_ERROR:', err);
+        return 'PUBLICATION_ERROR';
     }
-    
-    return accrualEmailDetails;
 };
 
 const initiateFloatAccruals = async () => {

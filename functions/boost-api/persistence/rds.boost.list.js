@@ -106,25 +106,26 @@ module.exports.fetchUserBoosts = async (accountId, { excludedStatus, changedSinc
 
     const endTimeColumn = '(case when expiry_time is not null then expiry_time else end_time end) as end_time';
 
-    const excludedType = ['REFERRAL']; // for now
+    // const excludedType = ['REFERRAL']; // removing
+    const excludedType = []; // stopgap
 
     const statusIndex = 2;
     const typeIndex = statusIndex + excludedStatus.length;
 
     // man but this needs a refactor sometime (just use length of array for index and keep adding to it)
-    const updatedTimeRestriction = changedSinceTime ? `and ${boostAccountJoinTable}.updated_time > $${typeIndex + excludedType.length} ` : '';
-    const flagRestriction = flags ? `and ${boostMainTable}.flags && $${typeIndex + excludedType.length + (changedSinceTime ? 1 : 0)} ` : '';
+    const updatedTimeRestriction = changedSinceTime ? ` and ${boostAccountJoinTable}.updated_time > $${typeIndex + excludedType.length}` : '';
+    const flagRestriction = flags ? ` and ${boostMainTable}.flags && $${typeIndex + excludedType.length + (changedSinceTime ? 1 : 0)}` : '';
     const finalClause = `${updatedTimeRestriction}${flagRestriction}`;
 
-    const selectBoostQuery = `select ${columns}, ${endTimeColumn} ` +
+    const selectBoostQuery = `select ${columns.join(', ')}, ${endTimeColumn} ` +
         `from ${boostMainTable} inner join ${boostAccountJoinTable} ` + 
             `on ${boostMainTable}.boost_id = ${boostAccountJoinTable}.boost_id ` +
         `where account_id = $1 and ` + 
-        `boost_status not in (${extractArrayIndices(excludedStatus, statusIndex)}) and ` +
-        `boost_type not in (${extractArrayIndices(excludedType, typeIndex)}) ${finalClause}` +
+        `boost_status not in (${extractArrayIndices(excludedStatus, statusIndex)}) ${finalClause} ` +
+        // `boost_type not in (${extractArrayIndices(excludedType, typeIndex)}) ${finalClause}` +
        `order by ${boostAccountJoinTable}.creation_time desc`;
 
-    const values = [accountId, ...excludedStatus, ...excludedType];
+    const values = [accountId, ...excludedStatus];
     if (changedSinceTime) {
         values.push(changedSinceTime.format());
     }

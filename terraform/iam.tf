@@ -898,6 +898,28 @@ resource "aws_iam_policy" "lambda_referral_code_open" {
 EOF
 }
 
+resource "aws_iam_policy" "lambda_referral_code_use" {
+  name        = "lambda_referral_use_${terraform.workspace}"
+  path        = "/"
+
+  policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "ReferralCodeUseInvokeAccess",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:InvokeFunction",
+                "lambda:InvokeAsync"
+            ],
+            "Resource": "${aws_lambda_function.referral_use.arn}"
+        }
+    ]
+}
+EOF
+}
+
 resource "aws_iam_policy" "lambda_invoke_admin_referral_access" {
     name = "referral_admin_lambda_invoke_access_${terraform.workspace}"
     path = "/"

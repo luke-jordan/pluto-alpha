@@ -268,11 +268,40 @@ const validateCode = async (event) => {
     return resultCode === referralNotFoundCode;
 };
 
+const updateReferralContext = async (event) => {
+    const params = opsCommonUtil.extractParamsFromEvent(event);
+
+    const { clientId, floatId, userReferralCodeDefaults } = params;
+
+    const userReferralDefaults = {
+        boostAmountOffered: userReferralCodeDefaults.boostAmountOffered || {},
+        redeemConditionType: userReferralCodeDefaults.redeemConditionType || 'TARGET_BALANCE',
+        redeemConditionAmount: userReferralCodeDefaults.redeemConditionAmount || {},
+        bonusPoolId: userReferralCodeDefaults.bonusPoolId
+    };
+
+    if (userReferralCodeDefaults.daysToMaintain && typeof userReferralCodeDefaults.daysToMaintain === 'number') {
+        userReferralDefaults.daysToMaintain = userReferralCodeDefaults.daysToMaintain;
+    }
+
+    logger('Assembled new referral defaults: ', userReferralDefaults);
+
+    const resultOfUpdate = await dynamo.updateClientFloatVars({ clientId, floatId, newReferralDefaults: userReferralDefaults });
+    logger('Result of updating referral code defaults: ', resultOfUpdate);
+
+    if (resultOfUpdate.result === 'SUCCESS') {
+        return resultOfUpdate;
+    }
+
+    throw new Error('Failure in updating dynamo with newreferral defaults');
+};
+
 const dispatcher = {
     'list': (event) => listReferralCodes(event),
     'create': (event) => createReferralCode(event),
     'deactivate': (event) => deactivateCode(event),
-    'update': (event) => modifyCode(event)
+    'update': (event) => modifyCode(event),
+    'user': (event) => updateReferralContext(event)
 };
 
 /**

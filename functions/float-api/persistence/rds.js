@@ -349,7 +349,7 @@ module.exports.obtainAllAccountsWithPriorAllocations = async (floatId, currency,
     
     logger('Assembled sum query: ', sumQuery);
     logger('And values: ', queryParams);
-        
+    
     // each row in this will have the sum in a particular unit for a particular account
     const accountTotalResults = await rdsConnection.selectQuery(sumQuery, queryParams);
     

@@ -26,6 +26,7 @@ const boostEventHandler = require('./event/boost-redeemed-event-handler');
 const friendEventHandler = require('./event/friend-event-handler');
 const saveEventHandler = require('./event/save-event-handler');
 const withdrawEventHandler = require('./event/withdrawal-event-handler');
+const genericDispatchHelper = require('./event/dispatch-helper');
 
 // for unwrapping some AWS stuff
 const extractLambdaBody = (lambdaResult) => JSON.parse(JSON.parse(lambdaResult['Payload']).body);
@@ -78,7 +79,9 @@ const EVENT_DISPATCHER = {
     ADMIN_SETTLED_WITHDRAWAL: withdrawEventHandler.dispatchWithdrawalToBoostProcess,
     BOOST_REDEEMED: boostEventHandler.handleBoostRedeemedEvent,
     FRIEND_REQUEST_TARGET_ACCEPTED: friendEventHandler.handleFriendshipConnectedEvent,
-    FRIEND_REQUEST_INITIATED_ACCEPTED: friendEventHandler.handleFriendshipConnectedEvent
+    FRIEND_REQUEST_INITIATED_ACCEPTED: friendEventHandler.handleFriendshipConnectedEvent,
+    // some events just need to be routed, as with this one, for now
+    REFERRAL_CODE_USED: ({ eventBody }) => genericDispatchHelper.sendEventToBoostProcessing(eventBody, publisher)
 };
 
 const EVENT_REQUIRES_CONTACT = {
@@ -93,7 +96,8 @@ const EVENT_REQUIRES_CONTACT = {
     ADMIN_SETTLED_WITHDRAWAL: { requiresProfile: false },
     BOOST_REDEEMED: { requiresProfile: false },
     FRIEND_REQUEST_TARGET_ACCEPTED: { requiresProfile: false },
-    FRIEND_REQUEST_INITIATED_ACCEPTED: { requiresProfile: false }
+    FRIEND_REQUEST_INITIATED_ACCEPTED: { requiresProfile: false },
+    REFERRAL_CODE_USED: { requiresProfile: false }
 };
 
 /**

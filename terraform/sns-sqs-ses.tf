@@ -235,7 +235,8 @@ resource "aws_sns_topic_subscription" "user_event_process_queue" {
       "ADMIN_SETTLED_WITHDRAWAL",
       "BOOST_REDEEMED",
       "FRIEND_REQUEST_TARGET_ACCEPTED",
-      "FRIEND_REQUEST_INITIATED_ACCEPTED"
+      "FRIEND_REQUEST_INITIATED_ACCEPTED",
+      "REFERRAL_CODE_USED"
     ]
   })}"
 }
