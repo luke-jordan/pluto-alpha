@@ -2,11 +2,13 @@
 
 const logger = require('debug')('jupiter:locked-saves:main');
 const config = require('config');
+const moment = require('moment');
 
 const persistence = require('./persistence/rds');
 const dynamo = require('./persistence/dynamodb');
 
 const opsUtil = require('ops-util-common');
+const publisher = require('publish-common');
 
 const interestHelper = require('./interest-helper');
 
@@ -110,7 +112,7 @@ const isUserTxAccountOwner = async (systemWideUserId, transactionToLock) => {
     logger('Got account ids for user: ', userAccountIds);
     
     if (!userAccountIds.includes(transactionToLock.accountId)) {
-        logger('User does not own the account with the transaction to be locked, exiting');
+        logger('User is not account owner, exiting');
         return false;
     }
 
@@ -130,7 +132,6 @@ module.exports.lockSettledSave = async (event) => {
             return { statusCode: 403 };
         }
     
-        // test behaviour on multiple event types
         const { systemWideUserId } = opsUtil.extractUserDetails(event);
         const { transactionId, lockBonusAmount, daysToLock } = opsUtil.extractParamsFromEvent(event);
     
@@ -138,7 +139,7 @@ module.exports.lockSettledSave = async (event) => {
         logger('Got transaction: ', transactionToLock);
 
         if (!transactionToLock) {
-            logger('No transaction found for received transaction id');
+            logger('No transaction found for received transaction id, exiting');
             return { statusCode: 400 };
         }
     
@@ -149,33 +150,31 @@ module.exports.lockSettledSave = async (event) => {
             }
         }
 
-       if (!isValidTxForLock(transactionToLock)) {
-           return { statusCode: 400 };
-       }
+        if (!isValidTxForLock(transactionToLock)) {
+            return { statusCode: 400 };
+        }
     
-        const bonusAmountString = opsUtil.convertAmountDictToString(lockBonusAmount);
+        const resultOfLock = await persistence.lockTransaction(transactionToLock, lockBonusAmount, daysToLock);
+        logger('Result of lock: ', resultOfLock);
 
-        const logToInsert = {
-            systemWideUserId,
-            accountId: transactionToLock.accountId,
-            logContext: {
-                transactionId: transactionToLock.transactionId,
-                lockBonusAmount,
-                daysToLock,
-                reasonToLog: 'User saving event locked'
+        const updatedTime = moment(resultOfLock.updatedTime);
+        
+        const logOptions = {
+            initiator: systemWideUserId,
+            timestamp: updatedTime.valueOf(),
+            context: {
+                transactionId,
+                accountId: transactionToLock.accountId,
+                transactionType: transactionToLock.transactionType,
+                oldTransactionStatus: transactionToLock.settlementStatus,
+                newTransactionStatus: 'LOCKED',
+                lockDurationDays: daysToLock,
+                lockBonusAmount
             }
         };
     
-        const resultOfUpdates = await Promise.all([
-            persistence.updateTxSettlementStatus({ transactionId, settlementStatus: 'LOCKED', logToInsert }),
-            persistence.updateTxTags(transactionId, `LOCK_BONUS::${bonusAmountString}`),
-            persistence.setTxLockDuration(transactionId, daysToLock)
-        ]);
+        await publisher.publishUserEvent(systemWideUserId, 'USER_LOCKED_SAVE', logOptions);
 
-        logger('Result of locked-tx updates: ', resultOfUpdates);
-
-        // todo: result validations
-        
         return opsUtil.wrapResponse({ result: 'SUCCESS' });
     } catch (err) {
         logger('FATAL_ERROR:', err);

@@ -16,9 +16,9 @@ const fetchFloatVarsStub = sinon.stub();
 
 const fetchTxStub = sinon.stub();
 const fetchAccountsStub = sinon.stub();
-const updateTxStatusStub = sinon.stub();
-const updateTxTagsStub = sinon.stub();
-const setLockDurationStub = sinon.stub();
+const lockTxStub = sinon.stub();
+
+const publishStub = sinon.stub();
 
 const proxyquire = require('proxyquire').noCallThru();
 
@@ -30,10 +30,11 @@ const handler = proxyquire('../locked-handler', {
     './persistence/rds': {
         'fetchTransaction': fetchTxStub,
         'findAccountsForUser': fetchAccountsStub,
-        'updateTxSettlementStatus': updateTxStatusStub,
-        'updateTxTags': updateTxTagsStub,
-        'setTxLockDuration': setLockDurationStub,
+        'lockTransaction': lockTxStub,
         '@noCallThru': true
+    },
+    'publish-common': {
+        'publishUserEvent': publishStub
     }
 });
 
@@ -136,18 +137,17 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
         unit: 'HUNDREDTH_CENT'
     };
 
+    beforeEach(() => {
+        testHelper.resetStubs(fetchTxStub, fetchAccountsStub, lockTxStub, publishStub);
+    });
+
     it('Locks a settled save, updates transaction tags and sets lock duration', async () => {
+        const testBonusAmount = { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'USD' };
+
         fetchTxStub.resolves(testTx);
-        updateTxStatusStub.resolves(testUpdatedTime);
-        updateTxTagsStub.resolves({ updatedTime: testUpdatedTime });
-        setLockDurationStub.resolves({ updatedTime: testUpdatedTime });
+        lockTxStub.resolves({ updatedTime: testUpdatedTime });
 
-        const testEventBody = {
-            transactionId: testTxId,
-            daysToLock: 30,
-            lockBonusAmount: { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'USD' }
-        };
-
+        const testEventBody = { transactionId: testTxId, daysToLock: 30, lockBonusAmount: testBonusAmount };
         const testEvent = testHelper.wrapEvent(testEventBody, testSystemId, 'ORDINARY_USER');
 
         const resultOfLock = await handler.lockSettledSave(testEvent);
@@ -156,27 +156,99 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
         expect(resultBody).to.deep.equal({ result: 'SUCCESS' });
         
         expect(fetchTxStub).to.have.been.calledOnceWithExactly(testTxId);
+        expect(lockTxStub).to.have.been.calledOnceWithExactly(testTx, testBonusAmount, 30);
 
-        const expectedLogContext = {
-            transactionId: testTxId,
-            lockBonusAmount: { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
-            daysToLock: 30,
-            reasonToLog: 'User saving event locked'
-        };
-
-        const expectedStatusUpdateArgs = {
-            transactionId: testTxId,
-            settlementStatus: 'LOCKED',
-            logToInsert: {
-                systemWideUserId: testSystemId,
+        const expectedLogOptions = {
+            initiator: testSystemId,
+            timestamp: testUpdatedTime.valueOf(),
+            context: {
+                transactionId: testTxId,
                 accountId: testAccountId,
-                logContext: expectedLogContext
+                transactionType: 'USER_SAVING_EVENT',
+                oldTransactionStatus: 'SETTLED',
+                newTransactionStatus: 'LOCKED',
+                lockBonusAmount: testBonusAmount,
+                lockDurationDays: 30
             }
         };
 
-        expect(updateTxStatusStub).to.have.been.calledOnceWithExactly(expectedStatusUpdateArgs);
-        expect(updateTxTagsStub).to.have.been.calledOnceWithExactly(testTxId, 'LOCK_BONUS::10000::HUNDREDTH_CENT::USD');
-        expect(setLockDurationStub).to.have.been.calledOnceWithExactly(testTxId, 30);
+        expect(publishStub).to.have.been.calledOnceWithExactly(testSystemId, 'USER_LOCKED_SAVE', expectedLogOptions);
+        expect(fetchAccountsStub).to.have.not.been.called;
+    });
+
+    it('Http route, locks user saving event, verifies user-account ownership', async () => {
+        const testBonusAmount = { amount: 15000, unit: 'HUNDREDTH_CENT', currency: 'USD' };
+
+        fetchTxStub.resolves(testTx);
+        fetchAccountsStub.resolves([testAccountId]);
+
+        lockTxStub.resolves({ updatedTime: testUpdatedTime });
+
+        const testEventBody = { transactionId: testTxId, daysToLock: 30, lockBonusAmount: testBonusAmount };
+        const testEvent = testHelper.wrapQueryParamEvent(testEventBody, testSystemId, 'ORDINARY_USER', 'POST');
+
+        const resultOfLock = await handler.lockSettledSave(testEvent);
+        const resultBody = testHelper.standardOkayChecks(resultOfLock);
+
+        expect(resultBody).to.deep.equal({ result: 'SUCCESS' });
+        
+        expect(fetchTxStub).to.have.been.calledOnceWithExactly(testTxId);
+        expect(lockTxStub).to.have.been.calledOnceWithExactly(testTx, testBonusAmount, 30);
+
+        const expectedLogOptions = {
+            initiator: testSystemId,
+            timestamp: testUpdatedTime.valueOf(),
+            context: {
+                transactionId: testTxId,
+                accountId: testAccountId,
+                transactionType: 'USER_SAVING_EVENT',
+                oldTransactionStatus: 'SETTLED',
+                newTransactionStatus: 'LOCKED',
+                lockBonusAmount: testBonusAmount,
+                lockDurationDays: 30 
+            }
+        };
+
+        expect(publishStub).to.have.been.calledOnceWithExactly(testSystemId, 'USER_LOCKED_SAVE', expectedLogOptions);
+        expect(fetchAccountsStub).to.have.been.calledOnceWithExactly(testSystemId);
+    });
+
+    it('Handles thrown errors and validation fails', async () => {
+        // On invalid event
+        await expect(handler.lockSettledSave({ httpMethod: 'POST' })).to.eventually.deep.equal({ statusCode: 403 });
+
+        fetchTxStub.resolves();
+        const testEvent = testHelper.wrapQueryParamEvent({ transactionId: testTxId }, testSystemId, 'ORDINARY_USER', 'POST');
+
+        // On invalid transaction id
+        await expect(handler.lockSettledSave(testEvent)).to.eventually.deep.equal({ statusCode: 400 });
+        testHelper.resetStubs(fetchTxStub);
+        
+        fetchTxStub.resolves(testTx);
+        fetchAccountsStub.resolves(['account-id']); // differs from tx account id
+        
+        // Where user does not own transaction account
+        await expect(handler.lockSettledSave(testEvent)).to.eventually.deep.equal({ statusCode: 403 });
+        testHelper.resetStubs(fetchTxStub, fetchAccountsStub);
+        
+        const invalidTx = { ...testTx };
+        invalidTx.transactionType = 'WITHDRAWAL';
+
+        fetchTxStub.resolves(invalidTx);
+        fetchAccountsStub.resolves([testAccountId]);
+
+        // On invalid transaction type
+        await expect(handler.lockSettledSave(testEvent)).to.eventually.deep.equal({ statusCode: 400 });
+        testHelper.resetStubs(fetchTxStub);
+
+        invalidTx.transactionType = 'USER_SAVING_EVENT';
+        invalidTx.settlementStatus = 'PENDING';
+
+        fetchTxStub.resolves(invalidTx);
+
+        // On non-SETTLED transaction
+        await expect(handler.lockSettledSave(testEvent)).to.eventually.deep.equal({ statusCode: 400 });
+        testHelper.resetStubs(fetchTxStub, fetchAccountsStub);
     });
 
 });

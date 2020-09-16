@@ -230,7 +230,7 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
         expect(result).to.deep.equal([{ logId: 'some-log', logType: 'ADMIN_SETTLED_SAVE' }]);
     });
 
-    it.only('Fetches prior transactions', async () => {
+    it('Fetches prior transactions', async () => {
         const selectQuery = `select * from ${config.get('tables.accountTransactions')} where account_id = $1 ` +
             `and settlement_status in ($2, $3) and transaction_type in ($4, $5, $6, $7, $8, $9) order by creation_time desc`;
         const selectValues = [testAccountId, 'SETTLED', 'LOCKED', 'USER_SAVING_EVENT', 'WITHDRAWAL', 'BOOST_REDEMPTION', 'CAPITALIZATION', 'BOOST_POOL_FUNDING', 'BOOST_REVOCATION'];

@@ -666,4 +666,24 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
         await expect(rds.updateTxSettlementStatus(params)).to.eventually.be.rejectedWith('Must supply settlement status');
         expect(updateRecordsStub).to.have.not.been.called;
     });
+
+    it('Updates settlement status to LOCKED, sets lock expiry and bonus amount tag', async () => {
+        const accountTxTable = config.get('tables.accountTransactions');
+
+        const lockBonusAmount = { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'ZAR' };
+        const expectedBonusTag = 'LOCK_BONUS::10000::HUNDREDTH_CENT::ZAR';
+        
+        const updateQuery = `update ${accountTxTable} set settlement_status = $1, locked_until_time = $2, tags = array_append(tags, $3) ` +
+            `where transaction_id = $4 returning updated_time`;
+        const updateValues = ['LOCKED', sinon.match.string, expectedBonusTag, testTxId];
+
+        updateRecordStub.withArgs(updateQuery, updateValues).resolves({ rows: [{ 'updated_time': testUpdatedTime }] });
+
+        const updateResult = await rds.lockTransaction(testTxId, lockBonusAmount, 30);
+
+        expect(updateResult).to.exist;
+        expect(updateResult).to.have.property('updatedTime');
+        expect(updateResult.updatedTime).to.deep.equal(moment(testUpdatedTime));
+        expect(updateRecordStub).to.have.been.calledOnceWithExactly(updateQuery, updateValues);
+    });
 });
