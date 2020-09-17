@@ -65,7 +65,8 @@
         "userBankVerify": "bank_account_verify",
         "sendOutboundMessages": "outbound_comms_send",
         "calcSavingHeat": "user_save_heat_fetch",
-        "connectFriendReferral": "friend_referral_connect"
+        "connectFriendReferral": "friend_referral_connect",
+        "createBoost": "boost_create"
     },
     "queues": {
         "boostProcess": "boost_process_queue",
@@ -124,6 +125,7 @@
         "duplicate": {
             "minuteCutOff": 15
         },
-        "lockedSaveMultiplier": 1
+        "lockedSaveMultiplier": 1,
+        "lockedSaveBoostExpiryDays": 1
     }
 }

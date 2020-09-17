@@ -1,6 +1,7 @@
 'use strict';
 
 // const logger = require('debug')('jupiter:locked-saves:test');
+const config = require('config');
 const moment = require('moment');
 const uuid = require('uuid');
 
@@ -15,12 +16,23 @@ const expect = chai.expect;
 const fetchFloatVarsStub = sinon.stub();
 
 const fetchTxStub = sinon.stub();
+const fetchLockedTxStub = sinon.stub();
 const fetchAccountsStub = sinon.stub();
 const lockTxStub = sinon.stub();
+const unlockTxStub = sinon.stub();
 
 const publishStub = sinon.stub();
+const momentStub = sinon.stub();
+
+const lambdaInvokeStub = sinon.stub();
 
 const proxyquire = require('proxyquire').noCallThru();
+
+class MockLambdaClient {
+    constructor () {
+        this.invoke = lambdaInvokeStub;
+    }
+}
 
 const handler = proxyquire('../locked-handler', {
     './persistence/dynamodb': {
@@ -31,11 +43,21 @@ const handler = proxyquire('../locked-handler', {
         'fetchTransaction': fetchTxStub,
         'findAccountsForUser': fetchAccountsStub,
         'lockTransaction': lockTxStub,
+        'fetchLockedTransactions': fetchLockedTxStub,
+        'unlockTransactions': unlockTxStub,
         '@noCallThru': true
     },
     'publish-common': {
-        'publishUserEvent': publishStub
-    }
+        'publishUserEvent': publishStub,
+        '@noCallThru': true
+    },
+    'aws-sdk': {
+        'Lambda': MockLambdaClient,
+        // eslint-disable-next-line no-empty-function
+        'config': { update: () => ({}) }
+    },
+    'moment': momentStub,
+    '@noCallThru': true
 });
 
 const testSystemId = uuid();
@@ -79,7 +101,7 @@ describe('*** UNIT TEST LOCKED SAVE BONUS PREVIEW ***', () => {
         expect(fetchFloatVarsStub).to.have.been.calledOnceWithExactly('some_client', 'primary_cash');
     });
 
-    it('Uses default multilier where locked save bonus not in client-float vars', async () => {
+    it('Uses default multiplier where locked save bonus not in client-float vars', async () => {
         fetchFloatVarsStub.resolves({ accrualRateAnnualBps: 250 });
 
         const testEventBody = {
@@ -125,6 +147,10 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
     const testTxId = uuid();
     const testAccountId = uuid();
 
+    const testClientId = 'some_client_co';
+    const testFloatId = 'some_float';
+    const testBonusPoolId = 'principal_bonus_pool';
+
     const testUpdatedTime = moment();
 
     const testTx = {
@@ -137,15 +163,38 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
         unit: 'HUNDREDTH_CENT'
     };
 
+    const testUserProfile = {
+        systemWideUserId: testSystemId,
+        clientId: 'some_client_co',
+        defaultFloatId: 'some_float',
+        defaultCurrency: 'USD'
+    };
+
     beforeEach(() => {
-        testHelper.resetStubs(fetchTxStub, fetchAccountsStub, lockTxStub, publishStub);
+        testHelper.resetStubs(fetchTxStub, fetchAccountsStub, lockTxStub, publishStub, lambdaInvokeStub, momentStub, fetchFloatVarsStub);
+    });
+
+    const mockLambdaResponse = (body, statusCode = 200) => ({
+        Payload: JSON.stringify({
+            statusCode,
+            body: JSON.stringify(body)
+        })
     });
 
     it('Locks a settled save, updates transaction tags and sets lock duration', async () => {
+        const testBoostExpiryTime = moment().add(31, 'days');
         const testBonusAmount = { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'USD' };
 
         fetchTxStub.resolves(testTx);
         lockTxStub.resolves({ updatedTime: testUpdatedTime });
+
+        fetchFloatVarsStub.resolves({ bonusPoolSystemWideId: 'principal_bonus_pool' });
+
+        lambdaInvokeStub.onFirstCall().returns({ promise: () => mockLambdaResponse(testUserProfile) });
+        lambdaInvokeStub.onSecondCall().returns({ promise: () => ({ statusCode: 200 })});
+
+        momentStub.onFirstCall().returns(testUpdatedTime);
+        momentStub.returns({ add: () => testBoostExpiryTime, valueOf: () => testBoostExpiryTime.valueOf() });
 
         const testEventBody = { transactionId: testTxId, daysToLock: 30, lockBonusAmount: testBonusAmount };
         const testEvent = testHelper.wrapEvent(testEventBody, testSystemId, 'ORDINARY_USER');
@@ -157,6 +206,42 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
         
         expect(fetchTxStub).to.have.been.calledOnceWithExactly(testTxId);
         expect(lockTxStub).to.have.been.calledOnceWithExactly(testTx, testBonusAmount, 30);
+
+        const expectedProfileInvocation = testHelper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testSystemId });
+
+        const expectedBoostSource = {
+            clientId: testClientId,
+            floatId: testFloatId,
+            bonusPoolId: testBonusPoolId
+        };
+
+        const expectedAudienceSelection = {
+            conditions: [
+                { op: 'in', prop: 'systemWideUserId', value: [testSystemId] }
+            ]
+        };
+
+        const expectedBoostPayload = {
+            creatingUserId: testSystemId,
+            label: 'Locked Save Boost',
+            boostTypeCategory: 'LOCKED::SIMPLE_LOCK',
+            boostAmountOffered: '100::HUNDREDTH_CENT::USD',
+            boostBudget: '100',
+            boostSource: expectedBoostSource,
+            endTimeMillis: testBoostExpiryTime.valueOf(),
+            boostAudienceType: 'INDIVIDUAL',
+            boostAudienceSelection: expectedAudienceSelection,
+            initialStatus: 'PENDING',
+            statusConditions: { REDEEMED: ['event_occurs #{LOCK_EXPIRED}'] }
+        };
+
+        const expectedBoostInvocation = testHelper.wrapLambdaInvoc(config.get('lambdas.createBoost'), true, expectedBoostPayload);
+
+        expect(lambdaInvokeStub).to.have.been.calledTwice;
+        expect(lambdaInvokeStub).to.have.been.calledWithExactly(expectedProfileInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledWithExactly(expectedBoostInvocation);
+
+        expect(fetchFloatVarsStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId);
 
         const expectedLogOptions = {
             initiator: testSystemId,
@@ -177,12 +262,20 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
     });
 
     it('Http route, locks user saving event, verifies user-account ownership', async () => {
+        const testBoostExpiryTime = moment().add(31, 'days');
         const testBonusAmount = { amount: 15000, unit: 'HUNDREDTH_CENT', currency: 'USD' };
 
         fetchTxStub.resolves(testTx);
         fetchAccountsStub.resolves([testAccountId]);
 
+        fetchFloatVarsStub.resolves({ bonusPoolSystemWideId: 'principal_bonus_pool' });
         lockTxStub.resolves({ updatedTime: testUpdatedTime });
+
+        lambdaInvokeStub.onFirstCall().returns({ promise: () => mockLambdaResponse(testUserProfile) });
+        lambdaInvokeStub.onSecondCall().returns({ promise: () => ({ statusCode: 200 })});
+
+        momentStub.onFirstCall().returns(testUpdatedTime);
+        momentStub.returns({ add: () => testBoostExpiryTime, valueOf: () => testBoostExpiryTime.valueOf() });
 
         const testEventBody = { transactionId: testTxId, daysToLock: 30, lockBonusAmount: testBonusAmount };
         const testEvent = testHelper.wrapQueryParamEvent(testEventBody, testSystemId, 'ORDINARY_USER', 'POST');
@@ -194,6 +287,43 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
         
         expect(fetchTxStub).to.have.been.calledOnceWithExactly(testTxId);
         expect(lockTxStub).to.have.been.calledOnceWithExactly(testTx, testBonusAmount, 30);
+
+        expect(fetchFloatVarsStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId);
+        expect(fetchAccountsStub).to.have.been.calledOnceWithExactly(testSystemId);
+
+        const expectedProfileInvocation = testHelper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testSystemId });
+
+        const expectedBoostSource = {
+            clientId: testClientId,
+            floatId: testFloatId,
+            bonusPoolId: testBonusPoolId
+        };
+
+        const expectedAudienceSelection = {
+            conditions: [
+                { op: 'in', prop: 'systemWideUserId', value: [testSystemId] }
+            ]
+        };
+
+        const expectedBoostPayload = {
+            creatingUserId: testSystemId,
+            label: 'Locked Save Boost',
+            boostTypeCategory: 'LOCKED::SIMPLE_LOCK',
+            boostAmountOffered: '100::HUNDREDTH_CENT::USD',
+            boostBudget: '100',
+            boostSource: expectedBoostSource,
+            endTimeMillis: testBoostExpiryTime.valueOf(),
+            boostAudienceType: 'INDIVIDUAL',
+            boostAudienceSelection: expectedAudienceSelection,
+            initialStatus: 'PENDING',
+            statusConditions: { REDEEMED: ['event_occurs #{LOCK_EXPIRED}'] }
+        };
+
+        const expectedBoostInvocation = testHelper.wrapLambdaInvoc(config.get('lambdas.createBoost'), true, expectedBoostPayload);
+
+        expect(lambdaInvokeStub).to.have.been.calledTwice;
+        expect(lambdaInvokeStub).to.have.been.calledWithExactly(expectedProfileInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledWithExactly(expectedBoostInvocation);
 
         const expectedLogOptions = {
             initiator: testSystemId,
@@ -210,15 +340,16 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
         };
 
         expect(publishStub).to.have.been.calledOnceWithExactly(testSystemId, 'USER_LOCKED_SAVE', expectedLogOptions);
-        expect(fetchAccountsStub).to.have.been.calledOnceWithExactly(testSystemId);
     });
 
     it('Handles thrown errors and validation fails', async () => {
+        const testEvent = testHelper.wrapQueryParamEvent({ transactionId: testTxId }, testSystemId, 'ORDINARY_USER', 'POST');
+
         // On invalid event
         await expect(handler.lockSettledSave({ httpMethod: 'POST' })).to.eventually.deep.equal({ statusCode: 403 });
+        testHelper.expectNoCalls(fetchTxStub, fetchAccountsStub);
 
         fetchTxStub.resolves();
-        const testEvent = testHelper.wrapQueryParamEvent({ transactionId: testTxId }, testSystemId, 'ORDINARY_USER', 'POST');
 
         // On invalid transaction id
         await expect(handler.lockSettledSave(testEvent)).to.eventually.deep.equal({ statusCode: 400 });
@@ -233,7 +364,6 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
         
         const invalidTx = { ...testTx };
         invalidTx.transactionType = 'WITHDRAWAL';
-
         fetchTxStub.resolves(invalidTx);
         fetchAccountsStub.resolves([testAccountId]);
 
@@ -243,12 +373,62 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
 
         invalidTx.transactionType = 'USER_SAVING_EVENT';
         invalidTx.settlementStatus = 'PENDING';
-
         fetchTxStub.resolves(invalidTx);
 
         // On non-SETTLED transaction
         await expect(handler.lockSettledSave(testEvent)).to.eventually.deep.equal({ statusCode: 400 });
         testHelper.resetStubs(fetchTxStub, fetchAccountsStub);
+
+        fetchTxStub.throws(new Error('Error!'));
+
+        // On thrown error
+        const resultOnError = await handler.lockSettledSave(testEvent);
+        const resultBody = testHelper.standardOkayChecks(resultOnError, 500);
+        expect(resultBody).to.deep.equal({ message: 'Error!'});
     });
 
+});
+
+describe('*** UNIT TEST LOCK EXPIRY SCHEDULED JOB ***', () => {
+    const testTxId = uuid();
+    const testAccountId = uuid();
+
+    const testLockExpiryTime = moment().subtract(12, 'hours');
+    const testCurrentTime = moment();
+
+    const testLockedTx = {
+        transactionId: testTxId,
+        accountId: testAccountId,
+        transactionType: 'USER_SAVING_EVENT',
+        settlementStatus: 'SETTLED',
+        amount: '100',
+        currency: 'USD',
+        unit: 'HUNDREDTH_CENT',
+        lockUntilTime: testLockExpiryTime.format(),
+        tags: ['LOCK_BONUS::1000::HUNDREDTH_CENT::ZAR']
+    };
+
+    it('Removes expired locks from transactions', async () => {
+        fetchLockedTxStub.resolves([testLockedTx]);
+        momentStub.returns(testCurrentTime);
+
+        const resultOfExpire = await handler.checkForExpiredLocks();
+        const resultBody = testHelper.standardOkayChecks(resultOfExpire);
+
+        expect(resultBody).to.deep.equal({ result: 'SUCCESS' });
+
+        expect(fetchLockedTxStub).to.have.been.calledOnceWithExactly(true);
+        expect(unlockTxStub).to.have.been.calledOnceWithExactly([testTxId]);
+
+        const expectedLogOptions = {
+            initiator: testAccountId,
+            timestamp: testCurrentTime.valueOf(),
+            context: {
+                transactionId: testTxId,
+                oldTransactionStatus: 'LOCKED',
+                newTransactionStatus: 'SETTLED'
+            }
+        };
+        expect(publishStub).to.have.been.calledOnceWithExactly(testAccountId, 'LOCK_EXPIRED', expectedLogOptions);
+    });
 });

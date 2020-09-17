@@ -12,6 +12,19 @@ const publisher = require('publish-common');
 
 const interestHelper = require('./interest-helper');
 
+const AWS = require('aws-sdk');
+AWS.config.update({ region: config.get('aws.region') });
+
+const lambda = new AWS.Lambda();
+
+const extractLambdaBody = (lambdaResult) => JSON.parse(JSON.parse(lambdaResult['Payload']).body);
+
+const wrapLambdaInvocation = (payload, nameKey, sync = true) => ({
+    FunctionName: config.get(`lambdas.${nameKey}`),
+    InvocationType: sync ? 'RequestResponse' : 'Event',
+    Payload: JSON.stringify(payload)
+});
+
 // Finds lowest "days" key in lockedSaveBonus that is smaller than passed in "days" and 
 // returns the multiplier associated with the days found.
 const roundDays = (days, lockedSaveBonus) => {
@@ -93,6 +106,60 @@ module.exports.previewBonus = async (event) => {
     }
 };
 
+const fetchUserProfile = async (systemWideUserId) => {
+    const profileFetchInvocation = wrapLambdaInvocation({ systemWideUserId }, 'fetchProfile');
+    const profileFetchResult = await lambda.invoke(profileFetchInvocation).promise();
+    logger('Result of profile fetch: ', profileFetchResult);
+
+    return extractLambdaBody(profileFetchResult);
+};
+
+const createBoostForLockedTx = async (systemWideUserId, lockBonusAmount, daysToLock) => {
+    const { clientId, defaultFloatId } = await fetchUserProfile(systemWideUserId);
+    logger('Got user client and float id: ', { clientId, defaultFloatId });
+
+    const { bonusPoolSystemWideId } = await dynamo.fetchFloatVarsForBalanceCalc(clientId, defaultFloatId);
+    logger('Got bonus pool id: ', bonusPoolSystemWideId);
+
+    const boostSource = {
+        clientId,
+        floatId: defaultFloatId,
+        bonusPoolId: bonusPoolSystemWideId
+    };
+
+    const boostAudienceSelection = {
+        conditions: [
+            { op: 'in', prop: 'systemWideUserId', value: [systemWideUserId] }
+        ]
+    };
+
+    // Sets boost to expire soon after lock expires, giving scheduled job time to redeem
+    const boostExpiryDays = daysToLock + config.get('defaults.lockedSaveBoostExpiryDays');
+    const boostExpiryTime = moment().add(boostExpiryDays, 'days').valueOf();
+
+    const boostPayload = {
+        creatingUserId: systemWideUserId,
+        label: 'Locked Save Boost',
+        boostTypeCategory: 'LOCKED::SIMPLE_LOCK',
+        boostAmountOffered: opsUtil.convertAmountDictToString(lockBonusAmount),
+        boostBudget: lockBonusAmount.amount,
+        boostSource,
+        endTimeMillis: boostExpiryTime,
+        boostAudienceType: 'INDIVIDUAL',
+        boostAudienceSelection,
+        initialStatus: 'PENDING',
+        statusConditions: { REDEEMED: ['event_occurs #{LOCK_EXPIRED}'] }
+    };
+
+    const boostInvocation = wrapLambdaInvocation(boostPayload, 'createBoost', false);
+
+    logger('Invoking lambda with payload: ', boostPayload);
+    const resultOfInvocation = await lambda.invoke(boostInvocation).promise();
+    logger('Result of firing off lambda invoke: ', resultOfInvocation);
+
+    return { result: 'BOOST_CREATED' };
+};
+
 const isValidTxForLock = (transactionToLock) => {
     if (transactionToLock.transactionType !== 'USER_SAVING_EVENT') {
         logger('Attempted to lock a non-saving event, exiting');
@@ -158,6 +225,9 @@ module.exports.lockSettledSave = async (event) => {
         logger('Result of lock: ', resultOfLock);
 
         const updatedTime = moment(resultOfLock.updatedTime);
+
+        const resultOfBoost = await createBoostForLockedTx(systemWideUserId, transactionToLock, lockBonusAmount);
+        logger('Result of boost creation for locked tx: ', resultOfBoost);
         
         const logOptions = {
             initiator: systemWideUserId,
@@ -182,10 +252,44 @@ module.exports.lockSettledSave = async (event) => {
     }
 };
 
+const publishExpiredLock = async (unlockedTx) => {
+    const logOptions = {
+        initiator: unlockedTx.accountId,
+        timestamp: moment().valueOf(),
+        context: {
+            transactionId: unlockedTx.transactionId,
+            oldTransactionStatus: 'LOCKED',
+            newTransactionStatus: 'SETTLED'
+        }
+    };
+
+    return publisher.publishUserEvent(unlockedTx.accountId, 'LOCK_EXPIRED', logOptions);
+};
+
 /**
  * 
  * @param {object} event 
  */
-// module.exports.checkForExpiredLocks = async (event) => {
+module.exports.checkForExpiredLocks = async () => {
+    try {
+        // event validation
 
-// };
+        // fetch transactions with expired locks
+        const lockedTransactions = await persistence.fetchLockedTransactions(true);
+        logger('Got locked tx: ', lockedTransactions);
+
+        const transactionIds = lockedTransactions.map((transaction) => transaction.transactionId);
+        logger('Expiring locks on transactions: ', transactionIds);
+
+        const resultOfLockExpiry = await persistence.unlockTransactions(transactionIds);
+        logger('Lock expiry results: ', resultOfLockExpiry);
+
+        const publishPromises = lockedTransactions.map((unlockedTx) => publishExpiredLock(unlockedTx));
+        await Promise.all(publishPromises);
+
+        return opsUtil.wrapResponse({ result: 'SUCCESS' });
+    } catch (err) {
+        logger('FATAL_ERROR:', err);
+        return opsUtil.wrapResponse({ message: err.message }, 500);
+    }
+};
