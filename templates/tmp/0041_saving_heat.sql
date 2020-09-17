@@ -9,6 +9,7 @@ create table transaction_data.event_point_list (
     float_id varchar (255) not null,
     event_type varchar (255) not null,
     creating_user_id uuid not null,
+    active boolean default true,
     number_points int not null,
     creation_time timestamp with time zone not null default current_timestamp,
     updated_time timestamp with time zone not null default current_timestamp,
@@ -17,6 +18,21 @@ create table transaction_data.event_point_list (
 );
 
 create trigger update_event_point_modtime before update on transaction_data.event_point_list 
+    for each row execute procedure trigger_set_updated_timestamp();
+
+-- As above, though this would have been a bit annoying in DDB
+create table transaction_data.point_heat_level (
+    level_id uuid primary key,
+    client_id varchar (255) not null,
+    float_id varchar (255) not null,
+    level_name varchar (255) not null,
+    level_color varcher (20) not null,
+    level_color_code varchar (20) not null,
+    minimum_points int not null,
+    unique (client_id, float_id, minimum_points)
+);
+
+create trigger update_heat_level_modtime before update on transaction_data.event_point_list
     for each row execute procedure trigger_set_updated_timestamp();
 
 -- using serial primary key because if we need to partition this etc we can do so fairly easily, and no other joins anywhere
@@ -34,3 +50,6 @@ create index if not exists idx_user_point_id on transaction_data.point_log(owner
 
 grant select, insert, update on transaction_data.event_point_list to save_tx_api_worker;
 grant select, insert on transaction_data.point_log to save_tx_api_worker;
+
+grant select, insert, update on transaction_data.event_point_list to admin_api_worker;
+grant select, insert, update, delete on transaction_data.point_heat_level to admin_api_worker;
