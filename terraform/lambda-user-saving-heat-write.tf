@@ -39,6 +39,14 @@ resource "aws_lambda_function" "user_save_heat_write" {
                 "names": {
                     "save_tx_api_worker": "${terraform.workspace}/ops/psql/transactions"
                 }
+              },
+              "publishing": {
+                "userEvents": {
+                    "topicArn": var.user_event_topic_arn[terraform.workspace]
+                },
+                "hash": {
+                  "key": var.log_hashing_secret[terraform.workspace]
+                }
               }
           }
       )}"
@@ -90,6 +98,11 @@ resource "aws_iam_role_policy_attachment" "user_save_heat_write_basic_execution_
 resource "aws_iam_role_policy_attachment" "user_save_heat_write_vpc_execution_policy" {
   role = aws_iam_role.user_save_heat_write_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "user_save_heat_profile_fetch" {
+  role = aws_iam_role.user_save_heat_write_role.name
+  policy_arn = var.user_profile_admin_policy_arn[terraform.workspace]
 }
 
 resource "aws_iam_role_policy_attachment" "user_save_heat_write_secret_get" {

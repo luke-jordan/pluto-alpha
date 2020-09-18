@@ -76,10 +76,14 @@ module.exports.obtainPointHistory = async (userId, startTime, endTime) => {
 // some validation would probably be useful later, as well as handling objects with varying keys (e.g., context present/not)
 module.exports.insertPointLogs = async (userEventPointObjects) => {
     const insertionQuery = `insert into ${pointLogTable} (owner_user_id, event_point_match_id, number_points) values %L`;
-    const columnTemplate = opsUtil.extractColumnTemplate(Object.keys(userEventPointObjects[0]));
     
-    logger('Inserting point log with query: ', insertionQuery, ' and records: ', JSON.stringify(userEventPointObjects));
-    const resultOfInsert = await rdsConnection.insertRecords(insertionQuery, columnTemplate, userEventPointObjects);
+    const insertionObjects = (userEventPointObjects).map((object) => (
+        { userId: object.userId, pointMatchId: object.eventPointMatchId, numberPoints: object.numberPoints }
+    ));
+    const columnTemplate = opsUtil.extractColumnTemplate(Object.keys(insertionObjects[0]));
+    
+    logger('Inserting point log with query: ', insertionQuery, ' and records: ', JSON.stringify(insertionObjects));
+    const resultOfInsert = await rdsConnection.insertRecords(insertionQuery, columnTemplate, insertionObjects);
     logger('Result of insertion: ', JSON.stringify(resultOfInsert));
     
     return { result: 'INSERTED' };

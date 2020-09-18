@@ -21,7 +21,9 @@
         "countryClientTable": "CountryClientTable",
         "authCacheTable": "AuthSucceededEvents",
         "activeReferralCodeTable": "ActiveReferralCodes",
-        "adminLogsTable": "AdminDynamoLogTable"
+        "adminLogsTable": "AdminDynamoLogTable",
+        "eventPointMatch": "transaction_data.event_point_list",
+        "heatLevelThreshold": "transaction_data.point_heat_level"
     },
     "lambdas": {
         "processAccrual": "float_accrue",

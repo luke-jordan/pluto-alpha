@@ -7,14 +7,14 @@ const persistence = require('./persistence/rds.heat');
 const opsUtil = require('ops-util-common');
 const adminUtil = require('./admin.util');
 
-const updateEventHeatPairs = async (params) => {
+const updateEventHeatPairs = async (params, adminUserId) => {
     const { eventPointItems } = params;
-    return persistence.upsertEventPointItems(eventPointItems);
+    return persistence.upsertEventPointItems(eventPointItems, adminUserId);
 };
 
-const updateHeatPointThresholds = async (params) => {
+const updateHeatPointThresholds = async (params, adminUserId) => {
     const { levelConfigurations } = params;
-    return persistence.upsertHeatPointThresholds(levelConfigurations);
+    return persistence.upsertHeatPointThresholds(levelConfigurations, adminUserId);
 };
 
 module.exports.writeHeatConfig = async (event) => {
@@ -26,12 +26,14 @@ module.exports.writeHeatConfig = async (event) => {
         const { operation, params } = opsUtil.extractPathAndParams(event);
         logger('Performing ', operation, ' with: ', JSON.stringify(params));
 
+        const { systemWideUserId: adminUserId } = opsUtil.extractUserDetails(event);
+
         let resultOfUpdate = null;
         if (operation === 'event') {
-            resultOfUpdate = await updateEventHeatPairs(params);
+            resultOfUpdate = await updateEventHeatPairs(params, adminUserId);
             logger('Result of updating event-point pairs: ', resultOfUpdate);
         } else if (operation === 'level') {
-            resultOfUpdate = await updateHeatPointThresholds(params);
+            resultOfUpdate = await updateHeatPointThresholds(params, adminUserId);
             logger('Result of updating level thresholds: ', resultOfUpdate);
         }
 

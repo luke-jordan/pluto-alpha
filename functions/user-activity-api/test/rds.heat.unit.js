@@ -48,8 +48,8 @@ describe('*** USER ACTIVITY *** SAVING HEAT POINT INSERTION', async () => {
         // note : could use a select subclause to get the points, but if a user event fires _while_ admin is updating point scores, the _prior_ scores should hold,
         // i.e., avoid race condition here by using previously pulled figure
         const expectedQuery = 'insert into transaction_data.point_log (owner_user_id, event_point_match_id, number_points) values %L';
-        const expectColumnTemplate = '${userId}, ${eventPointMatchId}, ${numberPoints}';
-        const expectedRow = [{ userId: 'userX', eventPointMatchId: 'somePointJoin', numberPoints: 5 }];
+        const expectColumnTemplate = '${userId}, ${pointMatchId}, ${numberPoints}';
+        const expectedRow = [{ userId: 'userX', pointMatchId: 'somePointJoin', numberPoints: 5 }];
 
         const resultOfQuery = await savingHeatRds.insertPointLogs([{ userId: 'userX', eventPointMatchId: 'somePointJoin', numberPoints: 5 }]);
 
