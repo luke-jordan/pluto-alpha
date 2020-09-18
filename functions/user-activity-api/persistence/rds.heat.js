@@ -73,6 +73,12 @@ module.exports.obtainPointHistory = async (userId, startTime, endTime) => {
     return resultOfQuery.map(camelCaseKeys);
 };
 
+module.exports.obtainPointLevels = async (clientId, floatId) => {
+    const query = `select * from ${config.get('tables.heatLevelThreshold')} where client_id = $1 and float_id = $2 order by minimum_points desc`;
+    const resultOfQuery = await rdsConnection.selectQuery(query, [clientId, floatId]);
+    return camelCaseKeys(resultOfQuery);
+};
+
 // some validation would probably be useful later, as well as handling objects with varying keys (e.g., context present/not)
 module.exports.insertPointLogs = async (userEventPointObjects) => {
     const insertionQuery = `insert into ${pointLogTable} (owner_user_id, event_point_match_id, number_points) values %L`;

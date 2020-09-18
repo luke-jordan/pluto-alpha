@@ -19,6 +19,7 @@
         "boostJoin": "boost_data.boost_account_status",
         "pointHeatDefinition": "transaction_data.event_point_list",
         "heatPointsLedger": "transaction_data.point_log",
+        "heatLevelThreshold": "transaction_data.point_heat_level",
         "clientFloatVars": "ClientFloatTable",
         "bankVerification": "BankVerificationTable"
     },

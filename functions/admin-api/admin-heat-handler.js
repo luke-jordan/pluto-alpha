@@ -2,7 +2,7 @@
 
 const logger = require('debug')('jupiter:admin:heat');
 
-const persistence = require('./persistence/rds.heat');
+const persistence = require('./persistence/rds.heat.admin');
 
 const opsUtil = require('ops-util-common');
 const adminUtil = require('./admin.util');

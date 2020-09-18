@@ -16,6 +16,7 @@ const insertPointLogStub = sinon.stub();
 
 const sumPointsStub = sinon.stub();
 const pointHistoryStub = sinon.stub();
+const pointLevelsStub = sinon.stub();
 
 const lambdaInvokeStub = sinon.stub();
 
@@ -31,6 +32,7 @@ const handler = proxyquire('../heat-handler', {
         'insertPointLogs': insertPointLogStub,
         'sumPointsForUsers': sumPointsStub,
         'obtainPointHistory': pointHistoryStub,
+        'obtainPointLevels': pointLevelsStub,
         '@noCallThru': true
     },
     'aws-sdk': {
@@ -171,17 +173,22 @@ describe('*** USER ACTIVITY *** FETCH POINTS', () => {
     beforeEach(resetStubs);
 
     it('Sums for single user, simple, with default dates, via API call', async () => {
+        // obtaining etc is covered above, so here just stub the cache
+        redisGetStub.resolves(JSON.stringify({ clientId: 'some_client', floatId: 'some_float' }));
+        
         sumPointsStub.resolves({ 'user1': 105 });
-        // we are going to need to fetch the heat "levels" too
+        // should also test case of no levels set
+        pointLevelsStub.resolves([{ minimumPoints: 50, name: 'Cold' }, { minimumPoints: 100, name: 'Hot' }]);
 
         const mockEvent = helper.wrapQueryParamEvent(null, 'user1');
 
         const resultOfHandle = await handler.fetchUserHeat(mockEvent);
         const resultBody = helper.standardOkayChecks(resultOfHandle);
-        expect(resultBody).to.deep.equal({ currentPoints: 105 });
+        expect(resultBody).to.deep.equal({ currentPoints: 105, currentLevel: { minimumPoints: 100, name: 'Hot' } });
 
         // not super happy about the nulls, but cleanest for now to retain flexibility in here
         expect(sumPointsStub).to.have.been.calledOnceWithExactly(['user1'], null, null);
+        expect(pointLevelsStub).to.have.been.calledOnceWithExactly('some_client', 'some_float');
     });
 
     it('Sums for multiple users, specified dates', async () => {
@@ -197,13 +204,16 @@ describe('*** USER ACTIVITY *** FETCH POINTS', () => {
         const pointSums = { 'user1': 105, 'user5': 200, 'user10': 3 }; 
         sumPointsStub.resolves(pointSums);
 
+        const pointLevels = [{ minimumPoints: 100, name: 'Hot' }, { minimumPoints: 200, name: 'Blazing' }];
+        pointLevelsStub.resolves(pointLevels);
+
         const resultOfHandle = await handler.fetchUserHeat(mockEvent);
         const resultBody = helper.standardOkayChecks(resultOfHandle);
         
         expect(resultBody).to.deep.equal({
-            'user1': { currentPoints: 105 },
-            'user5': { currentPoints: 200 },
-            'user10': { currentPoints: 3 }
+            'user1': { currentPoints: 105, currentLevel: pointLevels[0] },
+            'user5': { currentPoints: 200, currentLevel: pointLevels[1] },
+            'user10': { currentPoints: 3, currentLevel: null }
         });
     });
 

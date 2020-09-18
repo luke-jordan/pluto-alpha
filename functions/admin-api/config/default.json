@@ -17,13 +17,13 @@
         "boostMasterTable": "boost_data.boost",
         "boostJoinTable": "boost_data.boost_account_status",
         "accountLogTable": "account_data.account_log",
+        "eventPointMatch": "transaction_data.event_point_list",
+        "heatLevelThreshold": "transaction_data.point_heat_level",
         "clientFloatTable": "ClientFloatTable",
         "countryClientTable": "CountryClientTable",
         "authCacheTable": "AuthSucceededEvents",
         "activeReferralCodeTable": "ActiveReferralCodes",
-        "adminLogsTable": "AdminDynamoLogTable",
-        "eventPointMatch": "transaction_data.event_point_list",
-        "heatLevelThreshold": "transaction_data.point_heat_level"
+        "adminLogsTable": "AdminDynamoLogTable"
     },
     "lambdas": {
         "processAccrual": "float_accrue",
