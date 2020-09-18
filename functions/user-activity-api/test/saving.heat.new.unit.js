@@ -208,9 +208,9 @@ describe('*** USER ACTIVITY *** FETCH POINTS', () => {
         pointLevelsStub.resolves(pointLevels);
 
         const resultOfHandle = await handler.fetchUserHeat(mockEvent);
-        const resultBody = helper.standardOkayChecks(resultOfHandle);
+        const { userPointMap } = resultOfHandle;
         
-        expect(resultBody).to.deep.equal({
+        expect(userPointMap).to.deep.equal({
             'user1': { currentPoints: 105, currentLevel: pointLevels[0] },
             'user5': { currentPoints: 200, currentLevel: pointLevels[1] },
             'user10': { currentPoints: 3, currentLevel: null }

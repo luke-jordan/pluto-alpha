@@ -167,10 +167,10 @@ const fetchHeatForUserThemselves = async (userId, params) => {
 
     logger('For user ID ', userId, ' retrieved: ', pointSum);
 
-    const currentPoints = pointSum[userId];
+    const currentPoints = pointSum[userId] || 0;
     const currentLevel = findPointsForLevel(currentPoints, heatLevels);
 
-    return { statusCode: 200, body: JSON.stringify({ currentPoints, currentLevel })};
+    return { currentPoints, currentLevel };
 };
 
 const extractPointAndLevel = (userId, currentPointSums, heatLevels) => {
@@ -194,7 +194,7 @@ const fetchHeatForUsers = async (userIds, params) => {
         ...obj, [userId]: extractPointAndLevel(userId, currentPointSums, heatLevels)
     }), {});
 
-    return { statusCode: 200, body: JSON.stringify(userPointMap) };
+    return userPointMap;
 };
 
 module.exports.fetchUserHeat = async (event) => {
@@ -209,14 +209,17 @@ module.exports.fetchUserHeat = async (event) => {
         
         if (isApiCall && !params.userIds) {
             const { systemWideUserId } = opsUtil.extractUserDetails(event);
-            return fetchHeatForUserThemselves(systemWideUserId, params);
+            // note: if return the promise directly, lambda runtime does not wrap properly, so errors propagate incorrectly
+            const returnBody = await fetchHeatForUserThemselves(systemWideUserId, params);
+            return { statusCode: 200, body: JSON.stringify(returnBody) };
         }
 
         const { userIds } = params;
-        return fetchHeatForUsers(userIds, params);
+        const userPointMap = await fetchHeatForUsers(userIds, params);
+        logger('Returning user point map: ', JSON.stringify(userPointMap));
+        return { statusCode: 200, userPointMap };
     } catch (err) {
         logger('FATAL_ERROR: ', err);
         return { statusCode: 500 };
     }
 };
-
