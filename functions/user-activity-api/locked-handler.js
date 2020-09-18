@@ -288,7 +288,6 @@ module.exports.checkForExpiredLocks = async (event) => {
 
         const transactionIds = transactions.map((transaction) => transaction.transactionId);
         logger('Expiring locks on transactions: ', transactionIds);
-
         const resultOfUnlock = await persistence.unlockTransactions(transactionIds);
         logger('Lock expiry results: ', resultOfUnlock);
 

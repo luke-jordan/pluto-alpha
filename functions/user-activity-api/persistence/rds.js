@@ -791,7 +791,7 @@ module.exports.unlockTransactions = async (transactionIds) => {
  */
 module.exports.fetchExpiredLockedTransactions = async () => {
     const query = `select * from ${config.get('tables.accountTransactions')} where settlement_status = $1 and ` +
-        `locked_until_time > to_timestamp($2)`;
+        `locked_until_time is not null and locked_until_time > to_timestamp($2)`;
     const result = await rdsConnection.selectQuery(query, ['LOCKED', moment().unix()]);
     return result.map((row) => camelizeKeys(row)); 
 };

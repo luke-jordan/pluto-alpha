@@ -734,7 +734,7 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
         expect(expiredLockedTx).to.deep.equal(expectedResult);
 
         const expectedQuery = `select * from ${accountTxTable} where settlement_status = $1 and ` +
-            `locked_until_time > to_timestamp($2)`;
+            `locked_until_time is not null and locked_until_time > to_timestamp($2)`;
         expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['LOCKED', sinon.match.number]);
     });
 });
