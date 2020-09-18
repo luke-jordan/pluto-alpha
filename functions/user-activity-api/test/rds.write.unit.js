@@ -668,22 +668,73 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
     });
 
     it('Updates settlement status to LOCKED, sets lock expiry and bonus amount tag', async () => {
-        const accountTxTable = config.get('tables.accountTransactions');
+        const testTransactionId = uuid();
+        const lockedUntilTime = moment().add(30, 'days').format();
 
-        const lockBonusAmount = { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'ZAR' };
-        const expectedBonusTag = 'LOCK_BONUS::10000::HUNDREDTH_CENT::ZAR';
-        
-        const updateQuery = `update ${accountTxTable} set settlement_status = $1, locked_until_time = $2, tags = array_append(tags, $3) ` +
-            `where transaction_id = $4 returning updated_time`;
-        const updateValues = ['LOCKED', sinon.match.string, expectedBonusTag, testTxId];
+        updateRecordsStub.resolves([{ 'updated_time': testUpdatedTime }]);
 
-        updateRecordStub.withArgs(updateQuery, updateValues).resolves({ rows: [{ 'updated_time': testUpdatedTime }] });
+        const expectedArgs = {
+            key: { transactionId: testTransactionId},
+            value: { settlementStatus: 'LOCKED', lockedUntilTime },
+            table: config.get('tables.accountTransactions'),
+            returnClause: 'updated_time'
+        };
 
-        const updateResult = await rds.lockTransaction(testTxId, lockBonusAmount, 30);
+        const updateResult = await rds.lockTransaction(testTransactionId, 30);
 
         expect(updateResult).to.exist;
         expect(updateResult).to.have.property('updatedTime');
         expect(updateResult.updatedTime).to.deep.equal(moment(testUpdatedTime));
-        expect(updateRecordStub).to.have.been.calledOnceWithExactly(updateQuery, updateValues);
+        expect(updateRecordsStub).to.have.been.calledOnceWithExactly(expectedArgs);
+    });
+
+    it('Unlocks locked transactions with expired locks', async () => {
+        const accountTxTable = config.get('tables.accountTransactions');
+        const testTxIds = [uuid(), uuid()];
+
+        const updateTime = moment();
+
+        updateRecordStub.resolves({ rows: [{ 'updated_time': updateTime.format() }] });
+
+        const updateResult = await rds.unlockTransactions(testTxIds);
+
+        expect(updateResult).to.exist;
+        expect(updateResult).to.have.property('updatedTime');
+        expect(updateResult.updatedTime).to.deep.equal(moment(updateTime.format()));
+
+        const expectedQuery = `update ${accountTxTable} set settlement_status = $1 and locked_until_time = null ` +
+            `where settlement_status = $2 and locked_until_time > to_timestamp($3) and ` +
+            `transaction_id in ($4, $5) returning updated_time`;
+        const expectedValues = ['SETTLED', 'LOCKED', sinon.match.number, ...testTxIds];
+        expect(updateRecordStub).to.have.been.calledOnceWithExactly(expectedQuery, expectedValues);
+    });
+
+    it('Fetches transactions with expired locks', async () => {
+        const accountTxTable = config.get('tables.accountTransactions');
+        const testLockExpiryTime = moment().subtract(1, 'day');
+
+        const testTx = {
+            'transaction_id': testTxId,
+            'transaction_type': 'USER_SAVING_EVENT',
+            'settlement_status': 'LOCKED',
+            'lockedUntil_time': testLockExpiryTime.format()
+        };
+
+        queryStub.resolves([testTx]);
+
+        const expiredLockedTx = await rds.fetchExpiredLockedTransactions();
+
+        const expectedResult = [{
+            transactionId: testTxId,
+            transactionType: 'USER_SAVING_EVENT',
+            settlementStatus: 'LOCKED',
+            lockedUntilTime: testLockExpiryTime.format()
+        }];
+
+        expect(expiredLockedTx).to.deep.equal(expectedResult);
+
+        const expectedQuery = `select * from ${accountTxTable} where settlement_status = $1 and ` +
+            `locked_until_time > to_timestamp($2)`;
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['LOCKED', sinon.match.number]);
     });
 });

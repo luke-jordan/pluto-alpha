@@ -746,29 +746,52 @@ module.exports.updateTxSettlementStatus = async ({ transactionId, settlementStat
 };
 
 /**
- * Locks a transaction (typically a settled save). Updates settlement status to LOCKED, sets lock expiry
- * and bonus amount tag.
+ * Locks a transaction (typically a settled save). Updates settlement status to LOCKED and sets 
+ * lock expiry time.
  * @param {object} transactionToLock The transaction to be locked.
- * @param {object} lockBonusAmount A standard amount dict containing the lock bonus amount.
  * @param {number} daysToLock The number of days to lock the transaction.
  */
-module.exports.lockTransaction = async (transactionId, lockBonusAmount, daysToLock) => {
-    const accountTxTable = config.get('tables.accountTransactions');
+module.exports.lockTransaction = async (transactionId, daysToLock) => {
+    const lockedUntilTime = moment().add(daysToLock, 'days').format();
 
-    const lockExpiryTime = moment().add(daysToLock, 'days').format();
+    const updateDef = { 
+        key: { transactionId },
+        value: { settlementStatus: 'LOCKED', lockedUntilTime },
+        table: config.get('tables.accountTransactions'),
+        returnClause: 'updated_time'
+    };
 
-    const bonusBonusTag = `LOCK_BONUS::${opsUtil.convertAmountDictToString(lockBonusAmount)}`;
+    const resultOfUpdate = await rdsConnection.updateRecordObject(updateDef);
+    logger('Result of update: ', resultOfUpdate);
 
-    const lockUpdateQuery = `update ${accountTxTable} set settlement_status = $1, locked_until_time = $2, tags = array_append(tags, $3) ` +
-       `where transaction_id = $4 returning updated_time`;
-
-    const lockQueryValues = ['LOCKED', lockExpiryTime, bonusBonusTag, transactionId];
-
-    logger('Locking tx with query: ', lockUpdateQuery, ' and values: ', lockQueryValues);
-    const updateResult = await rdsConnection.updateRecord(lockUpdateQuery, ['LOCKED', lockExpiryTime, bonusBonusTag, transactionId]);
-    logger('Transaction tag update resulted in:', updateResult);
-
-    const updateMoment = updateResult['rows'].length > 0 ? moment(updateResult['rows'][0]['updated_time']) : null;
+    const updateMoment = resultOfUpdate.length > 0 ? moment(resultOfUpdate[0]['updated_time']) : null;
     logger('Extracted moment: ', updateMoment);
     return { updatedTime: updateMoment };
+};
+
+/**
+ * This function unlocks locked transactions, setting their status to SETTLED.
+ * @param {array} transactionIds An array of transaction ids to be unlocked.
+ */
+module.exports.unlockTransactions = async (transactionIds) => {
+    const updateQuery = `update ${config.get('tables.accountTransactions')} set settlement_status = $1 and ` +
+        `locked_until_time = null where settlement_status = $2 and locked_until_time > to_timestamp($3) and ` +
+        `transaction_id in (${opsUtil.extractArrayIndices(transactionIds, 4)}) returning updated_time`;
+
+    const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, ['SETTLED', 'LOCKED', moment().unix(), ...transactionIds]);
+    logger('Result of update: ', resultOfUpdate);
+
+    const updateMoment = resultOfUpdate['rows'].length > 0 ? moment(resultOfUpdate['rows'][0]['updated_time']) : null;
+    logger('Extracted moment: ', updateMoment);
+    return { updatedTime: updateMoment };
+};
+
+/**
+ * Fetches transactions with expired locks.
+ */
+module.exports.fetchExpiredLockedTransactions = async () => {
+    const query = `select * from ${config.get('tables.accountTransactions')} where settlement_status = $1 and ` +
+        `locked_until_time > to_timestamp($2)`;
+    const result = await rdsConnection.selectQuery(query, ['LOCKED', moment().unix()]);
+    return result.map((row) => camelizeKeys(row)); 
 };

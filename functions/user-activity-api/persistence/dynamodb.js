@@ -26,7 +26,8 @@ const relevantFloatColumns = [
     'currency', 
     'comparatorRates', 
     'bankDetails',
-    'lockedSaveBonus'
+    'lockedSaveBonus',
+    'bonusPoolSystemWideId'
 ];
 
 const initiateCacheConnection = async () => {

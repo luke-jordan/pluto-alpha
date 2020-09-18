@@ -114,7 +114,7 @@ const fetchUserProfile = async (systemWideUserId) => {
     return extractLambdaBody(profileFetchResult);
 };
 
-const createBoostForLockedTx = async (systemWideUserId, lockBonusAmount, daysToLock) => {
+const createBoostForLockedTx = async (systemWideUserId, transactionId, lockBonusAmount, daysToLock) => {
     const { clientId, defaultFloatId } = await fetchUserProfile(systemWideUserId);
     logger('Got user client and float id: ', { clientId, defaultFloatId });
 
@@ -137,6 +137,8 @@ const createBoostForLockedTx = async (systemWideUserId, lockBonusAmount, daysToL
     const boostExpiryDays = daysToLock + config.get('defaults.lockedSaveBoostExpiryDays');
     const boostExpiryTime = moment().add(boostExpiryDays, 'days').valueOf();
 
+    const lockExpiryTimeMillis = moment().add(daysToLock, 'days').valueOf();
+
     const boostPayload = {
         creatingUserId: systemWideUserId,
         label: 'Locked Save Boost',
@@ -148,7 +150,7 @@ const createBoostForLockedTx = async (systemWideUserId, lockBonusAmount, daysToL
         boostAudienceType: 'INDIVIDUAL',
         boostAudienceSelection,
         initialStatus: 'PENDING',
-        statusConditions: { REDEEMED: ['event_occurs #{LOCK_EXPIRED}'] }
+        statusConditions: { REDEEMED: [`lock_save_expires #{${transactionId}::${lockExpiryTimeMillis}}`] }
     };
 
     const boostInvocation = wrapLambdaInvocation(boostPayload, 'createBoost', false);
@@ -187,11 +189,12 @@ const isUserTxAccountOwner = async (systemWideUserId, transactionToLock) => {
 };
 
 /**
- * 
- * @param {object} event 
- * @property {string} transactionId
- * @property {object} lockBonusAmount
- * @property {number} daysToLock
+ * The function locks save transactions with whose settlement status is SETTLED and creates a boost that
+ * will be triggered when the lock expires.
+ * @param {object} event An admin, user, http, or direct invocation event.
+ * @property {string} transactionId The identifier of the transaction to be locked.
+ * @property {object} lockBonusAmount A standard amount dict, the boost amount to be awarded to the user after the lock expired
+ * @property {number} daysToLock The number of days to lock the transaction.
  */
 module.exports.lockSettledSave = async (event) => {
     try {
@@ -221,12 +224,12 @@ module.exports.lockSettledSave = async (event) => {
             return { statusCode: 400 };
         }
     
-        const resultOfLock = await persistence.lockTransaction(transactionToLock, lockBonusAmount, daysToLock);
+        const resultOfLock = await persistence.lockTransaction(transactionToLock, daysToLock);
         logger('Result of lock: ', resultOfLock);
 
         const updatedTime = moment(resultOfLock.updatedTime);
 
-        const resultOfBoost = await createBoostForLockedTx(systemWideUserId, transactionToLock, lockBonusAmount);
+        const resultOfBoost = await createBoostForLockedTx(systemWideUserId, transactionId, lockBonusAmount, daysToLock);
         logger('Result of boost creation for locked tx: ', resultOfBoost);
         
         const logOptions = {
@@ -252,7 +255,7 @@ module.exports.lockSettledSave = async (event) => {
     }
 };
 
-const publishExpiredLock = async (unlockedTx) => {
+const publishLockExpired = async (unlockedTx) => {
     const logOptions = {
         initiator: unlockedTx.accountId,
         timestamp: moment().valueOf(),
@@ -267,26 +270,29 @@ const publishExpiredLock = async (unlockedTx) => {
 };
 
 /**
- * 
+ * Searches for transactions with expired locks, sets their settlement status to SETTLED and 
+ * their lockedUntilTime to null.
  * @param {object} event 
  */
-module.exports.checkForExpiredLocks = async () => {
+module.exports.checkForExpiredLocks = async (event) => {
     try {
-        // event validation
+        logger('Locked tx expiry handler received event: ', event);
 
-        // fetch transactions with expired locks
-        const lockedTransactions = await persistence.fetchLockedTransactions(true);
-        logger('Got locked tx: ', lockedTransactions);
+        const transactions = await persistence.fetchExpiredLockedTransactions();
+        logger(`Got tx' with expired locks: `, transactions);
 
-        const transactionIds = lockedTransactions.map((transaction) => transaction.transactionId);
+        if (transactions.length === 0) {
+            logger('No expired tx locks found, exiting');
+            return { statusCode: 200 };
+        }
+
+        const transactionIds = transactions.map((transaction) => transaction.transactionId);
         logger('Expiring locks on transactions: ', transactionIds);
 
-        const resultOfLockExpiry = await persistence.unlockTransactions(transactionIds);
-        logger('Lock expiry results: ', resultOfLockExpiry);
+        const resultOfUnlock = await persistence.unlockTransactions(transactionIds);
+        logger('Lock expiry results: ', resultOfUnlock);
 
-        const publishPromises = lockedTransactions.map((unlockedTx) => publishExpiredLock(unlockedTx));
-        await Promise.all(publishPromises);
-
+        await Promise.all(transactions.map((unlockedTx) => publishLockExpired(unlockedTx)));
         return opsUtil.wrapResponse({ result: 'SUCCESS' });
     } catch (err) {
         logger('FATAL_ERROR:', err);

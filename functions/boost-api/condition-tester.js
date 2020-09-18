@@ -29,7 +29,8 @@ const EVENT_TYPE_CONDITION_MAP = {
     'BOOST_EXPIRED': ['number_taps_in_first_N', 'percent_destroyed_in_first_N', 'randomly_chosen_first_N'],
     'FRIEND_REQUEST_INITIATED_ACCEPTED': ['friends_added_since', 'total_number_friends'],
     'FRIEND_REQUEST_TARGET_ACCEPTED': ['friends_added_since', 'total_number_friends'],
-    'REFERRAL_CODE_USED': ['referral_code_used_by_user']
+    'REFERRAL_CODE_USED': ['referral_code_used_by_user'],
+    'LOCK_EXPIRED': ['lock_save_expires']
 };
 
 // expects in form AMOUNT::UNIT::CURRENCY
@@ -140,6 +141,11 @@ const evaluateTotalFriends = (parameterValue, friendshipList) => {
     const filterToApply = (friendship) => relationshipConstraint === 'EITHER' || friendship.userInitiated;
     const numberFriends = friendshipList.filter(filterToApply);
     return numberFriends.length >= targetNumber;
+};
+
+const evaluateLockedSave = (parameterValue, eventContext) => {
+    const [transactionId, lockExpiryTimeMillis] = parameterValue.split('::');
+    return transactionId === eventContext.transactionId && moment().valueOf() >= lockExpiryTimeMillis;
 };
 
 const extractTaggedBoosts = (eventContext) => (
@@ -263,6 +269,8 @@ module.exports.testCondition = (event, statusCondition) => {
             return evaluateCrossedDigit(parameterValue, eventContext);
         case 'balance_crossed_abs_target':
             return evaluateCrossedTarget(parameterValue, eventContext);
+        case 'lock_save_expires':
+            return evaluateLockedSave(parameterValue, eventContext);
         
         // game conditions
         case 'number_taps_greater_than':

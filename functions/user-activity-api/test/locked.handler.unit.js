@@ -43,7 +43,7 @@ const handler = proxyquire('../locked-handler', {
         'fetchTransaction': fetchTxStub,
         'findAccountsForUser': fetchAccountsStub,
         'lockTransaction': lockTxStub,
-        'fetchLockedTransactions': fetchLockedTxStub,
+        'fetchExpiredLockedTransactions': fetchLockedTxStub,
         'unlockTransactions': unlockTxStub,
         '@noCallThru': true
     },
@@ -182,6 +182,7 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
     });
 
     it('Locks a settled save, updates transaction tags and sets lock duration', async () => {
+        const lockExpiryTime = moment().add(30, 'days');
         const testBoostExpiryTime = moment().add(31, 'days');
         const testBonusAmount = { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'USD' };
 
@@ -194,7 +195,8 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
         lambdaInvokeStub.onSecondCall().returns({ promise: () => ({ statusCode: 200 })});
 
         momentStub.onFirstCall().returns(testUpdatedTime);
-        momentStub.returns({ add: () => testBoostExpiryTime, valueOf: () => testBoostExpiryTime.valueOf() });
+        momentStub.onSecondCall().returns({ add: () => testBoostExpiryTime, valueOf: () => testBoostExpiryTime.valueOf() });
+        momentStub.onThirdCall().returns({ add: () => lockExpiryTime, valueOf: () => lockExpiryTime.valueOf() });
 
         const testEventBody = { transactionId: testTxId, daysToLock: 30, lockBonusAmount: testBonusAmount };
         const testEvent = testHelper.wrapEvent(testEventBody, testSystemId, 'ORDINARY_USER');
@@ -205,7 +207,7 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
         expect(resultBody).to.deep.equal({ result: 'SUCCESS' });
         
         expect(fetchTxStub).to.have.been.calledOnceWithExactly(testTxId);
-        expect(lockTxStub).to.have.been.calledOnceWithExactly(testTx, testBonusAmount, 30);
+        expect(lockTxStub).to.have.been.calledOnceWithExactly(testTx, 30);
 
         const expectedProfileInvocation = testHelper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testSystemId });
 
@@ -225,14 +227,14 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
             creatingUserId: testSystemId,
             label: 'Locked Save Boost',
             boostTypeCategory: 'LOCKED::SIMPLE_LOCK',
-            boostAmountOffered: '100::HUNDREDTH_CENT::USD',
-            boostBudget: '100',
+            boostAmountOffered: '10000::HUNDREDTH_CENT::USD',
+            boostBudget: 10000,
             boostSource: expectedBoostSource,
             endTimeMillis: testBoostExpiryTime.valueOf(),
             boostAudienceType: 'INDIVIDUAL',
             boostAudienceSelection: expectedAudienceSelection,
             initialStatus: 'PENDING',
-            statusConditions: { REDEEMED: ['event_occurs #{LOCK_EXPIRED}'] }
+            statusConditions: { REDEEMED: [`lock_save_expires #{${testTxId}::${lockExpiryTime.valueOf()}}`] }
         };
 
         const expectedBoostInvocation = testHelper.wrapLambdaInvoc(config.get('lambdas.createBoost'), true, expectedBoostPayload);
@@ -262,6 +264,7 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
     });
 
     it('Http route, locks user saving event, verifies user-account ownership', async () => {
+        const lockExpiryTime = moment().add(30, 'days');
         const testBoostExpiryTime = moment().add(31, 'days');
         const testBonusAmount = { amount: 15000, unit: 'HUNDREDTH_CENT', currency: 'USD' };
 
@@ -275,7 +278,8 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
         lambdaInvokeStub.onSecondCall().returns({ promise: () => ({ statusCode: 200 })});
 
         momentStub.onFirstCall().returns(testUpdatedTime);
-        momentStub.returns({ add: () => testBoostExpiryTime, valueOf: () => testBoostExpiryTime.valueOf() });
+        momentStub.onSecondCall().returns({ add: () => testBoostExpiryTime, valueOf: () => testBoostExpiryTime.valueOf() });
+        momentStub.onThirdCall().returns({ add: () => lockExpiryTime, valueOf: () => lockExpiryTime.valueOf() });
 
         const testEventBody = { transactionId: testTxId, daysToLock: 30, lockBonusAmount: testBonusAmount };
         const testEvent = testHelper.wrapQueryParamEvent(testEventBody, testSystemId, 'ORDINARY_USER', 'POST');
@@ -286,7 +290,7 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
         expect(resultBody).to.deep.equal({ result: 'SUCCESS' });
         
         expect(fetchTxStub).to.have.been.calledOnceWithExactly(testTxId);
-        expect(lockTxStub).to.have.been.calledOnceWithExactly(testTx, testBonusAmount, 30);
+        expect(lockTxStub).to.have.been.calledOnceWithExactly(testTx, 30);
 
         expect(fetchFloatVarsStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId);
         expect(fetchAccountsStub).to.have.been.calledOnceWithExactly(testSystemId);
@@ -309,14 +313,14 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
             creatingUserId: testSystemId,
             label: 'Locked Save Boost',
             boostTypeCategory: 'LOCKED::SIMPLE_LOCK',
-            boostAmountOffered: '100::HUNDREDTH_CENT::USD',
-            boostBudget: '100',
+            boostAmountOffered: '15000::HUNDREDTH_CENT::USD',
+            boostBudget: 15000,
             boostSource: expectedBoostSource,
             endTimeMillis: testBoostExpiryTime.valueOf(),
             boostAudienceType: 'INDIVIDUAL',
             boostAudienceSelection: expectedAudienceSelection,
             initialStatus: 'PENDING',
-            statusConditions: { REDEEMED: ['event_occurs #{LOCK_EXPIRED}'] }
+            statusConditions: { REDEEMED: [`lock_save_expires #{${testTxId}::${lockExpiryTime.valueOf()}}`] }
         };
 
         const expectedBoostInvocation = testHelper.wrapLambdaInvoc(config.get('lambdas.createBoost'), true, expectedBoostPayload);
@@ -400,15 +404,14 @@ describe('*** UNIT TEST LOCK EXPIRY SCHEDULED JOB ***', () => {
         transactionId: testTxId,
         accountId: testAccountId,
         transactionType: 'USER_SAVING_EVENT',
-        settlementStatus: 'SETTLED',
+        settlementStatus: 'LOCKED',
         amount: '100',
         currency: 'USD',
         unit: 'HUNDREDTH_CENT',
-        lockUntilTime: testLockExpiryTime.format(),
-        tags: ['LOCK_BONUS::1000::HUNDREDTH_CENT::ZAR']
+        lockedUntilTime: testLockExpiryTime.format()
     };
 
-    it('Removes expired locks from transactions', async () => {
+    it('Unlocks transactions with expired locks', async () => {
         fetchLockedTxStub.resolves([testLockedTx]);
         momentStub.returns(testCurrentTime);
 
@@ -417,7 +420,7 @@ describe('*** UNIT TEST LOCK EXPIRY SCHEDULED JOB ***', () => {
 
         expect(resultBody).to.deep.equal({ result: 'SUCCESS' });
 
-        expect(fetchLockedTxStub).to.have.been.calledOnceWithExactly(true);
+        expect(fetchLockedTxStub).to.have.been.calledOnceWithExactly();
         expect(unlockTxStub).to.have.been.calledOnceWithExactly([testTxId]);
 
         const expectedLogOptions = {
@@ -430,5 +433,19 @@ describe('*** UNIT TEST LOCK EXPIRY SCHEDULED JOB ***', () => {
             }
         };
         expect(publishStub).to.have.been.calledOnceWithExactly(testAccountId, 'LOCK_EXPIRED', expectedLogOptions);
+    });
+
+    it('Handles thrown errors and no locked tx', async () => {
+        fetchLockedTxStub.resolves([]);
+        
+        // Where there are no locked tx to process
+        await expect(handler.checkForExpiredLocks()).to.eventually.deep.equal({ statusCode: 200 });
+
+        fetchLockedTxStub.throws(new Error('Error!'));
+
+        // Om thrown error
+        const resultOnError = await handler.checkForExpiredLocks();
+        const resultBody = testHelper.standardOkayChecks(resultOnError, 500);
+        expect(resultBody).to.deep.equal({ message: 'Error!'});
     });
 });
