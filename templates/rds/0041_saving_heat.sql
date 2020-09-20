@@ -59,3 +59,5 @@ grant select, insert, update, delete on transaction_data.point_heat_level to adm
 
 grant usage, select on transaction_data.point_log_insertion_id_seq to save_tx_api_worker;
 grant usage, select on transaction_data.point_log_insertion_id_seq to admin_api_worker;
+
+grant select on transaction_data.point_log to audience_worker;
