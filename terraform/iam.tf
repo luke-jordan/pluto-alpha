@@ -1158,6 +1158,31 @@ resource "aws_iam_policy" "sqs_bsheet_update_queue_poll" {
 EOF
 }
 
+resource "aws_iam_policy" "sqs_save_heat_queue_poll" {
+    name = "${terraform.workspace}_save_heat_queue_poll"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "SQSQueueAllow",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:ReceiveMessage",
+                "sqs:DeleteMessage",
+                "sqs:GetQueueAttributes"
+            ],
+            "Resource": [
+                "${aws_sqs_queue.heat_write_process_queue.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}
+
 // SOME SNIPPET PERMISSIONS
 
 resource "aws_iam_policy" "sqs_snippet_update_queue_publish" {

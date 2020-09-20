@@ -50,11 +50,11 @@ create table transaction_data.point_log (
 
 create index if not exists idx_user_point_id on transaction_data.point_log(owner_user_id);
 
-grant select, insert, update on transaction_data.event_point_list to save_tx_api_worker;
 grant select, insert on transaction_data.point_log to save_tx_api_worker;
+grant select on transaction_data.event_point_list to save_tx_api_worker;
 grant select on transaction_data.point_heat_level to save_tx_api_worker;
 
-grant select, insert, update on transaction_data.point_heat_level to admin_api_worker;
+grant select, insert, update on transaction_data.event_point_list to admin_api_worker;
 grant select, insert, update, delete on transaction_data.point_heat_level to admin_api_worker;
 
 grant usage, select on transaction_data.point_log_insertion_id_seq to save_tx_api_worker;

@@ -13,6 +13,8 @@ resource "aws_lambda_function" "user_save_heat_write" {
   timeout                        = 15
   tags                           = {"environment"  = terraform.workspace}
   
+  reserved_concurrent_executions = 2 // does not need to be instant at all, and should batch
+
   s3_bucket = "pluto.lambda.${terraform.workspace}"
   s3_key = "user_activity_api/${var.deploy_code_commit_hash}.zip"
 
@@ -108,6 +110,25 @@ resource "aws_iam_role_policy_attachment" "user_save_heat_profile_fetch" {
 resource "aws_iam_role_policy_attachment" "user_save_heat_write_secret_get" {
   role = aws_iam_role.user_save_heat_write_role.name
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_transaction_worker_read"
+}
+
+resource "aws_iam_role_policy_attachment" "user_save_heat_write_event_publish_policy" {
+  role = aws_iam_role.user_save_heat_write_role.name
+  policy_arn = aws_iam_policy.ops_sns_user_event_publish.arn
+}
+
+resource "aws_iam_role_policy_attachment" "user_save_heat_queue_polling_policy" {
+  role = aws_iam_role.user_save_heat_write_role.name
+  policy_arn = aws_iam_policy.sqs_save_heat_queue_poll.arn
+}
+
+////////////////// SUBSCRIPTION TO TOPIC (VIA QUEUE) ////////////////////////////////////////////////////////
+
+resource "aws_lambda_event_source_mapping" "user_save_heat_lambda" {
+  event_source_arn = aws_sqs_queue.heat_write_process_queue.arn
+  enabled = true
+  function_name = aws_lambda_function.user_save_heat_write.arn
+  batch_size = 5
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
