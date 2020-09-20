@@ -26,7 +26,7 @@ const profileKeyPrefix = config.get('cache.keyPrefixes.profile');
 // ///////////////////////////////////////////////////////////////////////////////////////////////////
 // write operation, takes a batch of user events, finds ones that have a heat attached, and write them
 
-const fetchProfile = async (userId) => {
+const obtainProfile = async (userId) => {
     const profileInvocation = {
         FunctionName: config.get('lambdas.fetchProfile'),
         InvocationType: 'RequestResponse',
@@ -47,7 +47,7 @@ const cacheUserProfile = async (userId) => {
     }
 
     // as above, could turn this into taking userIds and so on, but this lambda fetch is one-at-a-time, so not much gain
-    const userProfile = await fetchProfile(userId);
+    const userProfile = await obtainProfile(userId);
     await redis.set(cacheKey, JSON.stringify(userProfile), 'EX', config.get('cache.ttls.profile'));
     logger('Completed fetching and caching profile');
 };
@@ -125,28 +125,76 @@ module.exports.handleSqsBatch = async (event) => {
 // ///////////////////////////// READ OPERATIONS /////////////////////////////////////////////////////
 // ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+// simpler form of above (in time refactor above to just this)
+const fetchProfile = async (userId) => {
+    const cachedProfile = await redis.get(`${profileKeyPrefix}::${userId}`);
+    if (cachedProfile) {
+        return JSON.parse(cachedProfile);
+    }
+
+    const fetchedProfile = await obtainProfile(userId);
+    await redis.set(`${profileKeyPrefix}::${userId}`, JSON.stringify(fetchedProfile), 'EX', config.get('cache.ttls.profile'));
+    return fetchedProfile;
+};
+
+
+const fetchHeatLevels = async (clientId, floatId) => {
+    const listOfLevels = await rds.obtainPointLevels(clientId, floatId);
+    logger('Fetched heat levels for client ', clientId, ' and float ', floatId, ' as: ', JSON.stringify(listOfLevels));
+    if (!listOfLevels || listOfLevels.length === 0) {
+        return {}; // so current level will just return blank
+    }
+
+    const normalizedLevels = listOfLevels.reduce((obj, level) => ({ ...obj, [level.minimumPoints]: level }), {});
+    return normalizedLevels;
+};
+
+const findPointsForLevel = (currentPoints, heatLevels) => {
+    const heatPointLevels = Object.keys(heatLevels);
+    const pointsBelow = heatPointLevels.filter((minimumPoints) => minimumPoints <= currentPoints);
+    return pointsBelow.length > 0 ? heatLevels[Math.max(...pointsBelow)] : null;
+};
+
 const fetchHeatForUserThemselves = async (userId, params) => {
+    const { clientId, floatId } = await fetchProfile(userId);
+
     const start = params.startTimeMillis ? moment(params.startTimeMillis) : null;
     const end = params.endTimeMillis ? moment(params.endTimeMillis) : null;
 
-    const resultFromRds = await rds.sumPointsForUsers([userId], start, end);
-    logger('For user ID ', userId, ' retrieved: ', resultFromRds);
+    const [pointSum, heatLevels] = await Promise.all([
+        rds.sumPointsForUsers([userId], start, end), fetchHeatLevels(clientId, floatId)
+    ]);
 
-    // we will have to apply levels to this
-    const currentPoints = resultFromRds[userId];
-    return { statusCode: 200, body: JSON.stringify({ currentPoints })};
+    logger('For user ID ', userId, ' retrieved: ', pointSum);
+
+    const currentPoints = pointSum[userId] || 0;
+    const currentLevel = findPointsForLevel(currentPoints, heatLevels);
+
+    return { currentPoints, currentLevel };
+};
+
+const extractPointAndLevel = (userId, currentPointSums, heatLevels) => {
+    const currentPoints = currentPointSums[userId] || 0;
+    const currentLevel = findPointsForLevel(currentPoints, heatLevels);
+    return { currentPoints, currentLevel };
 };
 
 const fetchHeatForUsers = async (userIds, params) => {
+    const { clientId, floatId } = params;
+
     const start = params.startTimeMillis ? moment(params.startTimeMillis) : null;
     const end = params.endTimeMillis ? moment(params.endTimeMillis) : null;
 
-    const resultFromRds = await rds.sumPointsForUsers(userIds, start, end);
+    const [currentPointSums, heatLevels] = await Promise.all([
+        rds.sumPointsForUsers(userIds, start, end), fetchHeatLevels(clientId, floatId)
+    ]);
+
     // as above, will be adding heat to these things
     const userPointMap = userIds.reduce((obj, userId) => ({ 
-        ...obj, [userId]: { currentPoints: resultFromRds[userId] || 0 } 
+        ...obj, [userId]: extractPointAndLevel(userId, currentPointSums, heatLevels)
     }), {});
-    return { statusCode: 200, body: JSON.stringify(userPointMap) };
+
+    return userPointMap;
 };
 
 module.exports.fetchUserHeat = async (event) => {
@@ -161,14 +209,17 @@ module.exports.fetchUserHeat = async (event) => {
         
         if (isApiCall && !params.userIds) {
             const { systemWideUserId } = opsUtil.extractUserDetails(event);
-            return fetchHeatForUserThemselves(systemWideUserId, params);
+            // note: if return the promise directly, lambda runtime does not wrap properly, so errors propagate incorrectly
+            const returnBody = await fetchHeatForUserThemselves(systemWideUserId, params);
+            return { statusCode: 200, body: JSON.stringify(returnBody) };
         }
 
         const { userIds } = params;
-        return fetchHeatForUsers(userIds, params);
+        const userPointMap = await fetchHeatForUsers(userIds, params);
+        logger('Returning user point map: ', JSON.stringify(userPointMap));
+        return { statusCode: 200, userPointMap };
     } catch (err) {
         logger('FATAL_ERROR: ', err);
         return { statusCode: 500 };
     }
 };
-

@@ -71,6 +71,12 @@ module.exports.stdProperties = {
         expects: 'number',
         table: 'accountTable' // since we use a subquery on match (pattern to be avoided, but else JSON structure far too complex, given user-id/account-id differences)
     },
+    savingHeat: {
+        type: 'aggregate',
+        description: 'Saving heat points',
+        expects: 'number',
+        table: 'heatTable'
+    },
     boostNotRedeemed: {
         type: 'match',
         description: 'Offered boost, not redeemed',
@@ -206,6 +212,18 @@ module.exports.convertSavedThisMonth = (condition) => {
         groupBy: ['account_id'],
         postConditions: [
             { op: condition.op, prop: convertAmountToDefaultUnitQuery, value: amountInHundredthCent, valueType: 'int' }
+        ]
+    };
+};
+
+module.exports.convertSavingHeat = (condition) => {
+    // likely want to add a time cut off at some point (also generally keep an eye)
+    logger('Converting heat condition: ', condition);
+    return {
+        conditions: [],
+        groupBy: ['owner_user_id'],
+        postConditions: [
+            { op: condition.op, prop: 'sum(number_points)', value: condition.value, valueType: 'int' }
         ]
     };
 };

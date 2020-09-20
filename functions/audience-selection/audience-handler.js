@@ -74,6 +74,8 @@ const columnConverters = {
     boostCount: (condition) => converter.convertBoostNumber(condition),
 
     numberFriends: (condition) => converter.convertNumberFriends(condition),
+
+    savingHeat: (condition) => converter.convertSavingHeat(condition),
     
     systemWideUserId: (condition) => ({
         conditions: [

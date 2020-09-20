@@ -35,13 +35,13 @@ resource "aws_lambda_function" "balance_fetch" {
                 "accountData": "account_data.core_account_ledger"
             },
             "db": {
-              "host": "${local.database_config.host}",
-              "database": "${local.database_config.database}",
-              "port" :"${local.database_config.port}"
+              "host": local.database_config.host,
+              "database": local.database_config.database,
+              "port" : local.database_config.port
             },
             "cache": {
-              "host": "${aws_elasticache_cluster.ops_redis_cache.cache_nodes.0.address}",
-              "port": "${aws_elasticache_cluster.ops_redis_cache.cache_nodes.0.port}"
+              "host": aws_elasticache_cluster.ops_redis_cache.cache_nodes.0.address,
+              "port": aws_elasticache_cluster.ops_redis_cache.cache_nodes.0.port
             },
             "secrets": {
                 "enabled": true,

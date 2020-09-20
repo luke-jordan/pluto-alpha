@@ -241,6 +241,57 @@ resource "aws_sns_topic_subscription" "user_event_process_queue" {
   })}"
 }
 
+/////// SQS QUEUE TO PREVENT LAMBDA EXPLOSION FROM SNS, HEAT WRITING ////////
+
+// note: NOT FIFO, so no de-dup; not major issue (this is non-monetary) for now, but add idempotency in handler over time
+resource "aws_sqs_queue" "heat_write_process_queue" {
+  name = "${terraform.workspace}_heat_write_event_queue"
+  visibility_timeout_seconds = 4500
+  tags = {
+    environment = terraform.workspace
+  }
+}
+
+resource "aws_sqs_queue_policy" "heat_write_process_queue_policy" {
+  queue_url = aws_sqs_queue.heat_write_process_queue.id
+
+  policy = <<POLICY
+{
+  "Version": "2012-10-17",
+  "Id": "sqspolicy",
+  "Statement": [
+    {
+      "Sid": "First",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "sqs:SendMessage",
+      "Resource": "${aws_sqs_queue.heat_write_process_queue.arn}",
+      "Condition": {
+        "ArnEquals": {
+          "aws:SourceArn": "${var.user_event_topic_arn[terraform.workspace]}"
+        }
+      }
+    }
+  ]
+}
+POLICY
+}
+
+// for now, just using the message filter to strip out some high-volume ones that have <1% chance of being used as a source of heat points
+resource "aws_sns_topic_subscription" "heat_write_process_queue" {
+  topic_arn = var.user_event_topic_arn[terraform.workspace]
+  protocol = "sqs"
+  endpoint = aws_sqs_queue.heat_write_process_queue.arn
+
+  filter_policy = "${jsonencode({
+    "eventType": [
+      {
+        "anything-but": ["HEAT_POINTS_AWARDED", "MESSAGE_CREATED", "MESSAGE_FETCHED", "MESSAGE_PUSH_NOTIFICATION_SENT", "MESSAGE_SENT", "BOOST_CREATED_GAME", "BOOST_CREATED_SIMPLE", "BOOST_EXPIRED"]
+      }
+    ]
+  })}"
+}
+
 ///////////////// SIMPLE WORKER QUEUE FOR SNIPPET HANDLING ////////
 resource "aws_sqs_queue" "snippet_update_queue" {
   name = "${terraform.workspace}_snippet_update_queue"
