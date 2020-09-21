@@ -38,7 +38,7 @@ describe('*** TEST HEAT POINT AND LEVEL SELECTION ***', () => {
     // similar to friends, uses the sub-query to deal with fact that heat is user-level property (i.e., aggregates over user's accounts)
     it('Handles heat points', async () => {
         
-        const pointSubQuery = `(select max(last_period_points, current_period_points) from ` +
+        const pointSubQuery = `(select max(prior_period_points, current_period_points) from ` +
             `transaction_data.user_heat_state where system_wide_user_id = owner_user_id)`;
         
         const mockSelectionJSON = {

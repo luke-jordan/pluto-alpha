@@ -20,6 +20,7 @@
         "pointHeatDefinition": "transaction_data.event_point_list",
         "heatPointsLedger": "transaction_data.point_log",
         "heatLevelThreshold": "transaction_data.point_heat_level",
+        "heatStateLedger": "transaction_data.user_heat_state",
         "clientFloatVars": "ClientFloatTable",
         "bankVerification": "BankVerificationTable"
     },

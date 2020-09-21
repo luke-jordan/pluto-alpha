@@ -52,6 +52,10 @@ const cacheUserProfile = async (userId) => {
     logger('Completed fetching and caching profile');
 };
 
+const putUserInCacheAndStateTable = async (userId) => {
+    await Promise.all([cacheUserProfile(userId), rds.establishUserState(userId)]);
+};
+
 const assemblePointLogInsertion = async (userEvent) => {
     const { userId, eventType, timestamp } = userEvent;
     const cachedProfile = await redis.get(`${profileKeyPrefix}::${userId}`);
@@ -85,21 +89,41 @@ const publishLogForPoints = async (pointLogInsertion) => {
     await publisher.publishUserEvent(pointLogInsertion.userId, 'HEAT_POINTS_AWARDED', { context });
 };
 
+// utility method
+const extractClientFloatString = ({ clientId, floatId }) => `${clientId}::${floatId}`;
+
 // bit of overkill as little chance of more than 1 or 2 client-floats at a time, but otherwise could become a real snarl up at scale
 const obtainHeatLevels = async (userIds) => {
     // first we extract unique client float IDs (usually order of magnitude less than any volume of user Ids)
     const userProfilesRaw = await redis.mget(userIds.map((userId) => `${profileKeyPrefix}::${userId}`));
     const userProfiles = userProfilesRaw.map(JSON.parse);
-    const uniqueClientFloats = [... new Set(userProfiles.map(({ clientId, floatId }) => `${clientId}::${floatId}`))]
+    const uniqueClientFloats = [... new Set(userProfiles.map(extractClientFloatString))]
         .map((jointPair) => ({ clientId: jointPair.split('::')[0], floatId: jointPair.split('::')[1] }));
+    logger('For user IDs: ', userIds, ' have client float pairs: ', JSON.stringify(uniqueClientFloats));
     
     // then we assemble a map of client ID and float ID to heat levels
     const heatLevels = await Promise.all(uniqueClientFloats.map(({ clientId, floatId }) => rds.obtainPointLevels(clientId, floatId)));
+    const levelMap = uniqueClientFloats.reduce((obj, clientFloat, index) => ({ ...obj, [extractClientFloatString(clientFloat)]: heatLevels[index] }), {});
+    logger('Obtained resulting map of heat levels: ', JSON.stringify(levelMap));
     
     // then we attach that to user ID and return
+    const userClientFloatMap = userProfiles.reduce((obj, profile) => ({ ...obj, [profile.systemWideUserId]: extractClientFloatString(profile) }), {});
+    const attachHeatLevels = (userId) => levelMap[userClientFloatMap[userId]];
+    return userIds.reduce((obj, userId) => ({ ...obj, [userId]: attachHeatLevels(userId) }), {});
 };
 
-// candidate for future optimization but 
+const assembleUpdateStateCall = (userId, priorPeriodMap, currentPeriodMap, heatLevelMap) => {
+    const priorPeriodPoints = priorPeriodMap[userId] || 0;
+    const currentPeriodPoints = currentPeriodMap[userId] || 0;
+
+    const levelDefinitions = heatLevelMap[userId];
+    const currentLevel = findLevelForPoints(Math.max(priorPeriodPoints, currentPeriodPoints), levelDefinitions);
+    const currentLevelId = currentLevel ? currentLevel.levelId : null;
+
+    return { systemWideUserId: userId, priorPeriodPoints, currentPeriodPoints, currentLevelId };
+}
+
+// candidate for future optimization but is always going to be heavy (and hence doing it on background job and making easily available)
 const updateUserStates = async (pointLogInsertionsCompleted) => {
     const userIds = [...new Set(pointLogInsertionsCompleted.map(({ userId }) => userId))];
 
@@ -107,10 +131,16 @@ const updateUserStates = async (pointLogInsertionsCompleted) => {
     const refMomentThisPeriod = moment();
 
     const [priorPeriodPoints, currentPeriodPoints, heatLevels] = await Promise.all([
-        rds.sumPointsForUsers(userIds, refMomentLastPeriod.startOf('month'), refMomentThisPeriod.endOf('month')),
-        rds.sumPointsForUsers(userIds, refMomentThisPeriod.startOf('month')) // i.e., up until now
+        rds.sumPointsForUsers(userIds, refMomentLastPeriod.startOf('month'), refMomentLastPeriod.endOf('month')),
+        rds.sumPointsForUsers(userIds, refMomentThisPeriod.startOf('month')), // i.e., up until now
+        obtainHeatLevels(userIds)
     ]);
 
+    const updateCalls = userIds.map((userId) => assembleUpdateStateCall(userId, priorPeriodPoints, currentPeriodPoints, heatLevels));
+    logger('Assembled update calls: ', updateCalls);
+
+    const updateResults = await Promise.all(updateCalls.map(rds.updateUserState));
+    logger('Results of update calls: ', updateResults);
 };
 
 module.exports.handleSqsBatch = async (event) => {
@@ -130,8 +160,9 @@ module.exports.handleSqsBatch = async (event) => {
         // so that if we have a batch we don't end up multiplying unnecessary calls, and later calls have profiles ready
         // note ; since this cache is shared, there is little loss if we have a false positive on event to process
         const uniqueUserIds = [...new Set(eventsToProcess.map(({ userId }) => userId))];
+
         logger('Caching profiles for user IDs: ', uniqueUserIds);
-        await Promise.all(uniqueUserIds.map(cacheUserProfile));
+        await Promise.all(uniqueUserIds.map(putUserInCacheAndStateTable));
         
         const allAssembledInsertions = await Promise.all(eventsToProcess.map(assemblePointLogInsertion));
         const pointLogInsertions = allAssembledInsertions.filter((pointLogInsertion) => pointLogInsertion !== null);
@@ -170,9 +201,7 @@ const fetchProfile = async (userId) => {
 };
 
 
-const fetchHeatLevels = async (clientId, floatId) => {
-    const listOfLevels = await rds.obtainPointLevels(clientId, floatId);
-    logger('Fetched heat levels for client ', clientId, ' and float ', floatId, ' as: ', JSON.stringify(listOfLevels));
+const normalizeHeatLevels = (listOfLevels) => {
     if (!listOfLevels || listOfLevels.length === 0) {
         return {}; // so current level will just return blank
     }
@@ -181,7 +210,8 @@ const fetchHeatLevels = async (clientId, floatId) => {
     return normalizedLevels;
 };
 
-const findPointsForLevel = (currentPoints, heatLevels) => {
+const findLevelForPoints = (currentPoints, listOfLevels) => {
+    const heatLevels = normalizeHeatLevels(listOfLevels); // makes following steps a bit easier
     const heatPointLevels = Object.keys(heatLevels);
     const pointsBelow = heatPointLevels.filter((minimumPoints) => minimumPoints <= currentPoints);
     return pointsBelow.length > 0 ? heatLevels[Math.max(...pointsBelow)] : null;
@@ -193,21 +223,22 @@ const fetchHeatForUserThemselves = async (userId, params) => {
     const start = params.startTimeMillis ? moment(params.startTimeMillis) : null;
     const end = params.endTimeMillis ? moment(params.endTimeMillis) : null;
 
-    const [pointSum, heatLevels] = await Promise.all([
-        rds.sumPointsForUsers([userId], start, end), fetchHeatLevels(clientId, floatId)
+    const [pointSum, listOfLevels] = await Promise.all([
+        rds.sumPointsForUsers([userId], start, end), rds.obtainPointLevels(clientId, floatId)
     ]);
 
-    logger('For user ID ', userId, ' retrieved: ', pointSum);
+    logger('For user ID ', userId, ' retrieved point sum: ', pointSum);
+    logger('Fetched heat levels for client ', clientId, ' and float ', floatId, ' as: ', JSON.stringify(listOfLevels));
 
     const currentPoints = pointSum[userId] || 0;
-    const currentLevel = findPointsForLevel(currentPoints, heatLevels);
+    const currentLevel = findLevelForPoints(currentPoints, listOfLevels);
 
     return { currentPoints, currentLevel };
 };
 
-const extractPointAndLevel = (userId, currentPointSums, heatLevels) => {
+const extractPointAndLevel = (userId, currentPointSums, listOfLevels) => {
     const currentPoints = currentPointSums[userId] || 0;
-    const currentLevel = findPointsForLevel(currentPoints, heatLevels);
+    const currentLevel = findLevelForPoints(currentPoints, listOfLevels);
     return { currentPoints, currentLevel };
 };
 
@@ -217,13 +248,13 @@ const fetchHeatForUsers = async (userIds, params) => {
     const start = params.startTimeMillis ? moment(params.startTimeMillis) : null;
     const end = params.endTimeMillis ? moment(params.endTimeMillis) : null;
 
-    const [currentPointSums, heatLevels] = await Promise.all([
-        rds.sumPointsForUsers(userIds, start, end), fetchHeatLevels(clientId, floatId)
+    const [currentPointSums, listOfLevels] = await Promise.all([
+        rds.sumPointsForUsers(userIds, start, end), rds.obtainPointLevels(clientId, floatId)
     ]);
 
     // as above, will be adding heat to these things
     const userPointMap = userIds.reduce((obj, userId) => ({ 
-        ...obj, [userId]: extractPointAndLevel(userId, currentPointSums, heatLevels)
+        ...obj, [userId]: extractPointAndLevel(userId, currentPointSums, listOfLevels)
     }), {});
 
     return userPointMap;

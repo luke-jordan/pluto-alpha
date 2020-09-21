@@ -77,13 +77,13 @@ module.exports.stdProperties = {
         expects: 'number',
         table: 'heatTable'
     },
-    // savingHeatLevel: {
-    //     type: 'aggregate',
-    //     description: 'Saving heat level',
-    //     expects: 'entity',
-    //     entity: 'heatLevel',
-    //     table: 'heatTable'
-    // },
+    savingHeatLevel: {
+        type: 'aggregate',
+        description: 'Saving heat level',
+        expects: 'entity',
+        entity: 'heatLevel',
+        table: 'heatTable'
+    },
     boostNotRedeemed: {
         type: 'match',
         description: 'Offered boost, not redeemed',

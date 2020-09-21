@@ -13,16 +13,16 @@ const eventPointTable = config.get('tables.pointHeatDefinition');
 const pointLogTable = config.get('tables.heatPointsLedger');
 const heatStateTable = config.get('tables.heatStateLedger');
 
-const addOptionalDates = ({ baseQuery, baseValues, startTime, endTime, querySuffix }) => {
+const addOptionalRefDates = ({ baseQuery, baseValues, startTime, endTime, querySuffix }) => {
     let query = baseQuery;
     const values = [...baseValues];
     
     if (startTime) {
-        query = `${query} and creation_time > $${values.length + 1}`;
+        query = `${query} and reference_time > $${values.length + 1}`;
         values.push(startTime.format());
     }
     if (endTime) {
-        query = `${query} and creation_time < $${values.length + 1}`;
+        query = `${query} and reference_time < $${values.length + 1}`;
         values.push(endTime.format());
     }
     if (querySuffix) {
@@ -52,7 +52,7 @@ module.exports.sumPointsForUsers = async (userIds, startTime, endTime) => {
     const querySuffix = `group by owner_user_id`;
     const baseValues = [...userIds];
 
-    const { query, values } = addOptionalDates({ baseQuery, baseValues, startTime, endTime, querySuffix });
+    const { query, values } = addOptionalRefDates({ baseQuery, baseValues, startTime, endTime, querySuffix });
     const resultOfFetch = await rdsConnection.selectQuery(query, values);
     // and finally normalize
     return resultOfFetch.reduce((obj, row) => ({ ...obj, [row['owner_user_id']]: row['sum']}), {});
@@ -66,7 +66,7 @@ module.exports.obtainPointHistory = async (userId, startTime, endTime) => {
     const querySuffix = 'order by creation_time desc';
     const baseValues = [userId];
 
-    const { query, values } = addOptionalDates({ baseQuery, baseValues, startTime, endTime, querySuffix });
+    const { query, values } = addOptionalRefDates({ baseQuery, baseValues, startTime, endTime, querySuffix });
 
     logger('Obtaining point history with assembled query: ', query);
 
@@ -97,7 +97,7 @@ module.exports.insertPointLogs = async (userEventPointObjects) => {
 };
 
 // we use this to record the user current state, inserting first if it does not exist in state table
-module.exports.establishUserState = async (systemWideUserId) {
+module.exports.establishUserState = async (systemWideUserId) => {
     const existenceCheck = await rdsConnection.selectQuery(`select current_period_points from ${heatStateTable} where system_wide_user_id = $1`, [systemWideUserId]);
     if (existenceCheck.length > 0) {
         logger('User state exists');
@@ -105,17 +105,17 @@ module.exports.establishUserState = async (systemWideUserId) {
     }
 
     logger('User does not have heat state, insert blank record and continue');
-    const insertionQuery = `insert into ${heatStateTable} values (system_wide_user_id) returning creation_time`;
-    const resultOfInsert = await rdsConnection.insertRecords(insertionQuery, '${systemWideUserId', [{ systemWideUserId }]);
+    const insertionQuery = `insert into ${heatStateTable} (system_wide_user_id) values %L returning creation_time`;
+    const resultOfInsert = await rdsConnection.insertRecords(insertionQuery, '${systemWideUserId}', [{ systemWideUserId }]);
 
     return resultOfInsert;
 }
 
-module.exports.updateUserState = async ({ systemWideUserId, currentPeriodPoints, lastPeriodPoints, currentLevelId }) => {
+module.exports.updateUserState = async ({ systemWideUserId, currentPeriodPoints, priorPeriodPoints, currentLevelId }) => {
     const updateDefinition = {
         table: heatStateTable,
         key: { systemWideUserId },
-        value: { currentPeriodPoints, lastPeriodPoints, currentLevelId },
+        value: { currentPeriodPoints, priorPeriodPoints, currentLevelId },
         returnClause: 'updated_time'
     };
     
