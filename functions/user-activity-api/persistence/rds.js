@@ -775,10 +775,10 @@ module.exports.lockTransaction = async (transactionId, daysToLock) => {
  */
 module.exports.unlockTransactions = async (transactionIds) => {
     const updateQuery = `update ${config.get('tables.accountTransactions')} set settlement_status = $1 and ` +
-        `locked_until_time = null where settlement_status = $2 and locked_until_time > to_timestamp($3) and ` +
-        `transaction_id in (${opsUtil.extractArrayIndices(transactionIds, 4)}) returning updated_time`;
+        `locked_until_time = null where settlement_status = $2 and locked_until_time < current_timestamp and ` +
+        `transaction_id in (${opsUtil.extractArrayIndices(transactionIds, 3)}) returning updated_time`;
 
-    const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, ['SETTLED', 'LOCKED', moment().unix(), ...transactionIds]);
+    const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, ['SETTLED', 'LOCKED', ...transactionIds]);
     logger('Result of update: ', resultOfUpdate);
 
     const updateMoment = resultOfUpdate['rows'].length > 0 ? moment(resultOfUpdate['rows'][0]['updated_time']) : null;
@@ -791,7 +791,7 @@ module.exports.unlockTransactions = async (transactionIds) => {
  */
 module.exports.fetchExpiredLockedTransactions = async () => {
     const query = `select * from ${config.get('tables.accountTransactions')} where settlement_status = $1 and ` +
-        `locked_until_time is not null and locked_until_time > to_timestamp($2)`;
-    const result = await rdsConnection.selectQuery(query, ['LOCKED', moment().unix()]);
+        `locked_until_time is not null and locked_until_time < current_timestamp`;
+    const result = await rdsConnection.selectQuery(query, ['LOCKED']);
     return result.map((row) => camelizeKeys(row)); 
 };
