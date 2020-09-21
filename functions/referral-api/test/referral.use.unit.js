@@ -197,7 +197,7 @@ describe('*** UNIT TEST REFERRAL BOOST REDEMPTION ***', () => {
         systemWideUserId: testReferredUserId,
         personalName: 'Used',
         clientId: 'some_client_id',
-        floatId: 'primary_cash',
+        defaultFloatId: 'primary_cash',
         countryCode: 'USA',
         creationTimeEpochMillis: testProfileCreationTime,
         referralCodeUsed: testBetaCode
