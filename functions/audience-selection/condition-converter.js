@@ -71,12 +71,19 @@ module.exports.stdProperties = {
         expects: 'number',
         table: 'accountTable' // since we use a subquery on match (pattern to be avoided, but else JSON structure far too complex, given user-id/account-id differences)
     },
-    savingHeat: {
+    savingHeatPoints: {
         type: 'aggregate',
         description: 'Saving heat points',
         expects: 'number',
         table: 'heatTable'
     },
+    // savingHeatLevel: {
+    //     type: 'aggregate',
+    //     description: 'Saving heat level',
+    //     expects: 'entity',
+    //     entity: 'heatLevel',
+    //     table: 'heatTable'
+    // },
     boostNotRedeemed: {
         type: 'match',
         description: 'Offered boost, not redeemed',

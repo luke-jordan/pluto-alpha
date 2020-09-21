@@ -218,7 +218,6 @@ describe('*** TEST BOOST AND FRIEND SELECTION ***', () => {
         helper.itemizedSelectionCheck(executeConditionsStub, expectedPersParams(conditions, 'PRIMARY'), expectedBoostCountSelection);
     });
 
-    // going to be a bit more complex because of the issues with the friend counting, so come back to it
     it('Handles conversion into friend numbers', async () => {
         const countSubQuery = `(select count(*) from friend_data.core_friend_relationship where (initiated_user_id = owner_user_id or accepted_user_id = owner_user_id) and ` +
             `relationship_status = 'ACTIVE')`;

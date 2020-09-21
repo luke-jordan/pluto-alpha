@@ -53,7 +53,7 @@ const cacheUserProfile = async (userId) => {
 };
 
 const assemblePointLogInsertion = async (userEvent) => {
-    const { userId, eventType } = userEvent;
+    const { userId, eventType, timestamp } = userEvent;
     const cachedProfile = await redis.get(`${profileKeyPrefix}::${userId}`);
     if (!cachedProfile) {
         logger('Error! User profile not cached');
@@ -66,10 +66,13 @@ const assemblePointLogInsertion = async (userEvent) => {
     if (!pointLogInsertion) {
         return null;
     }
-
+    
     // final clean up (in future may use parameters to do some further processing). for now, rds does not need event type
-    // (gets it from join ID), but handy for log publishing etc
+    // (gets it from join ID), but handy for log publishing etc, and we want to include a reference time seperate to log creation time
+
+    pointLogInsertion.referenceTime = timestamp ? moment(timestamp).format() : moment().format();
     Reflect.deleteProperty(pointLogInsertion, 'parameters');
+    
     return { userId, eventType, ...pointLogInsertion };
 };
 
@@ -80,6 +83,34 @@ const publishLogForPoints = async (pointLogInsertion) => {
     };
 
     await publisher.publishUserEvent(pointLogInsertion.userId, 'HEAT_POINTS_AWARDED', { context });
+};
+
+// bit of overkill as little chance of more than 1 or 2 client-floats at a time, but otherwise could become a real snarl up at scale
+const obtainHeatLevels = async (userIds) => {
+    // first we extract unique client float IDs (usually order of magnitude less than any volume of user Ids)
+    const userProfilesRaw = await redis.mget(userIds.map((userId) => `${profileKeyPrefix}::${userId}`));
+    const userProfiles = userProfilesRaw.map(JSON.parse);
+    const uniqueClientFloats = [... new Set(userProfiles.map(({ clientId, floatId }) => `${clientId}::${floatId}`))]
+        .map((jointPair) => ({ clientId: jointPair.split('::')[0], floatId: jointPair.split('::')[1] }));
+    
+    // then we assemble a map of client ID and float ID to heat levels
+    const heatLevels = await Promise.all(uniqueClientFloats.map(({ clientId, floatId }) => rds.obtainPointLevels(clientId, floatId)));
+    
+    // then we attach that to user ID and return
+};
+
+// candidate for future optimization but 
+const updateUserStates = async (pointLogInsertionsCompleted) => {
+    const userIds = [...new Set(pointLogInsertionsCompleted.map(({ userId }) => userId))];
+
+    const refMomentLastPeriod = moment().subtract(1, 'month');
+    const refMomentThisPeriod = moment();
+
+    const [priorPeriodPoints, currentPeriodPoints, heatLevels] = await Promise.all([
+        rds.sumPointsForUsers(userIds, refMomentLastPeriod.startOf('month'), refMomentThisPeriod.endOf('month')),
+        rds.sumPointsForUsers(userIds, refMomentThisPeriod.startOf('month')) // i.e., up until now
+    ]);
+
 };
 
 module.exports.handleSqsBatch = async (event) => {
@@ -110,7 +141,8 @@ module.exports.handleSqsBatch = async (event) => {
 
         const resultOfInsertion = await rds.insertPointLogs(pointLogInsertions);
         if (resultOfInsertion.result === 'INSERTED') {
-            await Promise.all(pointLogInsertions.map(publishLogForPoints));
+            // finally, publish events, and update user state
+            await Promise.all([...pointLogInsertions.map(publishLogForPoints), updateUserStates(pointLogInsertions)]);
             return { statusCode: 200, pointEventsTrigged: pointLogInsertions.length };
         }
 

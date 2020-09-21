@@ -11,6 +11,7 @@ const rdsConnection = new RdsConnection(config.get('db'));
 
 const eventPointTable = config.get('tables.pointHeatDefinition');
 const pointLogTable = config.get('tables.heatPointsLedger');
+const heatStateTable = config.get('tables.heatStateLedger');
 
 const addOptionalDates = ({ baseQuery, baseValues, startTime, endTime, querySuffix }) => {
     let query = baseQuery;
@@ -81,10 +82,10 @@ module.exports.obtainPointLevels = async (clientId, floatId) => {
 
 // some validation would probably be useful later, as well as handling objects with varying keys (e.g., context present/not)
 module.exports.insertPointLogs = async (userEventPointObjects) => {
-    const insertionQuery = `insert into ${pointLogTable} (owner_user_id, event_point_match_id, number_points) values %L`;
+    const insertionQuery = `insert into ${pointLogTable} (owner_user_id, event_point_match_id, number_points, reference_time) values %L`;
     
     const insertionObjects = (userEventPointObjects).map((object) => (
-        { userId: object.userId, pointMatchId: object.eventPointMatchId, numberPoints: object.numberPoints }
+        { userId: object.userId, pointMatchId: object.eventPointMatchId, numberPoints: object.numberPoints, referenceTime: object.referenceTime }
     ));
     const columnTemplate = opsUtil.extractColumnTemplate(Object.keys(insertionObjects[0]));
     
@@ -93,4 +94,32 @@ module.exports.insertPointLogs = async (userEventPointObjects) => {
     logger('Result of insertion: ', JSON.stringify(resultOfInsert));
     
     return { result: 'INSERTED' };
+};
+
+// we use this to record the user current state, inserting first if it does not exist in state table
+module.exports.establishUserState = async (systemWideUserId) {
+    const existenceCheck = await rdsConnection.selectQuery(`select current_period_points from ${heatStateTable} where system_wide_user_id = $1`, [systemWideUserId]);
+    if (existenceCheck.length > 0) {
+        logger('User state exists');
+        return 'USER_EXISTS';
+    }
+
+    logger('User does not have heat state, insert blank record and continue');
+    const insertionQuery = `insert into ${heatStateTable} values (system_wide_user_id) returning creation_time`;
+    const resultOfInsert = await rdsConnection.insertRecords(insertionQuery, '${systemWideUserId', [{ systemWideUserId }]);
+
+    return resultOfInsert;
+}
+
+module.exports.updateUserState = async ({ systemWideUserId, currentPeriodPoints, lastPeriodPoints, currentLevelId }) => {
+    const updateDefinition = {
+        table: heatStateTable,
+        key: { systemWideUserId },
+        value: { currentPeriodPoints, lastPeriodPoints, currentLevelId },
+        returnClause: 'updated_time'
+    };
+    
+    logger('Sending in heat state update: ', updateDefinition);
+    await rdsConnection.updateRecordObject(updateDefinition);
+    return { result: 'UPDATED' };
 };
