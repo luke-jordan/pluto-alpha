@@ -66,7 +66,7 @@ const calculateBonusForLockedSave = (lockedSaveInterestMap, baseAmount) => {
 
 /**
  * Calculates the locked saved bonus for each duration passed in the daysToPreview array.
- * Returns the projected interest exclusive of the user balance.
+ * Returns the projected interest exclusive of the user's balance.
  * @param {object} event 
  * @property {string} floatId The float from which to read the accrual rate and locked save multipliers.
  * @property {string} clientId The client id used in conjunction with the float id above from which to read the relevant client-float vars.
@@ -189,7 +189,7 @@ const isUserTxAccountOwner = async (systemWideUserId, transactionToLock) => {
 };
 
 /**
- * The function locks save transactions with whose settlement status is SETTLED and creates a boost that
+ * The function locks save transactions whose settlement status is SETTLED and creates a boost that
  * will be triggered when the lock expires.
  * @param {object} event An admin, user, http, or direct invocation event.
  * @property {string} transactionId The identifier of the transaction to be locked.
@@ -257,7 +257,7 @@ module.exports.lockSettledSave = async (event) => {
 
 const publishLockExpired = async (unlockedTx) => {
     const logOptions = {
-        initiator: unlockedTx.accountId,
+        initiator: unlockedTx.ownerUserId,
         timestamp: moment().valueOf(),
         context: {
             transactionId: unlockedTx.transactionId,
@@ -266,20 +266,19 @@ const publishLockExpired = async (unlockedTx) => {
         }
     };
 
-    return publisher.publishUserEvent(unlockedTx.accountId, 'LOCK_EXPIRED', logOptions);
+    return publisher.publishUserEvent(unlockedTx.ownerUserId, 'LOCK_EXPIRED', logOptions);
 };
 
 /**
- * Searches for transactions with expired locks, sets their settlement status to SETTLED and 
- * their lockedUntilTime to null.
+ * Scheduled job for removing expired locks from transactions.
  * @param {object} event 
  */
 module.exports.checkForExpiredLocks = async (event) => {
     try {
-        logger('Locked tx expiry handler received event: ', event);
+        logger('Expired lock handler received event: ', event);
 
         const transactions = await persistence.fetchExpiredLockedTransactions();
-        logger(`Got tx' with expired locks: `, transactions);
+        logger('Got tx with expired locks: ', transactions);
 
         if (transactions.length === 0) {
             logger('No expired tx locks found, exiting');
@@ -288,7 +287,7 @@ module.exports.checkForExpiredLocks = async (event) => {
 
         const transactionIds = transactions.map((transaction) => transaction.transactionId);
         const resultOfUnlock = await persistence.unlockTransactions(transactionIds);
-        logger('Lock expiry results: ', resultOfUnlock);
+        logger('Removing expired locks resulted in: ', resultOfUnlock);
 
         await Promise.all(transactions.map((unlockedTx) => publishLockExpired(unlockedTx)));
         return opsUtil.wrapResponse({ result: 'SUCCESS' });

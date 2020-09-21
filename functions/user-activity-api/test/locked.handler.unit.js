@@ -195,6 +195,7 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
         lambdaInvokeStub.onSecondCall().returns({ promise: () => ({ statusCode: 200 })});
 
         momentStub.onFirstCall().returns(testUpdatedTime);
+
         momentStub.onSecondCall().returns({ add: () => testBoostExpiryTime, valueOf: () => testBoostExpiryTime.valueOf() });
         momentStub.onThirdCall().returns({ add: () => lockExpiryTime, valueOf: () => lockExpiryTime.valueOf() });
 
@@ -278,6 +279,7 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
         lambdaInvokeStub.onSecondCall().returns({ promise: () => ({ statusCode: 200 })});
 
         momentStub.onFirstCall().returns(testUpdatedTime);
+
         momentStub.onSecondCall().returns({ add: () => testBoostExpiryTime, valueOf: () => testBoostExpiryTime.valueOf() });
         momentStub.onThirdCall().returns({ add: () => lockExpiryTime, valueOf: () => lockExpiryTime.valueOf() });
 
@@ -408,7 +410,8 @@ describe('*** UNIT TEST LOCK EXPIRY SCHEDULED JOB ***', () => {
         amount: '100',
         currency: 'USD',
         unit: 'HUNDREDTH_CENT',
-        lockedUntilTime: testLockExpiryTime.format()
+        lockedUntilTime: testLockExpiryTime.format(),
+        ownerUserId: testSystemId
     };
 
     it('Unlocks transactions with expired locks', async () => {
@@ -424,7 +427,7 @@ describe('*** UNIT TEST LOCK EXPIRY SCHEDULED JOB ***', () => {
         expect(unlockTxStub).to.have.been.calledOnceWithExactly([testTxId]);
 
         const expectedLogOptions = {
-            initiator: testAccountId,
+            initiator: testSystemId,
             timestamp: testCurrentTime.valueOf(),
             context: {
                 transactionId: testTxId,
@@ -432,7 +435,7 @@ describe('*** UNIT TEST LOCK EXPIRY SCHEDULED JOB ***', () => {
                 newTransactionStatus: 'SETTLED'
             }
         };
-        expect(publishStub).to.have.been.calledOnceWithExactly(testAccountId, 'LOCK_EXPIRED', expectedLogOptions);
+        expect(publishStub).to.have.been.calledOnceWithExactly(testSystemId, 'LOCK_EXPIRED', expectedLogOptions);
     });
 
     it('Handles thrown errors and no locked tx', async () => {

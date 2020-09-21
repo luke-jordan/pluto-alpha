@@ -703,24 +703,27 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
         expect(updateResult.updatedTime).to.deep.equal(moment(updateTime.format()));
 
         const expectedQuery = `update ${accountTxTable} set settlement_status = $1 and locked_until_time = null ` +
-            `where settlement_status = $2 and locked_until_time > to_timestamp($3) and ` +
-            `transaction_id in ($4, $5) returning updated_time`;
-        const expectedValues = ['SETTLED', 'LOCKED', sinon.match.number, ...testTxIds];
+            `where settlement_status = $2 and locked_until_time < current_timestamp and ` +
+            `transaction_id in ($3, $4) returning updated_time`;
+        const expectedValues = ['SETTLED', 'LOCKED', ...testTxIds];
         expect(updateRecordStub).to.have.been.calledOnceWithExactly(expectedQuery, expectedValues);
     });
 
     it('Fetches transactions with expired locks', async () => {
         const accountTxTable = config.get('tables.accountTransactions');
+        const accountTable = config.get('tables.accountLedger');
+
         const testLockExpiryTime = moment().subtract(1, 'day');
 
-        const testTx = {
+        const testTxFromRds = {
             'transaction_id': testTxId,
             'transaction_type': 'USER_SAVING_EVENT',
             'settlement_status': 'LOCKED',
-            'lockedUntil_time': testLockExpiryTime.format()
+            'lockedUntil_time': testLockExpiryTime.format(),
+            'owner_user_id': testUserId
         };
 
-        queryStub.resolves([testTx]);
+        queryStub.resolves([testTxFromRds]);
 
         const expiredLockedTx = await rds.fetchExpiredLockedTransactions();
 
@@ -728,13 +731,15 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
             transactionId: testTxId,
             transactionType: 'USER_SAVING_EVENT',
             settlementStatus: 'LOCKED',
-            lockedUntilTime: testLockExpiryTime.format()
+            lockedUntilTime: testLockExpiryTime.format(),
+            ownerUserId: testUserId
         }];
 
         expect(expiredLockedTx).to.deep.equal(expectedResult);
 
-        const expectedQuery = `select * from ${accountTxTable} where settlement_status = $1 and ` +
-            `locked_until_time is not null and locked_until_time > to_timestamp($2)`;
-        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['LOCKED', sinon.match.number]);
+        const expectedQuery = `select ${accountTxTable}.*, ${accountTable}.owner_user_id from ${accountTxTable} ` +
+            `inner join ${accountTable} on ${accountTxTable}.account_id = ${accountTable}.account_id where ` +
+            `settlement_status = $1 and locked_until_time is not null and locked_until_time < current_timestamp`;
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['LOCKED']);
     });
 });

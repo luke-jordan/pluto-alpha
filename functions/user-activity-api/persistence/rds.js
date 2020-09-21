@@ -787,11 +787,18 @@ module.exports.unlockTransactions = async (transactionIds) => {
 };
 
 /**
- * Fetches transactions with expired locks.
+ * Fetches transactions with expired locks and the account owners.
  */
 module.exports.fetchExpiredLockedTransactions = async () => {
-    const query = `select * from ${config.get('tables.accountTransactions')} where settlement_status = $1 and ` +
+    const accountTxTable = config.get('tables.accountTransactions');
+    const accountTable = config.get('tables.accountLedger');
+
+    const query = `select ${accountTxTable}.*, ${accountTable}.owner_user_id from ${accountTxTable} inner join ${accountTable} ` +
+        `on ${accountTxTable}.account_id = ${accountTable}.account_id where settlement_status = $1 and ` +
         `locked_until_time is not null and locked_until_time < current_timestamp`;
+
     const result = await rdsConnection.selectQuery(query, ['LOCKED']);
+    logger('Result of expired lock query: ', result);
+    
     return result.map((row) => camelizeKeys(row)); 
 };
