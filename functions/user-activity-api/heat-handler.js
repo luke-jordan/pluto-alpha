@@ -140,10 +140,17 @@ const assembleUpdateStateCall = (userId, priorPeriodMap, currentPeriodMap, heatL
     return { systemWideUserId: userId, priorPeriodPoints, currentPeriodPoints, currentLevelId };
 };
 
-// candidate for future optimization but is always going to be heavy (and hence doing it on background job and making easily available)
-const updateUserStates = async (pointLogInsertionsCompleted) => {
-    const userIds = [...new Set(pointLogInsertionsCompleted.map(({ userId }) => userId))];
+// since this batch processes, and we _do not_ (at present) want a single failure to cause batch failure
+const safeUpdateCall = async (updateCall) => {
+    try {
+        await rds.updateUserState(updateCall);
+    } catch (err) {
+        logger('FATAL_ERROR: ', err); // so that alarm is triggered for debugging
+    }
+};
 
+// candidate for future optimization but is always going to be heavy (and hence doing it on background job and making easily available)
+const updateUserStates = async (userIds) => {
     const refMomentLastPeriod = moment().subtract(1, 'month');
     const refMomentThisPeriod = moment();
 
@@ -156,7 +163,7 @@ const updateUserStates = async (pointLogInsertionsCompleted) => {
     const updateCalls = userIds.map((userId) => assembleUpdateStateCall(userId, priorPeriodPoints, currentPeriodPoints, heatLevels));
     logger('Assembled update calls: ', updateCalls);
 
-    const updateResults = await Promise.all(updateCalls.map(rds.updateUserState));
+    const updateResults = await Promise.all(updateCalls.map(safeUpdateCall));
     logger('Results of update calls: ', updateResults);
 };
 
@@ -190,14 +197,35 @@ module.exports.handleSqsBatch = async (event) => {
         const resultOfInsertion = await rds.insertPointLogs(pointLogInsertions);
         if (resultOfInsertion.result === 'INSERTED') {
             // finally, publish events, and update user state
-            await Promise.all([...pointLogInsertions.map(publishLogForPoints), updateUserStates(pointLogInsertions)]);
+            const userIdsToUpdateState = [...new Set(pointLogInsertions.map(({ userId }) => userId))];
+            await Promise.all([...pointLogInsertions.map(publishLogForPoints), updateUserStates(userIdsToUpdateState)]);
             return { statusCode: 200, pointEventsTrigged: pointLogInsertions.length };
         }
 
-        throw Error('Uncaught error in RDS processing');
+        throw Error('Uncaught error in SQS batch processing');
     } catch (err) {
         logger('FATAL_ERROR: ', err); // so we catch this
         return { statusCode: 500, error: JSON.stringify(err) };
+    }
+};
+
+// used to flip 'current period points' to 'prior period points' at the beginning of the month
+// and to set the heat level accordingly; note : could in theory make this more efficient by doing
+// a simple sql query to set prior_period_points = current_period_points, current_period_points = 0,
+// _but_ that would introduce a lot of fragility (if the job runs in the wrong month by accident, etc)
+// so instead we have this -- as a heavy job once a month, not user blocking, not crucial, and only
+// really heavy at very very large user numbers (i.e., similar to float accrual, just less frequent)
+module.exports.calculateHeatStateForAllUsers = async (event) => {
+    try {
+        logger('Scheduled job to flip over periods, event: ', event);
+        const usersWithState = await rds.obtainAllUsersWithState();
+        logger('Will be updating ', usersWithState.length, ' users in total');
+        await updateUserStates(usersWithState);
+        logger('Completed updating user states');
+        return { statusCode: 200, usersUpdated: usersWithState.length };
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
+        return { statusCode: 500, error: JSON.stringify(err.message) };
     }
 };
 

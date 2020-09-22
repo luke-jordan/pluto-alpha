@@ -123,3 +123,10 @@ module.exports.updateUserState = async ({ systemWideUserId, currentPeriodPoints,
     await rdsConnection.updateRecordObject(updateDefinition);
     return { result: 'UPDATED' };
 };
+
+// maybe do an 'active' flag in the future, or filter by whether any point logs in prior period + this period, but all overkill for now
+module.exports.obtainAllUsersWithState = async () => {
+    const queryResult = await rdsConnection.selectQuery(`select system_wide_user_id from ${heatStateTable}`, []);
+    logger('Obtained ', queryResult.length, ' rows of user state');
+    return queryResult.map((row) => row['system_wide_user_id']);
+};
