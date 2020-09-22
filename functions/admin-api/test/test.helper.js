@@ -36,6 +36,20 @@ module.exports.wrapPathEvent = (body, userId, pathSegment, role = 'SYSTEM_ADMIN'
     return wrappedEvent;
 };
 
+module.exports.wrapHttpPathEvent = (params, path, userId, userRole = 'SYSTEM_ADMIN') => ({
+    requestContext: {
+        authorizer: {
+            systemWideUserId: userId,
+            role: userRole
+        }
+    },
+    httpMethod: 'POST',
+    pathParameters: {
+        proxy: path
+    },
+    body: JSON.stringify(params)
+});
+
 module.exports.wrapQueryParamEvent = (requestBody, systemWideUserId, userRole, httpMethod = 'GET') => ({
     queryStringParameters: requestBody,
     httpMethod: httpMethod,

@@ -1,6 +1,6 @@
 'use strict';
 
-// const logger = require('debug')('jupiter:admin:heat:unit')
+// const logger = require('debug')('jupiter:admin:heat:unit');
 const moment = require('moment');
 const uuid = require('uuid/v4');
 
@@ -33,6 +33,7 @@ const rds = proxyquire('../persistence/rds.heat.admin', {
 
 describe('*** UNIT TEST ADMIN HEAT RDS ***', () => {
     const testAdminId = uuid();
+    
     const testLevelId = uuid();
     const testEventMatchId = uuid();
 
@@ -175,7 +176,7 @@ describe('*** UNIT TEST ADMIN HEAT RDS ***', () => {
         expect(insertRecordsStub).to.have.been.calledOnceWithExactly(expectedQuery, expectedColumnTemplate, expectedRows);
     });
 
-    it('Fetches heat level thresholds', async () => {
+    it('Fetches heat-level thresholds', async () => {
         queryStub.resolves([levelThresholdFromRds]);
 
         const resultOfFetch = await rds.fetchHeatLevelThresholds(testClientId, testFloatId);
@@ -190,6 +191,9 @@ describe('*** UNIT TEST ADMIN HEAT RDS ***', () => {
             minimumPoints: 5
         };
         expect(resultOfFetch).to.deep.equal([expectedResult]);
+
+        const expectedQuery = 'select * from transaction_data.point_heat_level where client_id = $1 and float_id = $2';
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, [testClientId, testFloatId]);
     });
 
     it('Fetches event-point items', async () => {
@@ -208,6 +212,9 @@ describe('*** UNIT TEST ADMIN HEAT RDS ***', () => {
             parameters: {}
         };
         expect(resultOfFetch).to.deep.equal([expectedResult]);
+        
+        const expectedQuery = 'select * from transaction_data.event_point_list where client_id = $1 and float_id = $2';
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, [testClientId, testFloatId]);
     });
 
 });
