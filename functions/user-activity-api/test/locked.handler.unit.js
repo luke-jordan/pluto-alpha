@@ -416,6 +416,8 @@ describe('*** UNIT TEST LOCK EXPIRY SCHEDULED JOB ***', () => {
 
     it('Unlocks transactions with expired locks', async () => {
         fetchLockedTxStub.resolves([testLockedTx]);
+        unlockTxStub.resolves([testTxId]);
+
         momentStub.returns(testCurrentTime);
 
         const resultOfExpire = await handler.checkForExpiredLocks();
@@ -446,7 +448,7 @@ describe('*** UNIT TEST LOCK EXPIRY SCHEDULED JOB ***', () => {
 
         fetchLockedTxStub.throws(new Error('Error!'));
 
-        // Om thrown error
+        // On thrown error
         const resultOnError = await handler.checkForExpiredLocks();
         const resultBody = testHelper.standardOkayChecks(resultOnError, 500);
         expect(resultBody).to.deep.equal({ message: 'Error!'});

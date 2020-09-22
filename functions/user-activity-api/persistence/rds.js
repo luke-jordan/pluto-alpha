@@ -776,14 +776,15 @@ module.exports.lockTransaction = async (transactionId, daysToLock) => {
 module.exports.unlockTransactions = async (transactionIds) => {
     const updateQuery = `update ${config.get('tables.accountTransactions')} set settlement_status = $1 and ` +
         `locked_until_time = null where settlement_status = $2 and locked_until_time < current_timestamp and ` +
-        `transaction_id in (${opsUtil.extractArrayIndices(transactionIds, 3)}) returning updated_time`;
+        `transaction_id in (${opsUtil.extractArrayIndices(transactionIds, 3)}) returning updated_time, transaction_id`;
 
     const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, ['SETTLED', 'LOCKED', ...transactionIds]);
     logger('Result of update: ', resultOfUpdate);
 
     const updateMoment = resultOfUpdate['rows'].length > 0 ? moment(resultOfUpdate['rows'][0]['updated_time']) : null;
     logger('Extracted moment: ', updateMoment);
-    return { updatedTime: updateMoment };
+
+    return Array.isArray(resultOfUpdate['rows']) ? resultOfUpdate['rows'].map((result) => result['transaction_id']) : [];
 };
 
 /**

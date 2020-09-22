@@ -277,19 +277,21 @@ module.exports.checkForExpiredLocks = async (event) => {
     try {
         logger('Expired lock handler received event: ', event);
 
-        const transactions = await persistence.fetchExpiredLockedTransactions();
-        logger('Got tx with expired locks: ', transactions);
+        const lockedTransactions = await persistence.fetchExpiredLockedTransactions();
+        logger('Expired locks: ', lockedTransactions);
 
-        if (transactions.length === 0) {
+        if (lockedTransactions.length === 0) {
             logger('No expired tx locks found, exiting');
             return { statusCode: 200 };
         }
 
-        const transactionIds = transactions.map((transaction) => transaction.transactionId);
-        const resultOfUnlock = await persistence.unlockTransactions(transactionIds);
-        logger('Removing expired locks resulted in: ', resultOfUnlock);
+        const transactionIds = lockedTransactions.map((transaction) => transaction.transactionId);
+        const unlockedTxIds = await persistence.unlockTransactions(transactionIds);
+        logger('Result of expired lock removal: ', unlockedTxIds);
 
-        await Promise.all(transactions.map((unlockedTx) => publishLockExpired(unlockedTx)));
+        const unlockedTransactions = lockedTransactions.filter((tx) => unlockedTxIds.includes(tx.transactionId));
+
+        await Promise.all(unlockedTransactions.map((unlockedTx) => publishLockExpired(unlockedTx)));
         return opsUtil.wrapResponse({ result: 'SUCCESS' });
     } catch (err) {
         logger('FATAL_ERROR:', err);

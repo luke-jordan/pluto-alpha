@@ -694,17 +694,19 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
 
         const updateTime = moment();
 
-        updateRecordStub.resolves({ rows: [{ 'updated_time': updateTime.format() }] });
+        updateRecordStub.resolves({ rows: [
+            { 'updated_time': updateTime.format(), 'transaction_id': testTxIds[0] },
+            { 'updated_time': updateTime.format(), 'transaction_id': testTxIds[1] }
+        ]});
 
         const updateResult = await rds.unlockTransactions(testTxIds);
 
         expect(updateResult).to.exist;
-        expect(updateResult).to.have.property('updatedTime');
-        expect(updateResult.updatedTime).to.deep.equal(moment(updateTime.format()));
+        expect(updateResult).to.deep.equal(testTxIds);
 
         const expectedQuery = `update ${accountTxTable} set settlement_status = $1 and locked_until_time = null ` +
             `where settlement_status = $2 and locked_until_time < current_timestamp and ` +
-            `transaction_id in ($3, $4) returning updated_time`;
+            `transaction_id in ($3, $4) returning updated_time, transaction_id`;
         const expectedValues = ['SETTLED', 'LOCKED', ...testTxIds];
         expect(updateRecordStub).to.have.been.calledOnceWithExactly(expectedQuery, expectedValues);
     });
