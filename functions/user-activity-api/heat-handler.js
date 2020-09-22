@@ -226,6 +226,11 @@ module.exports.calculateHeatStateForAllUsers = async (event) => {
     try {
         logger('Scheduled job to flip over periods, event: ', event);
         const usersWithState = await rds.obtainAllUsersWithState();
+        if (usersWithState.length === 0) {
+            logger('No users with state yet, exit');
+            return { statusCode: 200, usersUpdated: 0 };
+        }
+        
         logger('Will be updating ', usersWithState.length, ' users in total');
         await bulkCacheUsers(usersWithState); // since next step assumes this
         await updateUserStates(usersWithState); // hence sequential
