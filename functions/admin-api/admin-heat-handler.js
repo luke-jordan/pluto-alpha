@@ -44,7 +44,7 @@ module.exports.writeHeatConfig = async (event) => {
         return opsUtil.wrapResponse(resultOfUpdate);
     } catch (err) {
         logger('FATAL_ERROR: ', err);
-        return opsUtil.wrapResponse(err, 500);
+        return opsUtil.wrapResponse(err.message, 500);
     }
 };
 
@@ -70,6 +70,6 @@ module.exports.fetchHeatConfiguration = async (event) => {
         return opsUtil.wrapResponse(returnResult);
     } catch (err) {
         logger('FATAL_ERROR: ', err);
-        return opsUtil.wrapResponse(err, 500);
+        return opsUtil.wrapResponse(err.message, 500);
     }
 };

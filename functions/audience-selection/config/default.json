@@ -16,6 +16,6 @@
     "accountTable": "account_data.core_account_ledger",
     "boostTable": "boost_data.boost_account_status",
     "friendTable": "friend_data.core_friend_relationship",
-    "heatTable": "transaction_data.point_log"
+    "heatStateTable": "transaction_data.user_heat_state"
   }
 }

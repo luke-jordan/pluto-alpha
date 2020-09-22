@@ -18,7 +18,9 @@ const STANDARD_PARAMS = [
     'current_balance',
     'opened_date',
     'total_interest',
-    'user_referral_code'
+    'user_referral_code',
+    'saving_heat_points',
+    'saving_heat_level'
 ];
 
 /**

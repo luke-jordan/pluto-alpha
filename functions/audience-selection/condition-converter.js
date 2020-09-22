@@ -71,11 +71,18 @@ module.exports.stdProperties = {
         expects: 'number',
         table: 'accountTable' // since we use a subquery on match (pattern to be avoided, but else JSON structure far too complex, given user-id/account-id differences)
     },
-    savingHeat: {
-        type: 'aggregate',
+    savingHeatPoints: {
+        type: 'match',
         description: 'Saving heat points',
         expects: 'number',
-        table: 'heatTable'
+        table: 'accountTable' // as above, we use a subquery on match (same rationale as above)
+    },
+    savingHeatLevel: {
+        type: 'match',
+        description: 'Saving heat level',
+        expects: 'entity',
+        entity: 'heatLevel',
+        table: 'accountTable'
     },
     boostNotRedeemed: {
         type: 'match',
@@ -216,20 +223,8 @@ module.exports.convertSavedThisMonth = (condition) => {
     };
 };
 
-module.exports.convertSavingHeat = (condition) => {
-    // likely want to add a time cut off at some point (also generally keep an eye)
-    logger('Converting heat condition: ', condition);
-    return {
-        conditions: [],
-        groupBy: ['owner_user_id'],
-        postConditions: [
-            { op: condition.op, prop: 'sum(number_points)', value: condition.value, valueType: 'int' }
-        ]
-    };
-};
-
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// //////////////////////////////////// BOOST, FRIEND SECTION  /////////////////////////////////////////////////////////////
+// //////////////////////////////////// BOOST, FRIEND, HEAT SECTION  ///////////////////////////////////////////////////////
 // ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 module.exports.convertBoostCreatedOffered = (condition) => ({
@@ -287,6 +282,26 @@ module.exports.convertNumberFriends = (condition) => {
         conditions: [
             { op: condition.op, prop: countSubQuery, value: condition.value, valueType: 'int' }
         ]
+    };
+};
+
+module.exports.convertSavingHeatPoints = (condition) => {
+    // likely want to add a time cut off at some point (also generally keep an eye)
+    logger('Converting heat condition: ', condition);
+    const pointSubQuery = `(select greatest(prior_period_points, current_period_points) from ` +
+        `${config.get('tables.heatStateTable')} where system_wide_user_id = owner_user_id)`;
+
+    return {
+        conditions: [{ op: condition.op, prop: pointSubQuery, value: condition.value, valueType: 'int' }]
+    };
+};
+
+module.exports.convertSavingHeatLevel = (condition) => {
+    const levelSubQuery = `(select current_level_id from ${config.get('tables.heatStateTable')} where ` +
+        `system_wide_user_id = owner_user_id)`;
+    
+    return {
+        conditions: [{ op: condition.op, prop: levelSubQuery, value: condition.value, valueType: 'int' }]
     };
 };
 

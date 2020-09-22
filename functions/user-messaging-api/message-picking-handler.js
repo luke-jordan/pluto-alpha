@@ -27,7 +27,9 @@ const STANDARD_PARAMS = [
     'last_capitalization',
     'total_earnings',
     'last_saved_amount',
-    'next_major_digit'
+    'next_major_digit',
+    'saving_heat_points',
+    'saving_heat_level'
 ];
 
 const UNIT_DIVISORS = {
@@ -156,6 +158,9 @@ const retrieveParamValue = async (param, destinationUserId, userProfile) => {
         return fetchAccountAggFigure(aggregateOperation, destinationUserId);
     } else if (paramName === 'next_major_digit') {
         return calculateNextMilestoneDigit(userProfile);
+    } else if (paramName === 'saving_heat_points' || paramName === 'saving_heat_levels') {
+        const aggregateOperation = paramName;
+        return fetchAccountAggFigure(aggregateOperation, destinationUserId);
     }
 };
 

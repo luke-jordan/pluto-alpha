@@ -19,10 +19,27 @@ const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
 const profileKeyPrefix = config.get('cache.keyPrefixes.profile');
-// const heatKeyPrefix = config.get('cache.keyPrefixes.savingHeat');
+
+// /////////////////////////// SOME UTILITY METHODS //////////////////////////////////////////////////
+
+const normalizeHeatLevels = (listOfLevels) => {
+    if (!listOfLevels || listOfLevels.length === 0) {
+        return {}; // so current level will just return blank
+    }
+
+    const normalizedLevels = listOfLevels.reduce((obj, level) => ({ ...obj, [level.minimumPoints]: level }), {});
+    return normalizedLevels;
+};
+
+const findLevelForPoints = (currentPoints, listOfLevels) => {
+    const heatLevels = normalizeHeatLevels(listOfLevels); // makes following steps a bit easier
+    const heatPointLevels = Object.keys(heatLevels);
+    const pointsBelow = heatPointLevels.filter((minimumPoints) => minimumPoints <= currentPoints);
+    return pointsBelow.length > 0 ? heatLevels[Math.max(...pointsBelow)] : null;
+};
 
 // ///////////////////////////////////////////////////////////////////////////////////////////////////
-// ///////////////////////////// WRITE OPERATIONS /////////////////////////////////////////////////////
+// ///////////////////////////// WRITE OPERATIONS ////////////////////////////////////////////////////
 // ///////////////////////////////////////////////////////////////////////////////////////////////////
 // write operation, takes a batch of user events, finds ones that have a heat attached, and write them
 
@@ -52,8 +69,12 @@ const cacheUserProfile = async (userId) => {
     logger('Completed fetching and caching profile');
 };
 
+const putUserInCacheAndStateTable = async (userId) => {
+    await Promise.all([cacheUserProfile(userId), rds.establishUserState(userId)]);
+};
+
 const assemblePointLogInsertion = async (userEvent) => {
-    const { userId, eventType } = userEvent;
+    const { userId, eventType, timestamp } = userEvent;
     const cachedProfile = await redis.get(`${profileKeyPrefix}::${userId}`);
     if (!cachedProfile) {
         logger('Error! User profile not cached');
@@ -66,10 +87,13 @@ const assemblePointLogInsertion = async (userEvent) => {
     if (!pointLogInsertion) {
         return null;
     }
-
+    
     // final clean up (in future may use parameters to do some further processing). for now, rds does not need event type
-    // (gets it from join ID), but handy for log publishing etc
+    // (gets it from join ID), but handy for log publishing etc, and we want to include a reference time seperate to log creation time
+
+    pointLogInsertion.referenceTime = timestamp ? moment(timestamp).format() : moment().format();
     Reflect.deleteProperty(pointLogInsertion, 'parameters');
+    
     return { userId, eventType, ...pointLogInsertion };
 };
 
@@ -80,6 +104,67 @@ const publishLogForPoints = async (pointLogInsertion) => {
     };
 
     await publisher.publishUserEvent(pointLogInsertion.userId, 'HEAT_POINTS_AWARDED', { context });
+};
+
+// utility method
+const extractClientFloatString = ({ clientId, floatId }) => `${clientId}::${floatId}`;
+
+// bit of overkill as little chance of more than 1 or 2 client-floats at a time, but otherwise could become a real snarl up at scale
+const obtainHeatLevels = async (userIds) => {
+    // first we extract unique client float IDs (usually order of magnitude less than any volume of user Ids)
+    const userProfilesRaw = await redis.mget(userIds.map((userId) => `${profileKeyPrefix}::${userId}`));
+    const userProfiles = userProfilesRaw.map(JSON.parse);
+    const uniqueClientFloats = [...new Set(userProfiles.map(extractClientFloatString))].
+        map((jointPair) => ({ clientId: jointPair.split('::')[0], floatId: jointPair.split('::')[1] }));
+    logger('For user IDs: ', userIds, ' have client float pairs: ', JSON.stringify(uniqueClientFloats));
+    
+    // then we assemble a map of client ID and float ID to heat levels
+    const heatLevels = await Promise.all(uniqueClientFloats.map(({ clientId, floatId }) => rds.obtainPointLevels(clientId, floatId)));
+    const levelMap = uniqueClientFloats.reduce((obj, clientFloat, index) => ({ ...obj, [extractClientFloatString(clientFloat)]: heatLevels[index] }), {});
+    logger('Obtained resulting map of heat levels: ', JSON.stringify(levelMap));
+    
+    // then we attach that to user ID and return
+    const userClientFloatMap = userProfiles.reduce((obj, profile) => ({ ...obj, [profile.systemWideUserId]: extractClientFloatString(profile) }), {});
+    const attachHeatLevels = (userId) => levelMap[userClientFloatMap[userId]];
+    return userIds.reduce((obj, userId) => ({ ...obj, [userId]: attachHeatLevels(userId) }), {});
+};
+
+const assembleUpdateStateCall = (userId, priorPeriodMap, currentPeriodMap, heatLevelMap) => {
+    const priorPeriodPoints = priorPeriodMap[userId] || 0;
+    const currentPeriodPoints = currentPeriodMap[userId] || 0;
+
+    const levelDefinitions = heatLevelMap[userId];
+    const currentLevel = findLevelForPoints(Math.max(priorPeriodPoints, currentPeriodPoints), levelDefinitions);
+    const currentLevelId = currentLevel ? currentLevel.levelId : null;
+
+    return { systemWideUserId: userId, priorPeriodPoints, currentPeriodPoints, currentLevelId };
+};
+
+// since this batch processes, and we _do not_ (at present) want a single failure to cause batch failure
+const safeUpdateCall = async (updateCall) => {
+    try {
+        await rds.updateUserState(updateCall);
+    } catch (err) {
+        logger('FATAL_ERROR: ', err); // so that alarm is triggered for debugging
+    }
+};
+
+// candidate for future optimization but is always going to be heavy (and hence doing it on background job and making easily available)
+const updateUserStates = async (userIds) => {
+    const refMomentLastPeriod = moment().subtract(1, 'month');
+    const refMomentThisPeriod = moment();
+
+    const [priorPeriodPoints, currentPeriodPoints, heatLevels] = await Promise.all([
+        rds.sumPointsForUsers(userIds, refMomentLastPeriod.startOf('month'), refMomentLastPeriod.endOf('month')),
+        rds.sumPointsForUsers(userIds, refMomentThisPeriod.startOf('month')), // i.e., up until now
+        obtainHeatLevels(userIds)
+    ]);
+
+    const updateCalls = userIds.map((userId) => assembleUpdateStateCall(userId, priorPeriodPoints, currentPeriodPoints, heatLevels));
+    logger('Assembled update calls: ', updateCalls);
+
+    const updateResults = await Promise.all(updateCalls.map(safeUpdateCall));
+    logger('Results of update calls: ', updateResults);
 };
 
 module.exports.handleSqsBatch = async (event) => {
@@ -99,8 +184,9 @@ module.exports.handleSqsBatch = async (event) => {
         // so that if we have a batch we don't end up multiplying unnecessary calls, and later calls have profiles ready
         // note ; since this cache is shared, there is little loss if we have a false positive on event to process
         const uniqueUserIds = [...new Set(eventsToProcess.map(({ userId }) => userId))];
+
         logger('Caching profiles for user IDs: ', uniqueUserIds);
-        await Promise.all(uniqueUserIds.map(cacheUserProfile));
+        await Promise.all(uniqueUserIds.map(putUserInCacheAndStateTable));
         
         const allAssembledInsertions = await Promise.all(eventsToProcess.map(assemblePointLogInsertion));
         const pointLogInsertions = allAssembledInsertions.filter((pointLogInsertion) => pointLogInsertion !== null);
@@ -110,14 +196,49 @@ module.exports.handleSqsBatch = async (event) => {
 
         const resultOfInsertion = await rds.insertPointLogs(pointLogInsertions);
         if (resultOfInsertion.result === 'INSERTED') {
-            await Promise.all(pointLogInsertions.map(publishLogForPoints));
+            // finally, publish events, and update user state
+            const userIdsToUpdateState = [...new Set(pointLogInsertions.map(({ userId }) => userId))];
+            await Promise.all([...pointLogInsertions.map(publishLogForPoints), updateUserStates(userIdsToUpdateState)]);
             return { statusCode: 200, pointEventsTrigged: pointLogInsertions.length };
         }
 
-        throw Error('Uncaught error in RDS processing');
+        throw Error('Uncaught error in SQS batch processing');
     } catch (err) {
         logger('FATAL_ERROR: ', err); // so we catch this
         return { statusCode: 500, error: JSON.stringify(err) };
+    }
+};
+
+const bulkCacheUsers = async (userIds) => {
+    const usersInCacheRaw = await redis.mget((userIds).map((userId) => `${profileKeyPrefix}::${userId}`));
+    const userIdsInCache = usersInCacheRaw.filter((profile) => profile !== null).map(JSON.parse).map(({ systemWideUserId }) => systemWideUserId);
+    const userIdsToCache = userIds.filter((userId) => !userIdsInCache.includes(userId));
+    await Promise.all((userIdsToCache).map((userId) => cacheUserProfile(userId)));
+};
+
+// used to flip 'current period points' to 'prior period points' at the beginning of the month
+// and to set the heat level accordingly; note : could in theory make this more efficient by doing
+// a simple sql query to set prior_period_points = current_period_points, current_period_points = 0,
+// _but_ that would introduce a lot of fragility (if the job runs in the wrong month by accident, etc)
+// so instead we have this -- as a heavy job once a month, not user blocking, not crucial, and only
+// really heavy at very very large user numbers (i.e., similar to float accrual, just less frequent)
+module.exports.calculateHeatStateForAllUsers = async (event) => {
+    try {
+        logger('Scheduled job to flip over periods, event: ', event);
+        const usersWithState = await rds.obtainAllUsersWithState();
+        if (usersWithState.length === 0) {
+            logger('No users with state yet, exit');
+            return { statusCode: 200, usersUpdated: 0 };
+        }
+        
+        logger('Will be updating ', usersWithState.length, ' users in total');
+        await bulkCacheUsers(usersWithState); // since next step assumes this
+        await updateUserStates(usersWithState); // hence sequential
+        logger('Completed updating user states');
+        return { statusCode: 200, usersUpdated: usersWithState.length };
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
+        return { statusCode: 500, error: JSON.stringify(err.message) };
     }
 };
 
@@ -137,45 +258,28 @@ const fetchProfile = async (userId) => {
     return fetchedProfile;
 };
 
-
-const fetchHeatLevels = async (clientId, floatId) => {
-    const listOfLevels = await rds.obtainPointLevels(clientId, floatId);
-    logger('Fetched heat levels for client ', clientId, ' and float ', floatId, ' as: ', JSON.stringify(listOfLevels));
-    if (!listOfLevels || listOfLevels.length === 0) {
-        return {}; // so current level will just return blank
-    }
-
-    const normalizedLevels = listOfLevels.reduce((obj, level) => ({ ...obj, [level.minimumPoints]: level }), {});
-    return normalizedLevels;
-};
-
-const findPointsForLevel = (currentPoints, heatLevels) => {
-    const heatPointLevels = Object.keys(heatLevels);
-    const pointsBelow = heatPointLevels.filter((minimumPoints) => minimumPoints <= currentPoints);
-    return pointsBelow.length > 0 ? heatLevels[Math.max(...pointsBelow)] : null;
-};
-
 const fetchHeatForUserThemselves = async (userId, params) => {
     const { clientId, floatId } = await fetchProfile(userId);
 
     const start = params.startTimeMillis ? moment(params.startTimeMillis) : null;
     const end = params.endTimeMillis ? moment(params.endTimeMillis) : null;
 
-    const [pointSum, heatLevels] = await Promise.all([
-        rds.sumPointsForUsers([userId], start, end), fetchHeatLevels(clientId, floatId)
+    const [pointSum, listOfLevels] = await Promise.all([
+        rds.sumPointsForUsers([userId], start, end), rds.obtainPointLevels(clientId, floatId)
     ]);
 
-    logger('For user ID ', userId, ' retrieved: ', pointSum);
+    logger('For user ID ', userId, ' retrieved point sum: ', pointSum);
+    logger('Fetched heat levels for client ', clientId, ' and float ', floatId, ' as: ', JSON.stringify(listOfLevels));
 
     const currentPoints = pointSum[userId] || 0;
-    const currentLevel = findPointsForLevel(currentPoints, heatLevels);
+    const currentLevel = findLevelForPoints(currentPoints, listOfLevels);
 
     return { currentPoints, currentLevel };
 };
 
-const extractPointAndLevel = (userId, currentPointSums, heatLevels) => {
+const extractPointAndLevel = (userId, currentPointSums, listOfLevels) => {
     const currentPoints = currentPointSums[userId] || 0;
-    const currentLevel = findPointsForLevel(currentPoints, heatLevels);
+    const currentLevel = findLevelForPoints(currentPoints, listOfLevels);
     return { currentPoints, currentLevel };
 };
 
@@ -185,13 +289,13 @@ const fetchHeatForUsers = async (userIds, params) => {
     const start = params.startTimeMillis ? moment(params.startTimeMillis) : null;
     const end = params.endTimeMillis ? moment(params.endTimeMillis) : null;
 
-    const [currentPointSums, heatLevels] = await Promise.all([
-        rds.sumPointsForUsers(userIds, start, end), fetchHeatLevels(clientId, floatId)
+    const [currentPointSums, listOfLevels] = await Promise.all([
+        rds.sumPointsForUsers(userIds, start, end), rds.obtainPointLevels(clientId, floatId)
     ]);
 
     // as above, will be adding heat to these things
     const userPointMap = userIds.reduce((obj, userId) => ({ 
-        ...obj, [userId]: extractPointAndLevel(userId, currentPointSums, heatLevels)
+        ...obj, [userId]: extractPointAndLevel(userId, currentPointSums, listOfLevels)
     }), {});
 
     return userPointMap;
