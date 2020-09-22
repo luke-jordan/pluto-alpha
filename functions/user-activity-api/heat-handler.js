@@ -209,6 +209,13 @@ module.exports.handleSqsBatch = async (event) => {
     }
 };
 
+const bulkCacheUsers = async (userIds) => {
+    const usersInCacheRaw = await redis.mget((userIds).map((userId) => `${profileKeyPrefix}::${userId}`));
+    const userIdsInCache = usersInCacheRaw.filter(profile => profile !== null).map(JSON.parse).map(({ systemWideUserId }) => systemWideUserId);
+    const userIdsToCache = userIds.filter((userId) => !userIdsInCache.includes(userId));
+    await Promise.all((userIdsToCache).map((userId) => cacheUserProfile(userId)));
+};
+
 // used to flip 'current period points' to 'prior period points' at the beginning of the month
 // and to set the heat level accordingly; note : could in theory make this more efficient by doing
 // a simple sql query to set prior_period_points = current_period_points, current_period_points = 0,
@@ -220,7 +227,8 @@ module.exports.calculateHeatStateForAllUsers = async (event) => {
         logger('Scheduled job to flip over periods, event: ', event);
         const usersWithState = await rds.obtainAllUsersWithState();
         logger('Will be updating ', usersWithState.length, ' users in total');
-        await updateUserStates(usersWithState);
+        await bulkCacheUsers(usersWithState); // since next step assumes this
+        await updateUserStates(usersWithState); // hence sequential
         logger('Completed updating user states');
         return { statusCode: 200, usersUpdated: usersWithState.length };
     } catch (err) {
