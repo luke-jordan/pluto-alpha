@@ -288,7 +288,7 @@ module.exports.convertNumberFriends = (condition) => {
 module.exports.convertSavingHeatPoints = (condition) => {
     // likely want to add a time cut off at some point (also generally keep an eye)
     logger('Converting heat condition: ', condition);
-    const pointSubQuery = `(select max(prior_period_points, current_period_points) from ` +
+    const pointSubQuery = `(select greatest(prior_period_points, current_period_points) from ` +
         `${config.get('tables.heatStateTable')} where system_wide_user_id = owner_user_id)`;
 
     return {
