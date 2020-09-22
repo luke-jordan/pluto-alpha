@@ -23,4 +23,3 @@ grant select, insert, update on transaction_data.user_heat_state to save_tx_api_
 
 grant select on transaction_data.user_heat_state to admin_api_worker;
 grant select on transaction_data.user_heat_state to audience_worker;
-grant select on transaction_data.user_heat_state to message_api_worker;

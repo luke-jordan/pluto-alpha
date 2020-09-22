@@ -211,7 +211,7 @@ module.exports.handleSqsBatch = async (event) => {
 
 const bulkCacheUsers = async (userIds) => {
     const usersInCacheRaw = await redis.mget((userIds).map((userId) => `${profileKeyPrefix}::${userId}`));
-    const userIdsInCache = usersInCacheRaw.filter(profile => profile !== null).map(JSON.parse).map(({ systemWideUserId }) => systemWideUserId);
+    const userIdsInCache = usersInCacheRaw.filter((profile) => profile !== null).map(JSON.parse).map(({ systemWideUserId }) => systemWideUserId);
     const userIdsToCache = userIds.filter((userId) => !userIdsInCache.includes(userId));
     await Promise.all((userIdsToCache).map((userId) => cacheUserProfile(userId)));
 };
