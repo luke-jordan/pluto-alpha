@@ -9,7 +9,6 @@ chai.use(require('sinon-chai'));
 const { expect } = chai;
 
 const proxyquire = require('proxyquire');
-const { obtainPointLevels } = require('../persistence/rds.heat');
 
 const filterEventStub = sinon.stub();
 const obtainPointsStub = sinon.stub();
@@ -63,7 +62,8 @@ const handler = proxyquire('../heat-handler', {
 
 const resetStubs = () => helper.resetStubs(
     obtainPointsStub, insertPointLogStub, sumPointsStub, pointHistoryStub, filterEventStub, pointLevelsStub, establishUserStateStub, updateUserStateStub,
-    lambdaInvokeStub, redisGetStub, redisMGetStub, redisSetStub, publishEventStub);
+    lambdaInvokeStub, redisGetStub, redisMGetStub, redisSetStub, publishEventStub
+);
 
 describe('*** USER ACTIVITY *** INSERT POINT RECORD', () => {
 

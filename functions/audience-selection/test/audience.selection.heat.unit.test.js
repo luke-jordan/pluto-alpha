@@ -1,7 +1,5 @@
 'use strict';
 
-const moment = require('moment');
-
 const chai = require('chai');
 const sinon = require('sinon');
 chai.use(require('sinon-chai'));
@@ -10,7 +8,6 @@ const expect = chai.expect;
 const proxyquire = require('proxyquire').noCallThru();
 
 const helper = require('./test.helper');
-const c = require('config');
 
 const executeConditionsStub = sinon.stub();
 const audienceHandler = proxyquire('../audience-handler', {
@@ -27,14 +24,6 @@ describe('*** TEST HEAT POINT AND LEVEL SELECTION ***', () => {
 
     beforeEach(() => executeConditionsStub.reset());
 
-    const expectedPersParams = (conditions, audienceType, isDynamic = false) => ({
-        clientId: mockClientId,
-        creatingUserId: mockUserId,
-        isDynamic,
-        propertyConditions: conditions,
-        audienceType
-    });
-
     // similar to friends, uses the sub-query to deal with fact that heat is user-level property (i.e., aggregates over user's accounts)
     it('Handles heat points', async () => {
         
@@ -46,7 +35,7 @@ describe('*** TEST HEAT POINT AND LEVEL SELECTION ***', () => {
             isDynamic: true,
             conditions: [
                 { op: 'and', children: [
-                    { prop: 'savingHeatPoints', op: 'greater_than', value: 200, type: 'aggregate' }
+                    { prop: 'savingHeatPoints', op: 'greater_than', value: 200, type: 'match' }
                 ]}
             ]
         };
@@ -56,7 +45,7 @@ describe('*** TEST HEAT POINT AND LEVEL SELECTION ***', () => {
             creatingUserId: mockUserId,
             conditions: [
                 { op: 'and', children: [
-                    { op: 'greater_than', prop: pointSubQuery, value: 2, valueType: 'int' },
+                    { op: 'greater_than', prop: pointSubQuery, value: 200, valueType: 'int' },
                     { op: 'is', prop: 'responsible_client_id', value: 'test-client-id' }
                 ]}
             ]
@@ -82,7 +71,7 @@ describe('*** TEST HEAT POINT AND LEVEL SELECTION ***', () => {
         helper.itemizedSelectionCheck(executeConditionsStub, expectedPersistenceParams, expectedSelection);
     });
 
-    it.skip('Handles heat levels', async () => {
+    it('Handles heat levels', async () => {
         const levelSubQuery = `(select current_level_id from ` +
             `transaction_data.user_heat_state where system_wide_user_id = owner_user_id)`;
         

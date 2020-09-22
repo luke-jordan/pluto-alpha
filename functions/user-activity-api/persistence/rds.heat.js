@@ -109,7 +109,7 @@ module.exports.establishUserState = async (systemWideUserId) => {
     const resultOfInsert = await rdsConnection.insertRecords(insertionQuery, '${systemWideUserId}', [{ systemWideUserId }]);
 
     return resultOfInsert;
-}
+};
 
 module.exports.updateUserState = async ({ systemWideUserId, currentPeriodPoints, priorPeriodPoints, currentLevelId }) => {
     const updateDefinition = {

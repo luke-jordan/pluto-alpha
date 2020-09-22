@@ -19,10 +19,27 @@ const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
 const profileKeyPrefix = config.get('cache.keyPrefixes.profile');
-// const heatKeyPrefix = config.get('cache.keyPrefixes.savingHeat');
+
+// /////////////////////////// SOME UTILITY METHODS //////////////////////////////////////////////////
+
+const normalizeHeatLevels = (listOfLevels) => {
+    if (!listOfLevels || listOfLevels.length === 0) {
+        return {}; // so current level will just return blank
+    }
+
+    const normalizedLevels = listOfLevels.reduce((obj, level) => ({ ...obj, [level.minimumPoints]: level }), {});
+    return normalizedLevels;
+};
+
+const findLevelForPoints = (currentPoints, listOfLevels) => {
+    const heatLevels = normalizeHeatLevels(listOfLevels); // makes following steps a bit easier
+    const heatPointLevels = Object.keys(heatLevels);
+    const pointsBelow = heatPointLevels.filter((minimumPoints) => minimumPoints <= currentPoints);
+    return pointsBelow.length > 0 ? heatLevels[Math.max(...pointsBelow)] : null;
+};
 
 // ///////////////////////////////////////////////////////////////////////////////////////////////////
-// ///////////////////////////// WRITE OPERATIONS /////////////////////////////////////////////////////
+// ///////////////////////////// WRITE OPERATIONS ////////////////////////////////////////////////////
 // ///////////////////////////////////////////////////////////////////////////////////////////////////
 // write operation, takes a batch of user events, finds ones that have a heat attached, and write them
 
@@ -97,8 +114,8 @@ const obtainHeatLevels = async (userIds) => {
     // first we extract unique client float IDs (usually order of magnitude less than any volume of user Ids)
     const userProfilesRaw = await redis.mget(userIds.map((userId) => `${profileKeyPrefix}::${userId}`));
     const userProfiles = userProfilesRaw.map(JSON.parse);
-    const uniqueClientFloats = [... new Set(userProfiles.map(extractClientFloatString))]
-        .map((jointPair) => ({ clientId: jointPair.split('::')[0], floatId: jointPair.split('::')[1] }));
+    const uniqueClientFloats = [...new Set(userProfiles.map(extractClientFloatString))].
+        map((jointPair) => ({ clientId: jointPair.split('::')[0], floatId: jointPair.split('::')[1] }));
     logger('For user IDs: ', userIds, ' have client float pairs: ', JSON.stringify(uniqueClientFloats));
     
     // then we assemble a map of client ID and float ID to heat levels
@@ -121,7 +138,7 @@ const assembleUpdateStateCall = (userId, priorPeriodMap, currentPeriodMap, heatL
     const currentLevelId = currentLevel ? currentLevel.levelId : null;
 
     return { systemWideUserId: userId, priorPeriodPoints, currentPeriodPoints, currentLevelId };
-}
+};
 
 // candidate for future optimization but is always going to be heavy (and hence doing it on background job and making easily available)
 const updateUserStates = async (pointLogInsertionsCompleted) => {
@@ -198,23 +215,6 @@ const fetchProfile = async (userId) => {
     const fetchedProfile = await obtainProfile(userId);
     await redis.set(`${profileKeyPrefix}::${userId}`, JSON.stringify(fetchedProfile), 'EX', config.get('cache.ttls.profile'));
     return fetchedProfile;
-};
-
-
-const normalizeHeatLevels = (listOfLevels) => {
-    if (!listOfLevels || listOfLevels.length === 0) {
-        return {}; // so current level will just return blank
-    }
-
-    const normalizedLevels = listOfLevels.reduce((obj, level) => ({ ...obj, [level.minimumPoints]: level }), {});
-    return normalizedLevels;
-};
-
-const findLevelForPoints = (currentPoints, listOfLevels) => {
-    const heatLevels = normalizeHeatLevels(listOfLevels); // makes following steps a bit easier
-    const heatPointLevels = Object.keys(heatLevels);
-    const pointsBelow = heatPointLevels.filter((minimumPoints) => minimumPoints <= currentPoints);
-    return pointsBelow.length > 0 ? heatLevels[Math.max(...pointsBelow)] : null;
 };
 
 const fetchHeatForUserThemselves = async (userId, params) => {
