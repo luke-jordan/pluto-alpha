@@ -56,6 +56,12 @@ module.exports.fetchHeatConfiguration = async (event) => {
 
         const { clientId, floatId } = opsUtil.extractQueryParams(event);
         logger('Fetching heat config for client ID: ', clientId, ' and float ID: ', floatId);
+
+        if (!floatId) {
+            logger('Fetching only levels, obtain and send back');
+            const clientHeatLevels = await persistence.fetchHeatLevelThresholds(clientId);
+            return opsUtil.wrapResponse({ clientHeatLevels });
+        }
         
         const [levelThresholds, eventPointItems] = await Promise.all([
             persistence.fetchHeatLevelThresholds(clientId, floatId),
