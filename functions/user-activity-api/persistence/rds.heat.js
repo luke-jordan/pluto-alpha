@@ -130,3 +130,11 @@ module.exports.obtainAllUsersWithState = async () => {
     logger('Obtained ', queryResult.length, ' rows of user state');
     return queryResult.map((row) => row['system_wide_user_id']);
 };
+
+// could possibly find a way to wrap this into queries above, but is a fairly rapid call
+module.exports.obtainUserLevels = async (userIds) => {
+    const fetchQuery = `select system_wide_user_id, current_level_id from ${heatStateTable} ` +
+        `where system_wide_user_id in (${opsUtil.extractArrayIndices(userIds)})`;
+    const queryResult = await rdsConnection.selectQuery(fetchQuery, userIds);
+    return queryResult.reduce((obj, row) => ({ ...obj, [row['system_wide_user_id']]: row['current_level_id'] }), {});
+};

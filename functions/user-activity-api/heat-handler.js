@@ -149,22 +149,56 @@ const safeUpdateCall = async (updateCall) => {
     }
 };
 
+// utility method for what comes next (events for going up/down levels)
+const findLevel = (userId, levelId, listOfLevels) => (listOfLevels[userId] ? listOfLevels[userId].find((level) => level.levelId === levelId) : null);
+
+const assembleLevelEvent = (userId, priorLevelId, newLevelId, listOfLevels) => {
+    logger('Assembling level up or down event, userId: ', userId, ' prior level ID: ', priorLevelId, ' and new: ', newLevelId, ' with list: ', listOfLevels);
+    const priorLevel = findLevel(userId, priorLevelId, listOfLevels);
+    const newLevel = findLevel(userId, newLevelId, listOfLevels);
+    if (!priorLevel && !newLevel) {
+        // throw Error('User entered changed level but has null old and new level');
+        logger('Error, prior and new level are null, throw error in future');
+        return null;
+    }
+
+    const levelUp = !priorLevel || priorLevel.minimumPoints < newLevel.minimumPoints;
+    const eventType = levelUp ? 'HEAT_LEVEL_UP' : 'HEAT_LEVEL_DOWN';
+
+    const eventContext = { priorLevel, newLevel };
+    return publisher.publishUserEvent(userId, eventType, { context: eventContext });
+};
+
+const publishLevelChanges = async (updateCalls, priorUserLevels, listOfLevels) => {
+    const newLevelMap = updateCalls.reduce((obj, updateCall) => ({ ...obj, [updateCall.systemWideUserId]: updateCall.currentLevelId }), {});
+    const newLevelUsers = Object.keys(newLevelMap).filter((userId) => newLevelMap[userId] !== priorUserLevels[userId]);
+    if (newLevelUsers.length === 0) {
+        logger('No users changed level, exit');
+    }
+
+    const publishPromises = newLevelUsers.map((userId) => assembleLevelEvent(userId, priorUserLevels[userId], newLevelMap[userId], listOfLevels));
+    await Promise.all(publishPromises);    
+};
+
 // candidate for future optimization but is always going to be heavy (and hence doing it on background job and making easily available)
 const updateUserStates = async (userIds) => {
     const refMomentLastPeriod = moment().subtract(1, 'month');
     const refMomentThisPeriod = moment();
 
-    const [priorPeriodPoints, currentPeriodPoints, heatLevels] = await Promise.all([
+    const [priorPeriodPoints, currentPeriodPoints, priorUserLevels, listOfLevels] = await Promise.all([
         rds.sumPointsForUsers(userIds, refMomentLastPeriod.startOf('month'), refMomentLastPeriod.endOf('month')),
         rds.sumPointsForUsers(userIds, refMomentThisPeriod.startOf('month')), // i.e., up until now
+        rds.obtainUserLevels(userIds),
         obtainHeatLevels(userIds)
     ]);
 
-    const updateCalls = userIds.map((userId) => assembleUpdateStateCall(userId, priorPeriodPoints, currentPeriodPoints, heatLevels));
+    const updateCalls = userIds.map((userId) => assembleUpdateStateCall(userId, priorPeriodPoints, currentPeriodPoints, listOfLevels));
     logger('Assembled update calls: ', updateCalls);
 
     const updateResults = await Promise.all(updateCalls.map(safeUpdateCall));
     logger('Results of update calls: ', updateResults);
+
+    await publishLevelChanges(updateCalls, priorUserLevels, listOfLevels);
 };
 
 module.exports.handleSqsBatch = async (event) => {
