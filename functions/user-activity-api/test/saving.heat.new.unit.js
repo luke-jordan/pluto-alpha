@@ -1,11 +1,16 @@
 'use strict';
 
+
+// const logger = require('debug')('jupiter:heat:test');
 const moment = require('moment');
+
+const uuid = require('uuid/v4');
 const helper = require('./test.helper');
 
 const chai = require('chai');
 const sinon = require('sinon');
 chai.use(require('sinon-chai'));
+chai.use(require('chai-as-promised'));
 const { expect } = chai;
 
 const proxyquire = require('proxyquire');
@@ -16,6 +21,7 @@ const insertPointLogStub = sinon.stub();
 
 const establishUserStateStub = sinon.stub();
 const updateUserStateStub = sinon.stub();
+const obtainStateUsersStub = sinon.stub();
 
 const sumPointsStub = sinon.stub();
 const pointHistoryStub = sinon.stub();
@@ -39,6 +45,7 @@ const handler = proxyquire('../heat-handler', {
         'obtainPointLevels': pointLevelsStub,
         'establishUserState': establishUserStateStub,
         'updateUserState': updateUserStateStub,
+        'obtainAllUsersWithState': obtainStateUsersStub,
         '@noCallThru': true
     },
     'aws-sdk': {
@@ -195,6 +202,11 @@ describe('*** USER ACTIVITY *** INSERT POINT RECORD', () => {
 });
 
 describe('*** USER ACTIVITY *** FETCH POINTS', () => {
+    const mockClientId = 'client-id';
+    const mockFloatId = 'float-id';
+
+    const mockProfileStringified = JSON.stringify({ clientId: mockClientId, floatId: mockFloatId });
+    const mockProfileResult = helper.mockLambdaResponse(JSON.stringify({ body: mockProfileStringified }));
 
     beforeEach(resetStubs);
 
@@ -243,6 +255,20 @@ describe('*** USER ACTIVITY *** FETCH POINTS', () => {
         });
     });
 
+    it('Handles invalid events and thrown errors', async () => {
+        // On invalid event
+        await expect(handler.fetchUserHeat({ httpMethod: 'GET' })).to.eventually.deep.equal({ statusCode: 403 });
+        
+        redisGetStub.resolves();
+        lambdaInvokeStub.returns({ promise: () => mockProfileResult });
+
+        sumPointsStub.throws(new Error('Error!'));
+        const mockEvent = helper.wrapQueryParamEvent(null, 'user1');
+
+        // On thrown error
+        await expect(handler.fetchUserHeat(mockEvent)).to.eventually.deep.equal({ statusCode: 500 });
+    });
+
     // not needed yet
     it.skip('Obtains a user point history', async () => {
         const mockMoments = [moment().subtract(20, 'days'), moment().subtract(5, 'days'), moment().subtract(1, 'days')];
@@ -265,6 +291,63 @@ describe('*** USER ACTIVITY *** FETCH POINTS', () => {
         };
 
         expect(resultBody).to.deep.equal(mockPointHistory.map(transformPointRecord));
+    });
+
+});
+
+describe('*** UNIT TEST HEAT CALCULATION ***', async () => {
+    const testSystemId = uuid();
+    const testLevelId = uuid();
+
+    const mockClientId = 'client-id';
+    const mockFloatId = 'float-id';
+
+    const mockProfileStringified = JSON.stringify({
+        systemWideUserId: testSystemId,
+        clientId: mockClientId,
+        floatId: mockFloatId
+    });
+
+    const mockProfileResult = helper.mockLambdaResponse(JSON.stringify({ body: mockProfileStringified }));
+
+    beforeEach(() => helper.resetStubs(obtainStateUsersStub, redisMGetStub, lambdaInvokeStub, pointLevelsStub, sumPointsStub));
+
+    it('Calculates heat score for all users', async () => {
+        obtainStateUsersStub.resolves([testSystemId]);
+
+        redisMGetStub.onFirstCall().resolves([]);
+        redisMGetStub.onSecondCall().resolves([mockProfileStringified]);
+
+        lambdaInvokeStub.returns({ promise: () => mockProfileResult });
+        pointLevelsStub.resolves([{ levelId: testLevelId, clientId: mockClientId, floatId: mockFloatId }]);
+
+        sumPointsStub.onFirstCall().resolves({ [testSystemId]: 11 });
+        sumPointsStub.onSecondCall().resolves({ [testSystemId]: 17 });
+
+        const resultOfCalc = await handler.calculateHeatStateForAllUsers({});
+        expect(resultOfCalc).to.deep.equal({ statusCode: 200, usersUpdated: 1 });
+
+        expect(obtainStateUsersStub).to.have.been.calledOnceWithExactly();
+
+        expect(redisMGetStub).to.have.been.calledTwice;
+        expect(redisMGetStub.getCall(0).args[0]).to.deep.equal([`USER_PROFILE::${testSystemId}`]);
+        expect(redisMGetStub.getCall(1).args[0]).to.deep.equal([`USER_PROFILE::${testSystemId}`]);
+
+        const expectedProfileInvocation = helper.wrapLambdaInvoc('profile_fetch', false, { systemWideUserId: testSystemId });
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(expectedProfileInvocation);
+
+        expect(sumPointsStub).to.have.been.calledTwice;
+        expect(sumPointsStub).to.have.been.calledWithExactly([testSystemId], sinon.match.any, sinon.match.any);
+        expect(sumPointsStub).to.have.been.calledWithExactly([testSystemId], sinon.match.any);
+    });
+
+    it('Handles thrown errors and no users with state', async () => {
+        obtainStateUsersStub.resolves([]);
+        await expect(handler.calculateHeatStateForAllUsers({ })).to.eventually.deep.equal({ statusCode: 200, usersUpdated: 0 });
+        obtainStateUsersStub.reset();
+
+        obtainStateUsersStub.throws(new Error('Error!'));
+        await expect(handler.calculateHeatStateForAllUsers({ })).to.eventually.deep.equal({ statusCode: 500, error: JSON.stringify('Error!') });
     });
 
 });

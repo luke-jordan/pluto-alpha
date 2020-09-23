@@ -14,6 +14,7 @@ const expect = chai.expect;
 
 const upsertPointItemsStub = sinon.stub();
 const upsertHeatThresholdStub = sinon.stub();
+
 const fetchHeatThresholdStub = sinon.stub();
 const fetchPointItemsStub = sinon.stub();
 
@@ -38,10 +39,10 @@ describe('*** UNIT TEST WRITE HEAT CONFIG ***', () => {
         const testEventBody = {
             eventPointItems: [
                 { eventPointMatchId: 'event_point_id_1', userId: 'user1', numberPoints: 13 },
-                { eventPointMatchId: 'event_point_id_2', userId: 'user2', numberPoints: 7 },
-                { eventPointMatchId: 'event_point_id_3', userId: 'user3', numberPoints: 11 },
-                { userId: 'user4', numberPoints: 5 },
-                { userId: 'user5', numberPoints: 17 }
+                { eventPointMatchId: 'event_point_id_2', userId: 'user2', numberPoints: 33 },
+                { eventPointMatchId: 'event_point_id_3', userId: 'user3', numberPoints: 21 },
+                { userId: 'user4', numberPoints: 8 },
+                { userId: 'user5', numberPoints: 5 }
             ]
         };
 

@@ -1,6 +1,8 @@
 'use strict';
 
+// const logger = require('debug')('jupiter:heat:test');
 const moment = require('moment');
+const uuid = require('uuid/v4');
 const camelCaseKeys = require('camelcase-keys');
 
 const helper = require('./test.helper');
@@ -123,5 +125,69 @@ describe('*** USER ACTIVITY *** SAVING HEAT SUMMATION', async () => {
 
         expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['userX']);
     });
+
+});
+
+describe('*** UNIT TEST RDS HEAT FUNCTIONS ***', async () => {
+    const testLevelId = uuid();
+    const testUserId = uuid();
+
+    const testClientId = 'client_id';
+    const testFloatId = 'float_id';
+
+    const testCreationTime = moment().format();
+
+    const mockLevelThreshold = {
+        'level_id': testLevelId,
+        'client_id': testClientId,
+        'float_id': testFloatId,
+        'level_name': 'Hard',
+        'level_color': 'Blue',
+        'level_color_code': '#ff0000',
+        'minimum_points': 50
+    };
+
+    beforeEach(() => helper.resetStubs(queryStub, insertStub));
+
+    it('Obtains point levels', async () => {
+        queryStub.resolves([mockLevelThreshold]);
+        const resultOfFetch = await savingHeatRds.obtainPointLevels(testClientId, testFloatId);
+
+        const expectedResult = {
+            levelId: testLevelId,
+            clientId: testClientId,
+            floatId: testFloatId,
+            levelName: 'Hard',
+            levelColor: 'Blue',
+            levelColorCode: '#ff0000',
+            minimumPoints: 50
+        };
+
+        expect(resultOfFetch).to.deep.equal([expectedResult]);
+
+        const expectedQuery = 'select * from transaction_data.point_heat_level where client_id = $1 and float_id = $2 order by minimum_points desc';
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, [testClientId, testFloatId]);
+    });
+    
+    it('Establishes user state', async () => {
+        queryStub.resolves([]);
+        insertStub.resolves({ rows: [{ 'creation_time': testCreationTime }]});
+        const resultOfInsert = await savingHeatRds.establishUserState(testUserId);
+        expect(resultOfInsert).to.deep.equal({ rows: [{ 'creation_time': testCreationTime }]});
+        
+        const expectedSelectQuery = 'select current_period_points from transaction_data.user_heat_state where system_wide_user_id = $1';
+        const expectedInsertQuery = 'insert into transaction_data.user_heat_state (system_wide_user_id) values %L returning creation_time';
+
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedSelectQuery, [testUserId]);
+        expect(insertStub).to.have.been.calledOnceWithExactly(expectedInsertQuery, '${systemWideUserId}', [{ systemWideUserId: testUserId }]);
+    });
+
+    // it('Updates user state', async () => {
+
+    // });
+
+    // it('Obtains all users with state', async () => {
+
+    // });
 
 });
