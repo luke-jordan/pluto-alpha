@@ -210,8 +210,15 @@ module.exports.getUserAccountFigure = async ({ systemWideUserId, operation }) =>
     logger('Params for operation: ', operationParams);
     const resultOfOperation = await executeAggregateOperation(operationParams, systemWideUserId);
     logger('Result of operation: ', resultOfOperation);
-    if (resultOfOperation) {
-        return { amount: resultOfOperation.amount, unit: resultOfOperation.unit, currency: resultOfOperation.currency };
+    
+    if (!resultOfOperation) {
+        return null;
     }
-    return null;
+
+    const isHeatFigure = operation.startsWith('saving_heat');
+    if (isHeatFigure) {
+        return resultOfOperation;
+    }
+
+    return { amount: resultOfOperation.amount, unit: resultOfOperation.unit, currency: resultOfOperation.currency };
 };
