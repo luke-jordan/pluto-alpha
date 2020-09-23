@@ -132,7 +132,7 @@ const savingHeatQuery = async (queryType, systemWideUserId) => {
         const levelQuery = `select level_name from ${heatStateTable} inner join ${heatLevelTable} on ` + 
             `${heatStateTable}.current_level_id = ${heatLevelTable}.level_id where system_wide_user_id = $1`;
         const result = await rdsConnection.selectQuery(levelQuery, [systemWideUserId]);
-        const levelName = result.length > 0 ? result[0]['level_name'] : 'NONE';
+        const levelName = result.length > 0 ? result[0]['level_name'] : config.get('defaults.heatLevel.none');
         return { currentLevelName: levelName };
     }
 
