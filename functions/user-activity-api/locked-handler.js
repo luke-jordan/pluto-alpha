@@ -121,11 +121,7 @@ const createBoostForLockedTx = async (systemWideUserId, transactionId, lockBonus
     const { bonusPoolSystemWideId } = await dynamo.fetchFloatVarsForBalanceCalc(clientId, defaultFloatId);
     logger('Got bonus pool id: ', bonusPoolSystemWideId);
 
-    const boostSource = {
-        clientId,
-        floatId: defaultFloatId,
-        bonusPoolId: bonusPoolSystemWideId
-    };
+    const boostSource = { clientId, floatId: defaultFloatId, bonusPoolId: bonusPoolSystemWideId };
 
     const boostAudienceSelection = {
         conditions: [
@@ -150,7 +146,9 @@ const createBoostForLockedTx = async (systemWideUserId, transactionId, lockBonus
         boostAudienceType: 'INDIVIDUAL',
         boostAudienceSelection,
         initialStatus: 'PENDING',
-        statusConditions: { REDEEMED: [`lock_save_expires #{${transactionId}::${lockExpiryTimeMillis}}`] }
+        statusConditions: {
+            REDEEMED: [`lock_save_expires #{${transactionId}::${lockExpiryTimeMillis}}`]
+        }
     };
 
     const boostInvocation = wrapLambdaInvocation(boostPayload, 'createBoost', false);
