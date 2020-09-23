@@ -115,13 +115,13 @@ const fetchUserProfile = async (systemWideUserId) => {
 };
 
 const createBoostForLockedTx = async (systemWideUserId, transactionId, lockBonusAmount, daysToLock) => {
-    const { clientId, defaultFloatId } = await fetchUserProfile(systemWideUserId);
-    logger('Got user client and float id: ', { clientId, defaultFloatId });
+    const { clientId, floatId } = await fetchUserProfile(systemWideUserId);
+    logger('Got user client and float id: ', { clientId, floatId });
 
-    const { bonusPoolSystemWideId } = await dynamo.fetchFloatVarsForBalanceCalc(clientId, defaultFloatId);
+    const { bonusPoolSystemWideId } = await dynamo.fetchFloatVarsForBalanceCalc(clientId, floatId);
     logger('Got bonus pool id: ', bonusPoolSystemWideId);
 
-    const boostSource = { clientId, floatId: defaultFloatId, bonusPoolId: bonusPoolSystemWideId };
+    const boostSource = { clientId, floatId: floatId, bonusPoolId: bonusPoolSystemWideId };
 
     const boostAudienceSelection = {
         conditions: [

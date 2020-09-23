@@ -301,7 +301,7 @@ const createBoostForReferralCode = async (userProfile, referralCodeDetails, boos
         boostBudget: boostAmountPerUser.amount * boostUserIds.length,
         boostSource: {
             clientId: userProfile.clientId,
-            floatId: userProfile.defaultFloatId,
+            floatId: userProfile.floatId,
             bonusPoolId
         },
         endTimeMillis: bonusExpiryTime.valueOf(),

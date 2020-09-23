@@ -166,7 +166,7 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
     const testUserProfile = {
         systemWideUserId: testSystemId,
         clientId: 'some_client_co',
-        defaultFloatId: 'some_float',
+        floatId: 'some_float',
         defaultCurrency: 'USD'
     };
 
