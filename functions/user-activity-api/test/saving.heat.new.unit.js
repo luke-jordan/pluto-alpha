@@ -71,7 +71,7 @@ const handler = proxyquire('../heat-handler', {
 
 const resetStubs = () => helper.resetStubs(
     obtainPointsStub, insertPointLogStub, sumPointsStub, pointHistoryStub, filterEventStub, pointLevelsStub, establishUserStateStub, updateUserStateStub,
-    lambdaInvokeStub, redisGetStub, redisMGetStub, redisSetStub, publishEventStub
+    lambdaInvokeStub, redisGetStub, redisMGetStub, redisSetStub, publishEventStub, obtainUserLevelStub
 );
 
 describe('*** USER ACTIVITY *** INSERT POINT RECORD', () => {
@@ -131,7 +131,13 @@ describe('*** USER ACTIVITY *** INSERT POINT RECORD', () => {
         const expectedContext = { numberPoints: 7, awardedForEvent: 'SAVING_PAYMENT_SUCCESSFUL' }; // for the moment ; also, nb : filter out HEAT_POINTS_AWARDED on SQS sub
         expect(publishEventStub).to.have.been.calledOnceWithExactly('user1', 'HEAT_POINTS_AWARDED', { context: expectedContext });
 
-        // todo : cover the expectations
+        expect(redisMGetStub).to.have.been.calledOnceWithExactly(['USER_PROFILE::user1']);
+
+        expect(sumPointsStub).to.have.been.calledTwice;
+        expect(sumPointsStub).to.have.been.calledWithExactly(['user1'], sinon.match.any, sinon.match.any);
+        expect(sumPointsStub).to.have.been.calledWithExactly(['user1'], sinon.match.any);
+
+        expect(obtainUserLevelStub).to.have.been.calledOnceWithExactly(['user1']);
     });
 
     it('Handles single event, found, insert points, user cached', async () => {
@@ -194,7 +200,20 @@ describe('*** USER ACTIVITY *** INSERT POINT RECORD', () => {
         const expectedSecondInsertion = { eventPointMatchId: 'second', userId: 'userY', numberPoints: 5, eventType: 'BOOST_REDEEMED', referenceTime: mockRefTime2.format() };
         expect(insertPointLogStub).to.have.been.calledOnceWithExactly([expectedFirstInsertion, expectedSecondInsertion]);
 
+        const expectedFirstContext = { context: { awardedForEvent: 'SAVING_PAYMENT_SUCCESSFUL', numberPoints: 10 }};
+        const expectedSecondContext = { context: { awardedForEvent: 'BOOST_REDEEMED', numberPoints: 5 }};
+
         expect(publishEventStub).to.have.been.calledTwice;
+        expect(publishEventStub).to.have.been.calledWithExactly('user3', 'HEAT_POINTS_AWARDED', expectedFirstContext);
+        expect(publishEventStub).to.have.been.calledWithExactly('userY', 'HEAT_POINTS_AWARDED', expectedSecondContext);
+
+        expect(redisMGetStub).to.have.been.calledOnceWithExactly(['USER_PROFILE::user3', 'USER_PROFILE::userY']);
+
+        expect(sumPointsStub).to.have.been.calledTwice;
+        expect(sumPointsStub).to.have.been.calledWithExactly(['user3', 'userY'], sinon.match.any, sinon.match.any);
+        expect(sumPointsStub).to.have.been.calledWithExactly(['user3', 'userY'], sinon.match.any);
+
+        expect(obtainUserLevelStub).to.have.been.calledOnceWithExactly(['user3', 'userY']);
     });
 
     it('Does nothing when none found', async () => {
@@ -328,8 +347,15 @@ describe('*** UNIT TEST HEAT CALCULATION ***', async () => {
         lambdaInvokeStub.returns({ promise: () => mockProfileResult });
         pointLevelsStub.resolves([{ levelId: testLevelId, clientId: mockClientId, floatId: mockFloatId }]);
 
-        sumPointsStub.onFirstCall().resolves({ [testSystemId]: 11 });
-        sumPointsStub.onSecondCall().resolves({ [testSystemId]: 17 });
+        sumPointsStub.onFirstCall().resolves({ [testSystemId]: 55 });
+        sumPointsStub.onSecondCall().resolves({ [testSystemId]: 144 });
+
+        obtainUserLevelStub.resolves({ [testSystemId]: 'basic-level-id' });
+
+        pointLevelsStub.resolves([
+            { levelId: 'basic-level-id', minimumPoints: 50, name: 'Cold' },
+            { levelId: 'higher-level-id', minimumPoints: 100, name: 'Hot' }
+        ]);
 
         const resultOfCalc = await handler.calculateHeatStateForAllUsers({});
         expect(resultOfCalc).to.deep.equal({ statusCode: 200, usersUpdated: 1 });
@@ -346,6 +372,15 @@ describe('*** UNIT TEST HEAT CALCULATION ***', async () => {
         expect(sumPointsStub).to.have.been.calledTwice;
         expect(sumPointsStub).to.have.been.calledWithExactly([testSystemId], sinon.match.any, sinon.match.any);
         expect(sumPointsStub).to.have.been.calledWithExactly([testSystemId], sinon.match.any);
+
+        const expectedPublishContext = {
+            context: {
+                priorLevel: { levelId: 'basic-level-id', minimumPoints: 50, name: 'Cold' },
+                newLevel: { levelId: 'higher-level-id', minimumPoints: 100, name: 'Hot' }
+            }
+        };
+
+        expect(publishEventStub).to.have.been.calledOnceWithExactly(testSystemId, 'HEAT_LEVEL_UP', expectedPublishContext);
     });
 
     it('Handles thrown errors and no users with state', async () => {
