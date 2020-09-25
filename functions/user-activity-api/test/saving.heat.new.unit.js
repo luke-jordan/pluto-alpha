@@ -22,6 +22,7 @@ const insertPointLogStub = sinon.stub();
 const establishUserStateStub = sinon.stub();
 const updateUserStateStub = sinon.stub();
 const obtainStateUsersStub = sinon.stub();
+const obtainUserLevelStub = sinon.stub();
 
 const sumPointsStub = sinon.stub();
 const pointHistoryStub = sinon.stub();
@@ -46,6 +47,7 @@ const handler = proxyquire('../heat-handler', {
         'establishUserState': establishUserStateStub,
         'updateUserState': updateUserStateStub,
         'obtainAllUsersWithState': obtainStateUsersStub,
+        'obtainUserLevels': obtainUserLevelStub,
         '@noCallThru': true
     },
     'aws-sdk': {
@@ -103,7 +105,9 @@ describe('*** USER ACTIVITY *** INSERT POINT RECORD', () => {
 
         sumPointsStub.onFirstCall().resolves({}); // last month, no events, so empty
         sumPointsStub.onSecondCall().resolves({ 'user1': 7 }); // this month
-        // todo also test level extraction etc
+        
+        // todo also test level extraction etc, properly
+        obtainUserLevelStub.resolves({ 'user1': 'basic-level-id' });
 
         const mockTime = moment();
         const mockEvent = wrapAsSqsBatch([mockPair('user1', 'SAVING_PAYMENT_SUCCESSFUL', mockTime.valueOf())]);
@@ -175,6 +179,9 @@ describe('*** USER ACTIVITY *** INSERT POINT RECORD', () => {
 
         sumPointsStub.onFirstCall().resolves({ 'userY': 20 });
         sumPointsStub.onSecondCall().resolves({ 'user3': 10, 'userY': 25 }); // this month
+
+        // todo also test level extraction etc, properly
+        obtainUserLevelStub.resolves({ 'userY': 'basic-level-id', 'user3': 'higher-level-id' });
 
         const resultOfHandle = await handler.handleSqsBatch(mockEvent);
         expect(resultOfHandle).to.deep.equal({ statusCode: 200, pointEventsTrigged: 2 });

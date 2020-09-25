@@ -132,7 +132,7 @@ const savingHeatQuery = async (queryType, systemWideUserId) => {
         const levelQuery = `select level_name from ${heatStateTable} inner join ${heatLevelTable} on ` + 
             `${heatStateTable}.current_level_id = ${heatLevelTable}.level_id where system_wide_user_id = $1`;
         const result = await rdsConnection.selectQuery(levelQuery, [systemWideUserId]);
-        const levelName = result.length > 0 ? result[0]['level_name'] : 'NONE';
+        const levelName = result.length > 0 ? result[0]['level_name'] : config.get('defaults.heatLevel.none');
         return { currentLevelName: levelName };
     }
 
@@ -210,8 +210,15 @@ module.exports.getUserAccountFigure = async ({ systemWideUserId, operation }) =>
     logger('Params for operation: ', operationParams);
     const resultOfOperation = await executeAggregateOperation(operationParams, systemWideUserId);
     logger('Result of operation: ', resultOfOperation);
-    if (resultOfOperation) {
-        return { amount: resultOfOperation.amount, unit: resultOfOperation.unit, currency: resultOfOperation.currency };
+    
+    if (!resultOfOperation) {
+        return null;
     }
-    return null;
+
+    const isHeatFigure = operation.startsWith('saving_heat');
+    if (isHeatFigure) {
+        return resultOfOperation;
+    }
+
+    return { amount: resultOfOperation.amount, unit: resultOfOperation.unit, currency: resultOfOperation.currency };
 };

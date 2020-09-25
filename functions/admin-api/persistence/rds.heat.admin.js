@@ -11,8 +11,8 @@ const RdsConnection = require('rds-common');
 const rdsConnection = new RdsConnection(config.get('db'));
 
 module.exports.fetchHeatLevelThresholds = async (clientId, floatId) => {
-    const query = `select * from ${config.get('tables.heatLevelThreshold')} where client_id = $1 and float_id = $2`;
-    const resultOfQuery = await rdsConnection.selectQuery(query, [clientId, floatId]);
+    const query = `select * from ${config.get('tables.heatLevelThreshold')} where client_id = $1 ${floatId ? 'and float_id = $2' : ''}`;
+    const resultOfQuery = await rdsConnection.selectQuery(query, floatId ? [clientId, floatId] : [clientId]);
     return camelcaseKeys(resultOfQuery);
 };
 
