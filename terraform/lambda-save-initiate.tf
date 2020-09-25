@@ -44,6 +44,10 @@ resource "aws_lambda_function" "save_initiate" {
                   "key": "${var.log_hashing_secret[terraform.workspace]}"
                 }
               },
+              "cache": {
+                "host": aws_elasticache_cluster.ops_redis_cache.cache_nodes.0.address,
+                "port": aws_elasticache_cluster.ops_redis_cache.cache_nodes.0.port
+              },
               "payment": {
                 "test": terraform.workspace == "staging"
               }
@@ -53,7 +57,8 @@ resource "aws_lambda_function" "save_initiate" {
   }
   vpc_config {
     subnet_ids = [for subnet in aws_subnet.private : subnet.id]
-    security_group_ids = [aws_security_group.sg_5432_egress.id, aws_security_group.sg_db_access_sg.id, aws_security_group.sg_https_dns_egress.id]
+    security_group_ids = [aws_security_group.sg_5432_egress.id, aws_security_group.sg_db_access_sg.id, 
+      aws_security_group.sg_cache_6379_ingress.id, aws_security_group.sg_ops_cache_access.id, aws_security_group.sg_https_dns_egress.id]
   }
 
   depends_on = [aws_cloudwatch_log_group.save_initiate]

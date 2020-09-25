@@ -5,13 +5,13 @@ variable "admin_client_float_edit_lambda_function_name" {
 
 resource "aws_lambda_function" "admin_client_float_edit" {
 
-  function_name                  = "${var.admin_client_float_edit_lambda_function_name}"
-  role                           = "${aws_iam_role.admin_client_float_edit_role.arn}"
+  function_name                  = var.admin_client_float_edit_lambda_function_name
+  role                           = aws_iam_role.admin_client_float_edit_role.arn
   handler                        = "admin-float-handler.adjustClientFloat"
   memory_size                    = 256
   runtime                        = "nodejs12.x"
   timeout                        = 15
-  tags                           = {"environment"  = "${terraform.workspace}"}
+  tags                           = {"environment"  = terraform.workspace}
   
   s3_bucket = "pluto.lambda.${terraform.workspace}"
   s3_key = "admin_api/${var.deploy_code_commit_hash}.zip"
@@ -26,9 +26,9 @@ resource "aws_lambda_function" "admin_client_float_edit" {
                   "region": "${var.aws_default_region[terraform.workspace]}"
               },
               "db": {
-                "host": "${local.database_config.host}",
-                "database": "${local.database_config.database}",
-                "port" :"${local.database_config.port}"
+                "host": local.database_config.host,
+                "database": local.database_config.database,
+                "port": local.database_config.port
               },
               "secrets": {
                   "enabled": true,
@@ -78,26 +78,26 @@ resource "aws_cloudwatch_log_group" "admin_client_float_edit" {
 }
 
 resource "aws_iam_role_policy_attachment" "admin_client_float_edit_basic_execution_policy" {
-  role = "${aws_iam_role.admin_client_float_edit_role.name}"
+  role = aws_iam_role.admin_client_float_edit_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
 resource "aws_iam_role_policy_attachment" "admin_client_float_edit_vpc_execution_policy" {
-  role = "${aws_iam_role.admin_client_float_edit_role.name}"
+  role = aws_iam_role.admin_client_float_edit_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
 resource "aws_iam_role_policy_attachment" "admin_client_float_edit_secret_get" {
-  role = "${aws_iam_role.admin_client_float_edit_role.name}"
+  role = aws_iam_role.admin_client_float_edit_role.name
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_admin_worker_read"
 }
 
 resource "aws_iam_role_policy_attachment" "admin_client_float_edit_table_access" {
-  role = "${aws_iam_role.admin_client_float_edit_role.name}"
+  role = aws_iam_role.admin_client_float_edit_role.name
   policy_arn = "${aws_iam_policy.admin_client_float_access.arn}"
 }
 
 resource "aws_iam_role_policy_attachment" "admin_client_float_edit_transfer_access" {
-  role = "${aws_iam_role.admin_client_float_edit_role.name}"
+  role = aws_iam_role.admin_client_float_edit_role.name
   policy_arn = "${aws_iam_policy.lambda_invoke_float_transfer_access.arn}"
 }

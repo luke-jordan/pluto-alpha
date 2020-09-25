@@ -47,11 +47,13 @@ describe('*** USER ACTIVITY *** SAVING HEAT POINT INSERTION', async () => {
     it('Insert savings heat points for user', async () => {
         // note : could use a select subclause to get the points, but if a user event fires _while_ admin is updating point scores, the _prior_ scores should hold,
         // i.e., avoid race condition here by using previously pulled figure
-        const expectedQuery = 'insert into transaction_data.point_log (owner_user_id, event_point_match_id, number_points) values %L';
-        const expectColumnTemplate = '${userId}, ${eventPointMatchId}, ${numberPoints}';
-        const expectedRow = [{ userId: 'userX', eventPointMatchId: 'somePointJoin', numberPoints: 5 }];
+        const mockRefTime = moment();
 
-        const resultOfQuery = await savingHeatRds.insertPointLogs([{ userId: 'userX', eventPointMatchId: 'somePointJoin', numberPoints: 5 }]);
+        const expectedQuery = 'insert into transaction_data.point_log (owner_user_id, event_point_match_id, number_points, reference_time) values %L';
+        const expectColumnTemplate = '${userId}, ${pointMatchId}, ${numberPoints}, ${referenceTime}';
+        const expectedRow = [{ userId: 'userX', pointMatchId: 'somePointJoin', numberPoints: 5, referenceTime: mockRefTime.format() }];
+
+        const resultOfQuery = await savingHeatRds.insertPointLogs([{ userId: 'userX', eventPointMatchId: 'somePointJoin', numberPoints: 5, referenceTime: mockRefTime.format() }]);
 
         expect(resultOfQuery).to.deep.equal({ result: 'INSERTED' });
         expect(insertStub).to.have.been.calledOnceWithExactly(expectedQuery, expectColumnTemplate, expectedRow);
@@ -91,7 +93,7 @@ describe('*** USER ACTIVITY *** SAVING HEAT SUMMATION', async () => {
         const mockUserRow = (userId, points) => ({ 'owner_user_id': userId, 'sum': points });
 
         const expectedQuery = 'select owner_user_id, sum(number_points) from transaction_data.point_log ' +
-            'where owner_user_id in ($1, $2, $3) and creation_time > $4 and creation_time < $5 group by owner_user_id';
+            'where owner_user_id in ($1, $2, $3) and reference_time > $4 and reference_time < $5 group by owner_user_id';
         queryStub.resolves([mockUserRow('user1', 10), mockUserRow('user5', 34), mockUserRow('user8', 20)]);
 
         const resultOfQuery = await savingHeatRds.sumPointsForUsers(['user1', 'user8', 'user5'], testStart, testEnd);

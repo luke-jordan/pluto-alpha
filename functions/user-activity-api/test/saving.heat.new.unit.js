@@ -14,13 +14,19 @@ const filterEventStub = sinon.stub();
 const obtainPointsStub = sinon.stub();
 const insertPointLogStub = sinon.stub();
 
+const establishUserStateStub = sinon.stub();
+const updateUserStateStub = sinon.stub();
+const obtainUserLevelStub = sinon.stub();
+
 const sumPointsStub = sinon.stub();
 const pointHistoryStub = sinon.stub();
+const pointLevelsStub = sinon.stub();
 
 const lambdaInvokeStub = sinon.stub();
 
 const redisGetStub = sinon.stub();
 const redisSetStub = sinon.stub();
+const redisMGetStub = sinon.stub();
 
 const publishEventStub = sinon.stub();
 
@@ -31,6 +37,10 @@ const handler = proxyquire('../heat-handler', {
         'insertPointLogs': insertPointLogStub,
         'sumPointsForUsers': sumPointsStub,
         'obtainPointHistory': pointHistoryStub,
+        'obtainPointLevels': pointLevelsStub,
+        'establishUserState': establishUserStateStub,
+        'updateUserState': updateUserStateStub,
+        'obtainUserLevels': obtainUserLevelStub,
         '@noCallThru': true
     },
     'aws-sdk': {
@@ -43,6 +53,7 @@ const handler = proxyquire('../heat-handler', {
     'ioredis': class {
         constructor () {
             this.get = redisGetStub;
+            this.mget = redisMGetStub;
             this.set = redisSetStub;
         }
     },
@@ -51,7 +62,10 @@ const handler = proxyquire('../heat-handler', {
     }
 });
 
-const resetStubs = () => helper.resetStubs(obtainPointsStub, insertPointLogStub, sumPointsStub, pointHistoryStub, filterEventStub, lambdaInvokeStub, redisGetStub, redisSetStub, publishEventStub);
+const resetStubs = () => helper.resetStubs(
+    obtainPointsStub, insertPointLogStub, sumPointsStub, pointHistoryStub, filterEventStub, pointLevelsStub, establishUserStateStub, updateUserStateStub,
+    lambdaInvokeStub, redisGetStub, redisMGetStub, redisSetStub, publishEventStub
+);
 
 describe('*** USER ACTIVITY *** INSERT POINT RECORD', () => {
 
@@ -67,7 +81,7 @@ describe('*** USER ACTIVITY *** INSERT POINT RECORD', () => {
     const mockProfileStringified = JSON.stringify({ clientId: mockClientId, floatId: mockFloatId });
     const mockProfileResult = helper.mockLambdaResponse(JSON.stringify({ body: mockProfileStringified }));
     
-    const mockPair = (userId, eventType) => ({ userId, eventType });
+    const mockPair = (userId, eventType, timestamp) => ({ userId, eventType, timestamp });
 
     beforeEach(resetStubs);
 
@@ -77,11 +91,19 @@ describe('*** USER ACTIVITY *** INSERT POINT RECORD', () => {
         redisGetStub.onFirstCall().resolves(null);
         lambdaInvokeStub.returns({ promise: () => mockProfileResult });
         redisGetStub.onSecondCall().resolves(mockProfileStringified);
+        redisMGetStub.resolves([mockProfileStringified]);
 
         obtainPointsStub.resolves({ eventPointMatchId: 'pointJoinId', numberPoints: 7, parameters: {} });
         insertPointLogStub.resolves({ result: 'INSERTED' });
 
-        const mockEvent = wrapAsSqsBatch([mockPair('user1', 'SAVING_PAYMENT_SUCCESSFUL')]);
+        sumPointsStub.onFirstCall().resolves({}); // last month, no events, so empty
+        sumPointsStub.onSecondCall().resolves({ 'user1': 7 }); // this month
+        
+        // todo also test level extraction etc, properly
+        obtainUserLevelStub.resolves({ 'user1': 'basic-level-id' });
+
+        const mockTime = moment();
+        const mockEvent = wrapAsSqsBatch([mockPair('user1', 'SAVING_PAYMENT_SUCCESSFUL', mockTime.valueOf())]);
         const resultOfHandle = await handler.handleSqsBatch(mockEvent);
 
         expect(resultOfHandle).to.deep.equal({ statusCode: 200, pointEventsTrigged: 1 });
@@ -96,11 +118,13 @@ describe('*** USER ACTIVITY *** INSERT POINT RECORD', () => {
         expect(obtainPointsStub).to.have.been.calledOnceWithExactly(mockClientId, mockFloatId, 'SAVING_PAYMENT_SUCCESSFUL');
         
         // see note in code on why redundant event type here (it's for publishing logs) 
-        const expectedInsertion = { eventPointMatchId: 'pointJoinId', userId: 'user1', numberPoints: 7, eventType: 'SAVING_PAYMENT_SUCCESSFUL' };
+        const expectedInsertion = { eventPointMatchId: 'pointJoinId', userId: 'user1', numberPoints: 7, eventType: 'SAVING_PAYMENT_SUCCESSFUL', referenceTime: mockTime.format() };
         expect(insertPointLogStub).to.have.been.calledOnceWithExactly([expectedInsertion]);
 
         const expectedContext = { numberPoints: 7, awardedForEvent: 'SAVING_PAYMENT_SUCCESSFUL' }; // for the moment ; also, nb : filter out HEAT_POINTS_AWARDED on SQS sub
         expect(publishEventStub).to.have.been.calledOnceWithExactly('user1', 'HEAT_POINTS_AWARDED', { context: expectedContext });
+
+        // todo : cover the expectations
     });
 
     it('Handles single event, found, insert points, user cached', async () => {
@@ -121,11 +145,14 @@ describe('*** USER ACTIVITY *** INSERT POINT RECORD', () => {
     });
 
     it('Handles batch events, some found, others not, mostly cached', async () => {
+        const mockRefTime1 = moment();
+        const mockRefTime2 = moment();
+
         const mockEvent = wrapAsSqsBatch([
-            mockPair('user3', 'SAVING_PAYMENT_SUCCESSFUL'),
-            mockPair('userN', 'MESSAGE_SENT'),
-            mockPair('userY', 'BOOST_REDEEMED'),
-            mockPair('userF', 'USER_GAME_RESPONSE')
+            mockPair('user3', 'SAVING_PAYMENT_SUCCESSFUL', mockRefTime1.valueOf()),
+            mockPair('userN', 'MESSAGE_SENT', mockRefTime1.valueOf()),
+            mockPair('userY', 'BOOST_REDEEMED', mockRefTime2.valueOf()),
+            mockPair('userF', 'USER_GAME_RESPONSE', mockRefTime2.valueOf())
         ]);
 
         filterEventStub.resolves(['SAVING_PAYMENT_SUCCESSFUL', 'BOOST_REDEEMED', 'USER_GAME_RESPONSE']);
@@ -133,6 +160,8 @@ describe('*** USER ACTIVITY *** INSERT POINT RECORD', () => {
         lambdaInvokeStub.returns({ promise: () => mockProfileResult });
         redisGetStub.withArgs('USER_PROFILE::userY').onFirstCall().resolves(null).onSecondCall().resolves(mockProfileStringified);
         redisGetStub.withArgs('USER_PROFILE::userF').onFirstCall().resolves(null).onSecondCall().resolves(mockProfileStringified);
+        
+        redisMGetStub.resolves(Array(4).fill(mockProfileStringified));
 
         obtainPointsStub.withArgs(mockClientId, mockFloatId, 'SAVING_PAYMENT_SUCCESSFUL').resolves({ numberPoints: 10, eventPointMatchId: 'first' });
         obtainPointsStub.withArgs(mockClientId, mockFloatId, 'BOOST_REDEEMED').resolves({ numberPoints: 5, eventPointMatchId: 'second' });
@@ -141,6 +170,12 @@ describe('*** USER ACTIVITY *** INSERT POINT RECORD', () => {
         obtainPointsStub.withArgs(mockClientId, mockFloatId, 'USER_GAME_RESPONSE').resolves(null);
         insertPointLogStub.resolves({ result: 'INSERTED' });
 
+        sumPointsStub.onFirstCall().resolves({ 'userY': 20 });
+        sumPointsStub.onSecondCall().resolves({ 'user3': 10, 'userY': 25 }); // this month
+
+        // todo also test level extraction etc, properly
+        obtainUserLevelStub.resolves({ 'userY': 'basic-level-id', 'user3': 'higher-level-id' });
+
         const resultOfHandle = await handler.handleSqsBatch(mockEvent);
         expect(resultOfHandle).to.deep.equal({ statusCode: 200, pointEventsTrigged: 2 });
 
@@ -148,8 +183,8 @@ describe('*** USER ACTIVITY *** INSERT POINT RECORD', () => {
         expect(lambdaInvokeStub).to.have.been.calledTwice;
         expect(obtainPointsStub).to.have.been.calledThrice;
         
-        const expectedFirstInsertion = { eventPointMatchId: 'first', userId: 'user3', numberPoints: 10, eventType: 'SAVING_PAYMENT_SUCCESSFUL' };
-        const expectedSecondInsertion = { eventPointMatchId: 'second', userId: 'userY', numberPoints: 5, eventType: 'BOOST_REDEEMED' };
+        const expectedFirstInsertion = { eventPointMatchId: 'first', userId: 'user3', numberPoints: 10, eventType: 'SAVING_PAYMENT_SUCCESSFUL', referenceTime: mockRefTime1.format() };
+        const expectedSecondInsertion = { eventPointMatchId: 'second', userId: 'userY', numberPoints: 5, eventType: 'BOOST_REDEEMED', referenceTime: mockRefTime2.format() };
         expect(insertPointLogStub).to.have.been.calledOnceWithExactly([expectedFirstInsertion, expectedSecondInsertion]);
 
         expect(publishEventStub).to.have.been.calledTwice;
@@ -171,17 +206,22 @@ describe('*** USER ACTIVITY *** FETCH POINTS', () => {
     beforeEach(resetStubs);
 
     it('Sums for single user, simple, with default dates, via API call', async () => {
+        // obtaining etc is covered above, so here just stub the cache
+        redisGetStub.resolves(JSON.stringify({ clientId: 'some_client', floatId: 'some_float' }));
+        
         sumPointsStub.resolves({ 'user1': 105 });
-        // we are going to need to fetch the heat "levels" too
+        // should also test case of no levels set
+        pointLevelsStub.resolves([{ minimumPoints: 50, name: 'Cold' }, { minimumPoints: 100, name: 'Hot' }]);
 
         const mockEvent = helper.wrapQueryParamEvent(null, 'user1');
 
         const resultOfHandle = await handler.fetchUserHeat(mockEvent);
         const resultBody = helper.standardOkayChecks(resultOfHandle);
-        expect(resultBody).to.deep.equal({ currentPoints: 105 });
+        expect(resultBody).to.deep.equal({ currentPoints: 105, currentLevel: { minimumPoints: 100, name: 'Hot' } });
 
         // not super happy about the nulls, but cleanest for now to retain flexibility in here
         expect(sumPointsStub).to.have.been.calledOnceWithExactly(['user1'], null, null);
+        expect(pointLevelsStub).to.have.been.calledOnceWithExactly('some_client', 'some_float');
     });
 
     it('Sums for multiple users, specified dates', async () => {
@@ -197,13 +237,16 @@ describe('*** USER ACTIVITY *** FETCH POINTS', () => {
         const pointSums = { 'user1': 105, 'user5': 200, 'user10': 3 }; 
         sumPointsStub.resolves(pointSums);
 
+        const pointLevels = [{ minimumPoints: 100, name: 'Hot' }, { minimumPoints: 200, name: 'Blazing' }];
+        pointLevelsStub.resolves(pointLevels);
+
         const resultOfHandle = await handler.fetchUserHeat(mockEvent);
-        const resultBody = helper.standardOkayChecks(resultOfHandle);
+        const { userPointMap } = resultOfHandle;
         
-        expect(resultBody).to.deep.equal({
-            'user1': { currentPoints: 105 },
-            'user5': { currentPoints: 200 },
-            'user10': { currentPoints: 3 }
+        expect(userPointMap).to.deep.equal({
+            'user1': { currentPoints: 105, currentLevel: pointLevels[0] },
+            'user5': { currentPoints: 200, currentLevel: pointLevels[1] },
+            'user10': { currentPoints: 3, currentLevel: null }
         });
     });
 

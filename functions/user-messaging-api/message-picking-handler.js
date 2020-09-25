@@ -27,7 +27,9 @@ const STANDARD_PARAMS = [
     'last_capitalization',
     'total_earnings',
     'last_saved_amount',
-    'next_major_digit'
+    'next_major_digit',
+    'saving_heat_points',
+    'saving_heat_level'
 ];
 
 const UNIT_DIVISORS = {
@@ -94,8 +96,9 @@ const fetchAccountFigureRaw = async (aggregateOperation, systemWideUserId) => {
         InvocationType: 'RequestResponse',
         Payload: JSON.stringify({ aggregates: [aggregateOperation], systemWideUserId })
     };
+    logger('Aggregate invocation: ', JSON.stringify(invocation));
     const resultOfInvoke = await lambda.invoke(invocation).promise();
-    // logger('Aggregate response: ', resultOfInvoke);
+    logger('Aggregate response: ', resultOfInvoke);
     const resultBody = JSON.parse(resultOfInvoke['Payload']);
     return resultBody.results[0];
 };
@@ -115,6 +118,16 @@ const calculateNextMilestoneDigit = async (userProfile) => {
     logger('Calculed next amount: ', nextMilestoneAmount);
 
     return formatAmountResult({ amount: nextMilestoneAmount, unit: 'WHOLE_CURRENCY', currency }, 0);
+};
+
+const fetchHeatLevel = async (systemWideUserId) => {
+    const accountFetchResult = await fetchAccountFigureRaw('saving_heat_level', systemWideUserId);
+    return accountFetchResult.currentLevelName;
+};
+
+const fetchHeatPoints = async (systemWideUserId) => {
+    const accountFetchResult = await fetchAccountFigureRaw('saving_heat_points', systemWideUserId);
+    return accountFetchResult.currentPeriodPoints;
 };
 
 const retrieveParamValue = async (param, destinationUserId, userProfile) => {
@@ -156,6 +169,10 @@ const retrieveParamValue = async (param, destinationUserId, userProfile) => {
         return fetchAccountAggFigure(aggregateOperation, destinationUserId);
     } else if (paramName === 'next_major_digit') {
         return calculateNextMilestoneDigit(userProfile);
+    } else if (paramName === 'saving_heat_points') {
+        return fetchHeatPoints(destinationUserId);
+    } else if (paramName === 'saving_heat_level') {
+        return fetchHeatLevel(destinationUserId);
     }
 };
 

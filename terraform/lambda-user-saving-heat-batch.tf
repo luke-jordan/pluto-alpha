@@ -1,20 +1,18 @@
-variable "user_save_heat_write" {
-  default = "user_save_heat_write"
+variable "user_save_heat_batch" {
+  default = "user_save_heat_batch"
   type = string
 }
 
-resource "aws_lambda_function" "user_save_heat_write" {
+resource "aws_lambda_function" "user_save_heat_batch" {
 
-  function_name                  = var.user_save_heat_write
-  role                           = aws_iam_role.user_save_heat_write_role.arn
-  handler                        = "heat-handler.handleSqsBatch"
-  memory_size                    = 256
+  function_name                  = var.user_save_heat_batch
+  role                           = aws_iam_role.user_save_heat_batch_role.arn
+  handler                        = "heat-handler.calculateHeatStateForAllUsers"
+  memory_size                    = 512
   runtime                        = "nodejs12.x"
   timeout                        = 15
   tags                           = {"environment"  = terraform.workspace}
   
-  reserved_concurrent_executions = 2 // does not need to be instant at all, and should batch
-
   s3_bucket = "pluto.lambda.${terraform.workspace}"
   s3_key = "user_activity_api/${var.deploy_code_commit_hash}.zip"
 
@@ -60,11 +58,11 @@ resource "aws_lambda_function" "user_save_heat_write" {
       aws_security_group.sg_cache_6379_ingress.id, aws_security_group.sg_ops_cache_access.id, aws_security_group.sg_https_dns_egress.id]
   }
 
-  depends_on = [aws_cloudwatch_log_group.user_save_heat_write]
+  depends_on = [aws_cloudwatch_log_group.user_save_heat_batch]
 }
 
-resource "aws_iam_role" "user_save_heat_write_role" {
-  name = "${var.user_save_heat_write}_role_${terraform.workspace}"
+resource "aws_iam_role" "user_save_heat_batch_role" {
+  name = "${var.user_save_heat_batch}_role_${terraform.workspace}"
 
   assume_role_policy = <<EOF
 {
@@ -83,8 +81,8 @@ resource "aws_iam_role" "user_save_heat_write_role" {
 EOF
 }
 
-resource "aws_cloudwatch_log_group" "user_save_heat_write" {
-  name = "/aws/lambda/${var.user_save_heat_write}"
+resource "aws_cloudwatch_log_group" "user_save_heat_batch" {
+  name = "/aws/lambda/${var.user_save_heat_batch}"
   retention_in_days = 3
 
   tags = {
@@ -92,63 +90,68 @@ resource "aws_cloudwatch_log_group" "user_save_heat_write" {
   }
 }
 
-resource "aws_iam_role_policy_attachment" "user_save_heat_write_basic_execution_policy" {
-  role = aws_iam_role.user_save_heat_write_role.name
+resource "aws_iam_role_policy_attachment" "user_save_heat_batch_basic_execution_policy" {
+  role = aws_iam_role.user_save_heat_batch_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-resource "aws_iam_role_policy_attachment" "user_save_heat_write_vpc_execution_policy" {
-  role = aws_iam_role.user_save_heat_write_role.name
+resource "aws_iam_role_policy_attachment" "user_save_heat_batch_vpc_execution_policy" {
+  role = aws_iam_role.user_save_heat_batch_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-resource "aws_iam_role_policy_attachment" "user_save_heat_profile_fetch" {
-  role = aws_iam_role.user_save_heat_write_role.name
+resource "aws_iam_role_policy_attachment" "user_save_heat_batch_profile_fetch" {
+  role = aws_iam_role.user_save_heat_batch_role.name
   policy_arn = var.user_profile_admin_policy_arn[terraform.workspace]
 }
 
-resource "aws_iam_role_policy_attachment" "user_save_heat_write_secret_get" {
-  role = aws_iam_role.user_save_heat_write_role.name
+resource "aws_iam_role_policy_attachment" "user_save_heat_batch_secret_get" {
+  role = aws_iam_role.user_save_heat_batch_role.name
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_transaction_worker_read"
 }
 
-resource "aws_iam_role_policy_attachment" "user_save_heat_write_event_publish_policy" {
-  role = aws_iam_role.user_save_heat_write_role.name
+resource "aws_iam_role_policy_attachment" "user_save_heat_batch_event_publish_policy" {
+  role = aws_iam_role.user_save_heat_batch_role.name
   policy_arn = aws_iam_policy.ops_sns_user_event_publish.arn
 }
 
-resource "aws_iam_role_policy_attachment" "user_save_heat_queue_polling_policy" {
-  role = aws_iam_role.user_save_heat_write_role.name
-  policy_arn = aws_iam_policy.sqs_save_heat_queue_poll.arn
+
+/////////////////// CLOUD WATCH FOR EVENT SOURCE, DAILY (DROP TO MONTHLY ONCE STABLE) ////////////////////
+
+resource "aws_cloudwatch_event_target" "trigger_ops_heat_batch_update" {
+    rule = aws_cloudwatch_event_rule.ops_every_day.name
+    target_id = aws_lambda_function.user_save_heat_batch.id
+    arn = aws_lambda_function.user_save_heat_batch.arn
+
+    input = jsonencode({}) // for now, may add client/float params in future
 }
 
-////////////////// SUBSCRIPTION TO TOPIC (VIA QUEUE) ////////////////////////////////////////////////////////
-
-resource "aws_lambda_event_source_mapping" "user_save_heat_lambda" {
-  event_source_arn = aws_sqs_queue.heat_write_process_queue.arn
-  enabled = true
-  function_name = aws_lambda_function.user_save_heat_write.arn
-  batch_size = 5
+resource "aws_lambda_permission" "allow_cloudwatch_to_call_heat_batch_update" {
+    statement_id = "AllowDailyAdminExecutionFromCloudWatch"
+    action = "lambda:InvokeFunction"
+    function_name = aws_lambda_function.user_save_heat_batch.function_name
+    principal = "events.amazonaws.com"
+    source_arn = aws_cloudwatch_event_rule.ops_every_day.arn
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
 
-resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_user_save_heat_write" {
-  log_group_name = aws_cloudwatch_log_group.user_save_heat_write.name
+resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_user_save_heat_batch" {
+  log_group_name = aws_cloudwatch_log_group.user_save_heat_batch.name
   metric_transformation {
-    name = "${var.user_save_heat_write}_fatal_api_alarm"
+    name = "${var.user_save_heat_batch}_fatal_api_alarm"
     namespace = "lambda_errors"
     value = "1"
   }
-  name = "${var.user_save_heat_write}_fatal_api_alarm"
+  name = "${var.user_save_heat_batch}_fatal_api_alarm"
   pattern = "FATAL_ERROR"
 }
 
-resource "aws_cloudwatch_metric_alarm" "fatal_metric_alarm_user_save_heat_write" {
-  alarm_name = "${var.user_save_heat_write}_fatal_api_alarm"
+resource "aws_cloudwatch_metric_alarm" "fatal_metric_alarm_user_save_heat_batch" {
+  alarm_name = "${var.user_save_heat_batch}_fatal_api_alarm"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods = 1
-  metric_name = aws_cloudwatch_log_metric_filter.fatal_metric_filter_user_save_heat_write.name
+  metric_name = aws_cloudwatch_log_metric_filter.fatal_metric_filter_user_save_heat_batch.name
   namespace = "lambda_errors"
   period = 60
   threshold = 0

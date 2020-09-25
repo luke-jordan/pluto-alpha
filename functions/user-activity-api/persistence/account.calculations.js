@@ -11,6 +11,8 @@ const rdsConnection = new RdsConnection(config.get('db'));
 
 const txTable = config.get('tables.accountTransactions');
 const userAccountTable = config.get('tables.accountLedger');
+const heatStateTable = config.get('tables.heatStateLedger');
+const heatLevelTable = config.get('tables.heatLevelThreshold');
 
 const DEFAULT_UNIT = 'HUNDREDTH_CENT';
 
@@ -125,6 +127,21 @@ const netSavingQuery = async (params, systemWideUserId) => {
     return sumOverSettledTransactionTypes(params, systemWideUserId, transTypesToInclude);
 };
 
+const savingHeatQuery = async (queryType, systemWideUserId) => {
+    if (queryType === 'saving_heat_level') {
+        const levelQuery = `select level_name from ${heatStateTable} inner join ${heatLevelTable} on ` + 
+            `${heatStateTable}.current_level_id = ${heatLevelTable}.level_id where system_wide_user_id = $1`;
+        const result = await rdsConnection.selectQuery(levelQuery, [systemWideUserId]);
+        const levelName = result.length > 0 ? result[0]['level_name'] : config.get('defaults.heatLevel.none');
+        return { currentLevelName: levelName };
+    }
+
+    const pointQuery = `select current_period_points from ${heatStateTable} where system_wide_user_id = $1`;
+    const resultOfQuery = await rdsConnection.selectQuery(pointQuery, [systemWideUserId]);
+
+    return { currentPeriodPoints: resultOfQuery.length > 0 ? resultOfQuery[0]['current_period_points'] : 0};
+};
+
 /* eslint-disable no-magic-numbers */
 const executeAggregateOperation = (operationParams, systemWideUserId) => {
     const operation = operationParams[0];
@@ -163,6 +180,10 @@ const executeAggregateOperation = (operationParams, systemWideUserId) => {
             params.endTimeMillis = operationParams.length > 4 ? operationParams[4] : null;
             return netSavingQuery(params, systemWideUserId);
         }
+        case 'saving_heat_points':
+        case 'saving_heat_level': {
+            return savingHeatQuery(operation, systemWideUserId);
+        }
         default:
             return null;
     }
@@ -178,6 +199,10 @@ const executeAggregateOperation = (operationParams, systemWideUserId) => {
  * capitalization::<currency>::<startEpochMillis>>::<endEpochMillis> : adds up capitalization between times; if no times provided, returns last capitalization
  * total_earnings::<unit>::<currency>>::<startMillis>::<endMillis> : adds up interest + boosts in the period, or all time if no period provided
  * net_saving::<unit>::<currency>::<startMillis>::<endMillis> : adds up savings - withdrawals in the period, or all time
+ *
+ * also for convenience can fetch saving heat figures
+ * saving_heat_points : gets current period saving points
+ * saving_heat_level : gets current level
  */
 module.exports.getUserAccountFigure = async ({ systemWideUserId, operation }) => {
     logger('User ID: ', systemWideUserId);
@@ -185,8 +210,15 @@ module.exports.getUserAccountFigure = async ({ systemWideUserId, operation }) =>
     logger('Params for operation: ', operationParams);
     const resultOfOperation = await executeAggregateOperation(operationParams, systemWideUserId);
     logger('Result of operation: ', resultOfOperation);
-    if (resultOfOperation) {
-        return { amount: resultOfOperation.amount, unit: resultOfOperation.unit, currency: resultOfOperation.currency };
+    
+    if (!resultOfOperation) {
+        return null;
     }
-    return null;
+
+    const isHeatFigure = operation.startsWith('saving_heat');
+    if (isHeatFigure) {
+        return resultOfOperation;
+    }
+
+    return { amount: resultOfOperation.amount, unit: resultOfOperation.unit, currency: resultOfOperation.currency };
 };
