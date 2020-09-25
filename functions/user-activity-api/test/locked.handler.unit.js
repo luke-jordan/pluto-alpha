@@ -39,7 +39,7 @@ const handler = proxyquire('../locked-handler', {
         'fetchFloatVarsForBalanceCalc': fetchFloatVarsStub,
         '@noCallThru': true
     },
-    './persistence/rds': {
+    './persistence/rds.lock': {
         'fetchTransaction': fetchTxStub,
         'findAccountsForUser': fetchAccountsStub,
         'lockTransaction': lockTxStub,

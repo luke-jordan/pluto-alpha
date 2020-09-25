@@ -4,7 +4,7 @@ const logger = require('debug')('jupiter:locked-saves:main');
 const config = require('config');
 const moment = require('moment');
 
-const persistence = require('./persistence/rds');
+const persistence = require('./persistence/rds.lock');
 const dynamo = require('./persistence/dynamodb');
 
 const opsUtil = require('ops-util-common');
