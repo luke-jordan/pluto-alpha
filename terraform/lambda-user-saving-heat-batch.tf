@@ -10,7 +10,7 @@ resource "aws_lambda_function" "user_save_heat_batch" {
   handler                        = "heat-handler.calculateHeatStateForAllUsers"
   memory_size                    = 512
   runtime                        = "nodejs12.x"
-  timeout                        = 15
+  timeout                        = 60
   tags                           = {"environment"  = terraform.workspace}
   
   s3_bucket = "pluto.lambda.${terraform.workspace}"
