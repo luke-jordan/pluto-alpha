@@ -133,7 +133,7 @@ module.exports.obtainAllUsersWithState = async () => {
 };
 
 // could possibly find a way to wrap this into queries above, but is a fairly rapid call
-module.exports.obtainUserLevels = async (userIds) => {
+module.exports.obtainUserLevels = async (userIds, includeLevelDetails = false) => {
     const fetchQuery = `select system_wide_user_id, current_level_id from ${heatStateTable} ` +
         `where system_wide_user_id in (${opsUtil.extractArrayIndices(userIds)})`;
     const queryResult = await rdsConnection.selectQuery(fetchQuery, userIds);
@@ -147,4 +147,29 @@ module.exports.fetchUserLevel = async (userId) => {
         `where system_wide_user_id = $1`;
     const queryResult = await rdsConnection.selectQuery(fetchQuery, [userId]);
     return queryResult.length > 0 ? camelCaseKeys(queryResult[0]) : null;
+};
+
+// we use this because some consumers of multi-user heat, i.e., friends, needs to know latest activity too
+module.exports.obtainLatestActivities = async (userIds, txTypesToInclude) => {
+    const txTable = config.get('tables.accountTransactions');
+    const accountTable = config.get('tables.accountLedger');
+
+    const fetchQuery = `select owner_user_id, transaction_type, max(${txTable}.creation_time) as latest_time from ` +
+        `${txTable} inner join ${accountTable} on ${txTable}.account_id = ${accountTable}.account_id ` +
+        `where owner_user_id in (${opsUtil.extractArrayIndices(userIds)}) ` +
+        `and transaction_type in (${opsUtil.extractArrayIndices(txTypesToInclude, userIds.length + 1)}) ` +
+        `group by owner_user_id, transaction_type`;
+
+    logger('Obtaining latest activities using query: ', fetchQuery);
+    const queryResults = await rdsConnection.selectQuery(fetchQuery, [...userIds, ...txTypesToInclude]);
+    
+    const usersConsolidated = new Map();
+    queryResults.forEach((row) => {
+        currentUserState = { ...usersConsolidated.get(row['owner_user_id']) } || {};
+        currentUserState[row['transaction_type']] = row['latest_time'];
+        usersConsolidated.set(row['owner_user_id'], currentUserState);
+    });
+
+    logger('Consolidated user activity, have: ', usersConsolidated);
+    return userIds.reduce((obj, userId) => ({ ...obj, [userId]: usersConsolidated.get(userId) || {} }), {});
 };

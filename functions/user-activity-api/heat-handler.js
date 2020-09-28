@@ -292,28 +292,17 @@ module.exports.calculateHeatStateForAllUsers = async (event) => {
 //     return fetchedProfile;
 // };
 
-const extractPointAndLevel = (userId, currentPointSums, listOfLevels) => {
-    const currentPoints = currentPointSums[userId] || 0;
-    const currentLevel = findLevelForPoints(currentPoints, listOfLevels);
-    return { currentPoints, currentLevel };
-};
-
-const fetchHeatForUsers = async (userIds, params) => {
-    const { clientId, floatId } = params;
-
-    const start = params.startTimeMillis ? moment(params.startTimeMillis) : null;
-    const end = params.endTimeMillis ? moment(params.endTimeMillis) : null;
-
-    const [currentPointSums, listOfLevels] = await Promise.all([
-        rds.sumPointsForUsers(userIds, start, end), rds.obtainPointLevels(clientId, floatId)
+const fetchHeatForUsers = async (params) => {
+    const { userIds, includeLastActivityOfType } = params;
+    const [userHeatLevels, latestActivities] = await Promise.all([
+        rds.obtainUserLevels(userIds, true), rds.obtainLatestActivities(userIds, includeLastActivityOfType)
     ]);
 
-    // as above, will be adding heat to these things
-    const userPointMap = userIds.reduce((obj, userId) => ({ 
-        ...obj, [userId]: extractPointAndLevel(userId, currentPointSums, listOfLevels)
+    const userHeatMap = userIds.reduce((obj, userId) => ({
+        ...obj, [userId]: { currentLevel: userHeatLevels[userId], recentActivity: latestActivities[userId] }
     }), {});
 
-    return userPointMap;
+    return userHeatMap;
 };
 
 module.exports.fetchUserHeat = async (event) => {
@@ -335,11 +324,11 @@ module.exports.fetchUserHeat = async (event) => {
         }
 
         const { userIds } = params;
-        const userPointMap = await fetchHeatForUsers(userIds, params);
+        const userHeatMap = await fetchHeatForUsers(userIds, params);
         
         // note: if return the promise directly, lambda runtime does not wrap properly, so errors propagate incorrectly
-        logger('Returning user point map: ', JSON.stringify(userPointMap));
-        return { statusCode: 200, userPointMap };
+        logger('Returning user point map: ', JSON.stringify(userHeatMap));
+        return { statusCode: 200, userHeatMap };
     } catch (err) {
         logger('FATAL_ERROR: ', err);
         return { statusCode: 500 };
