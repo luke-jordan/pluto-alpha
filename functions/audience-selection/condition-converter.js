@@ -301,7 +301,7 @@ module.exports.convertSavingHeatLevel = (condition) => {
         `system_wide_user_id = owner_user_id)`;
     
     return {
-        conditions: [{ op: condition.op, prop: levelSubQuery, value: condition.value, valueType: 'int' }]
+        conditions: [{ op: condition.op, prop: levelSubQuery, value: condition.value, valueType: 'string' }]
     };
 };
 
