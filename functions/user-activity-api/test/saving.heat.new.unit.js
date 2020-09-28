@@ -386,6 +386,7 @@ describe('*** UNIT TEST HEAT CALCULATION ***', async () => {
     it('Handles thrown errors and no users with state', async () => {
         obtainStateUsersStub.resolves([]);
         await expect(handler.calculateHeatStateForAllUsers({ })).to.eventually.deep.equal({ statusCode: 200, usersUpdated: 0 });
+
         obtainStateUsersStub.reset();
 
         obtainStateUsersStub.throws(new Error('Error!'));

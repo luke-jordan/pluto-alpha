@@ -133,7 +133,7 @@ describe('*** USER ACTIVITY *** SAVING HEAT SUMMATION', async () => {
 
 });
 
-describe('*** UNIT TEST RDS HEAT FUNCTIONS ***', async () => {
+describe('*** USER ACTIVITY *** SAVING HEAT USER FUNCTIONS ***', async () => {
     const testLevelId = uuid();
     const testUserId = uuid();
 
