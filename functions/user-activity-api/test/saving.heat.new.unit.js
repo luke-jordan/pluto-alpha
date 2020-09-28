@@ -1,11 +1,16 @@
 'use strict';
 
+
+// const logger = require('debug')('jupiter:heat:test');
 const moment = require('moment');
+
+const uuid = require('uuid/v4');
 const helper = require('./test.helper');
 
 const chai = require('chai');
 const sinon = require('sinon');
 chai.use(require('sinon-chai'));
+chai.use(require('chai-as-promised'));
 const { expect } = chai;
 
 const proxyquire = require('proxyquire');
@@ -16,6 +21,7 @@ const insertPointLogStub = sinon.stub();
 
 const establishUserStateStub = sinon.stub();
 const updateUserStateStub = sinon.stub();
+const obtainStateUsersStub = sinon.stub();
 const obtainUserLevelStub = sinon.stub();
 
 const sumPointsStub = sinon.stub();
@@ -40,6 +46,7 @@ const handler = proxyquire('../heat-handler', {
         'obtainPointLevels': pointLevelsStub,
         'establishUserState': establishUserStateStub,
         'updateUserState': updateUserStateStub,
+        'obtainAllUsersWithState': obtainStateUsersStub,
         'obtainUserLevels': obtainUserLevelStub,
         '@noCallThru': true
     },
@@ -64,7 +71,7 @@ const handler = proxyquire('../heat-handler', {
 
 const resetStubs = () => helper.resetStubs(
     obtainPointsStub, insertPointLogStub, sumPointsStub, pointHistoryStub, filterEventStub, pointLevelsStub, establishUserStateStub, updateUserStateStub,
-    lambdaInvokeStub, redisGetStub, redisMGetStub, redisSetStub, publishEventStub
+    lambdaInvokeStub, redisGetStub, redisMGetStub, redisSetStub, publishEventStub, obtainUserLevelStub
 );
 
 describe('*** USER ACTIVITY *** INSERT POINT RECORD', () => {
@@ -124,7 +131,13 @@ describe('*** USER ACTIVITY *** INSERT POINT RECORD', () => {
         const expectedContext = { numberPoints: 7, awardedForEvent: 'SAVING_PAYMENT_SUCCESSFUL' }; // for the moment ; also, nb : filter out HEAT_POINTS_AWARDED on SQS sub
         expect(publishEventStub).to.have.been.calledOnceWithExactly('user1', 'HEAT_POINTS_AWARDED', { context: expectedContext });
 
-        // todo : cover the expectations
+        expect(redisMGetStub).to.have.been.calledOnceWithExactly(['USER_PROFILE::user1']);
+
+        expect(sumPointsStub).to.have.been.calledTwice;
+        expect(sumPointsStub).to.have.been.calledWithExactly(['user1'], sinon.match.any, sinon.match.any);
+        expect(sumPointsStub).to.have.been.calledWithExactly(['user1'], sinon.match.any);
+
+        expect(obtainUserLevelStub).to.have.been.calledOnceWithExactly(['user1']);
     });
 
     it('Handles single event, found, insert points, user cached', async () => {
@@ -187,7 +200,20 @@ describe('*** USER ACTIVITY *** INSERT POINT RECORD', () => {
         const expectedSecondInsertion = { eventPointMatchId: 'second', userId: 'userY', numberPoints: 5, eventType: 'BOOST_REDEEMED', referenceTime: mockRefTime2.format() };
         expect(insertPointLogStub).to.have.been.calledOnceWithExactly([expectedFirstInsertion, expectedSecondInsertion]);
 
+        const expectedFirstContext = { context: { awardedForEvent: 'SAVING_PAYMENT_SUCCESSFUL', numberPoints: 10 }};
+        const expectedSecondContext = { context: { awardedForEvent: 'BOOST_REDEEMED', numberPoints: 5 }};
+
         expect(publishEventStub).to.have.been.calledTwice;
+        expect(publishEventStub).to.have.been.calledWithExactly('user3', 'HEAT_POINTS_AWARDED', expectedFirstContext);
+        expect(publishEventStub).to.have.been.calledWithExactly('userY', 'HEAT_POINTS_AWARDED', expectedSecondContext);
+
+        expect(redisMGetStub).to.have.been.calledOnceWithExactly(['USER_PROFILE::user3', 'USER_PROFILE::userY']);
+
+        expect(sumPointsStub).to.have.been.calledTwice;
+        expect(sumPointsStub).to.have.been.calledWithExactly(['user3', 'userY'], sinon.match.any, sinon.match.any);
+        expect(sumPointsStub).to.have.been.calledWithExactly(['user3', 'userY'], sinon.match.any);
+
+        expect(obtainUserLevelStub).to.have.been.calledOnceWithExactly(['user3', 'userY']);
     });
 
     it('Does nothing when none found', async () => {
@@ -202,6 +228,11 @@ describe('*** USER ACTIVITY *** INSERT POINT RECORD', () => {
 });
 
 describe('*** USER ACTIVITY *** FETCH POINTS', () => {
+    const mockClientId = 'client-id';
+    const mockFloatId = 'float-id';
+
+    const mockProfileStringified = JSON.stringify({ clientId: mockClientId, floatId: mockFloatId });
+    const mockProfileResult = helper.mockLambdaResponse(JSON.stringify({ body: mockProfileStringified }));
 
     beforeEach(resetStubs);
 
@@ -250,6 +281,20 @@ describe('*** USER ACTIVITY *** FETCH POINTS', () => {
         });
     });
 
+    it('Handles invalid events and thrown errors', async () => {
+        // On invalid event
+        await expect(handler.fetchUserHeat({ httpMethod: 'GET' })).to.eventually.deep.equal({ statusCode: 403 });
+        
+        redisGetStub.resolves();
+        lambdaInvokeStub.returns({ promise: () => mockProfileResult });
+
+        sumPointsStub.throws(new Error('Error!'));
+        const mockEvent = helper.wrapQueryParamEvent(null, 'user1');
+
+        // On thrown error
+        await expect(handler.fetchUserHeat(mockEvent)).to.eventually.deep.equal({ statusCode: 500 });
+    });
+
     // not needed yet
     it.skip('Obtains a user point history', async () => {
         const mockMoments = [moment().subtract(20, 'days'), moment().subtract(5, 'days'), moment().subtract(1, 'days')];
@@ -272,6 +317,79 @@ describe('*** USER ACTIVITY *** FETCH POINTS', () => {
         };
 
         expect(resultBody).to.deep.equal(mockPointHistory.map(transformPointRecord));
+    });
+
+});
+
+describe('*** UNIT TEST HEAT CALCULATION ***', async () => {
+    const testSystemId = uuid();
+    const testLevelId = uuid();
+
+    const mockClientId = 'client-id';
+    const mockFloatId = 'float-id';
+
+    const mockProfileStringified = JSON.stringify({
+        systemWideUserId: testSystemId,
+        clientId: mockClientId,
+        floatId: mockFloatId
+    });
+
+    const mockProfileResult = helper.mockLambdaResponse(JSON.stringify({ body: mockProfileStringified }));
+
+    beforeEach(() => helper.resetStubs(obtainStateUsersStub, redisMGetStub, lambdaInvokeStub, pointLevelsStub, sumPointsStub));
+
+    it('Calculates heat score for all users', async () => {
+        obtainStateUsersStub.resolves([testSystemId]);
+
+        redisMGetStub.onFirstCall().resolves([]);
+        redisMGetStub.onSecondCall().resolves([mockProfileStringified]);
+
+        lambdaInvokeStub.returns({ promise: () => mockProfileResult });
+        pointLevelsStub.resolves([{ levelId: testLevelId, clientId: mockClientId, floatId: mockFloatId }]);
+
+        sumPointsStub.onFirstCall().resolves({ [testSystemId]: 55 });
+        sumPointsStub.onSecondCall().resolves({ [testSystemId]: 144 });
+
+        obtainUserLevelStub.resolves({ [testSystemId]: 'basic-level-id' });
+
+        pointLevelsStub.resolves([
+            { levelId: 'basic-level-id', minimumPoints: 50, name: 'Cold' },
+            { levelId: 'higher-level-id', minimumPoints: 100, name: 'Hot' }
+        ]);
+
+        const resultOfCalc = await handler.calculateHeatStateForAllUsers({});
+        expect(resultOfCalc).to.deep.equal({ statusCode: 200, usersUpdated: 1 });
+
+        expect(obtainStateUsersStub).to.have.been.calledOnceWithExactly();
+
+        expect(redisMGetStub).to.have.been.calledTwice;
+        expect(redisMGetStub.getCall(0).args[0]).to.deep.equal([`USER_PROFILE::${testSystemId}`]);
+        expect(redisMGetStub.getCall(1).args[0]).to.deep.equal([`USER_PROFILE::${testSystemId}`]);
+
+        const expectedProfileInvocation = helper.wrapLambdaInvoc('profile_fetch', false, { systemWideUserId: testSystemId });
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(expectedProfileInvocation);
+
+        expect(sumPointsStub).to.have.been.calledTwice;
+        expect(sumPointsStub).to.have.been.calledWithExactly([testSystemId], sinon.match.any, sinon.match.any);
+        expect(sumPointsStub).to.have.been.calledWithExactly([testSystemId], sinon.match.any);
+
+        const expectedPublishContext = {
+            context: {
+                priorLevel: { levelId: 'basic-level-id', minimumPoints: 50, name: 'Cold' },
+                newLevel: { levelId: 'higher-level-id', minimumPoints: 100, name: 'Hot' }
+            }
+        };
+
+        expect(publishEventStub).to.have.been.calledOnceWithExactly(testSystemId, 'HEAT_LEVEL_UP', expectedPublishContext);
+    });
+
+    it('Handles thrown errors and no users with state', async () => {
+        obtainStateUsersStub.resolves([]);
+        await expect(handler.calculateHeatStateForAllUsers({ })).to.eventually.deep.equal({ statusCode: 200, usersUpdated: 0 });
+        obtainStateUsersStub.reset();
+
+        obtainStateUsersStub.throws(new Error('Error!'));
+        await expect(handler.calculateHeatStateForAllUsers({ })).to.eventually.deep.equal({ statusCode: 500, error: JSON.stringify('Error!') });
     });
 
 });
