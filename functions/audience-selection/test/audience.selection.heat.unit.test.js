@@ -90,7 +90,7 @@ describe('*** TEST HEAT POINT AND LEVEL SELECTION ***', () => {
             creatingUserId: mockUserId,
             conditions: [
                 { op: 'and', children: [
-                    { op: 'is', prop: levelSubQuery, value: 'purple-level-id', valueType: 'int' },
+                    { op: 'is', prop: levelSubQuery, value: 'purple-level-id', valueType: 'string' },
                     { op: 'is', prop: 'responsible_client_id', value: 'test-client-id' }
                 ]}
             ]

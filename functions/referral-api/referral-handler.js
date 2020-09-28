@@ -101,7 +101,8 @@ module.exports.status = async (event) => {
         logger('Received params: ', params);
         const { countryCode } = params;
         logger('Return for country code: ', countryCode);
-        const result = { codeRequired: true, defaultCode: 'RANDELAS' };
+        const defaultCode = config.has('defaultCode') ? config.get('defaultCode') : '';
+        const result = { codeRequired: true, defaultCode };
         return { statusCode: status['OK'], body: JSON.stringify(result) };
     } catch (err) {
         return handleErrorAndReturn(err);

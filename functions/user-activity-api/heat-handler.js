@@ -280,36 +280,17 @@ module.exports.calculateHeatStateForAllUsers = async (event) => {
 // ///////////////////////////// READ OPERATIONS /////////////////////////////////////////////////////
 // ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-// simpler form of above (in time refactor above to just this)
-const fetchProfile = async (userId) => {
-    const cachedProfile = await redis.get(`${profileKeyPrefix}::${userId}`);
-    if (cachedProfile) {
-        return JSON.parse(cachedProfile);
-    }
+// simpler form of above (in time refactor above to just this) - commented for now but will use in obtain history
+// const fetchProfile = async (userId) => {
+//     const cachedProfile = await redis.get(`${profileKeyPrefix}::${userId}`);
+//     if (cachedProfile) {
+//         return JSON.parse(cachedProfile);
+//     }
 
-    const fetchedProfile = await obtainProfile(userId);
-    await redis.set(`${profileKeyPrefix}::${userId}`, JSON.stringify(fetchedProfile), 'EX', config.get('cache.ttls.profile'));
-    return fetchedProfile;
-};
-
-const fetchHeatForUserThemselves = async (userId, params) => {
-    const { clientId, floatId } = await fetchProfile(userId);
-
-    const start = params.startTimeMillis ? moment(params.startTimeMillis) : null;
-    const end = params.endTimeMillis ? moment(params.endTimeMillis) : null;
-
-    const [pointSum, listOfLevels] = await Promise.all([
-        rds.sumPointsForUsers([userId], start, end), rds.obtainPointLevels(clientId, floatId)
-    ]);
-
-    logger('For user ID ', userId, ' retrieved point sum: ', pointSum);
-    logger('Fetched heat levels for client ', clientId, ' and float ', floatId, ' as: ', JSON.stringify(listOfLevels));
-
-    const currentPoints = pointSum[userId] || 0;
-    const currentLevel = findLevelForPoints(currentPoints, listOfLevels);
-
-    return { currentPoints, currentLevel };
-};
+//     const fetchedProfile = await obtainProfile(userId);
+//     await redis.set(`${profileKeyPrefix}::${userId}`, JSON.stringify(fetchedProfile), 'EX', config.get('cache.ttls.profile'));
+//     return fetchedProfile;
+// };
 
 const extractPointAndLevel = (userId, currentPointSums, listOfLevels) => {
     const currentPoints = currentPointSums[userId] || 0;
@@ -347,13 +328,16 @@ module.exports.fetchUserHeat = async (event) => {
         
         if (isApiCall && !params.userIds) {
             const { systemWideUserId } = opsUtil.extractUserDetails(event);
-            // note: if return the promise directly, lambda runtime does not wrap properly, so errors propagate incorrectly
-            const returnBody = await fetchHeatForUserThemselves(systemWideUserId, params);
-            return { statusCode: 200, body: JSON.stringify(returnBody) };
+            logger('Fetching user heat for: ', systemWideUserId);
+            const userLevel = await rds.fetchUserLevel(systemWideUserId);
+            logger('From persistence: ', userLevel);
+            return { statusCode: 200, body: JSON.stringify({ currentLevel: userLevel }) };
         }
 
         const { userIds } = params;
         const userPointMap = await fetchHeatForUsers(userIds, params);
+        
+        // note: if return the promise directly, lambda runtime does not wrap properly, so errors propagate incorrectly
         logger('Returning user point map: ', JSON.stringify(userPointMap));
         return { statusCode: 200, userPointMap };
     } catch (err) {
