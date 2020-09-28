@@ -12,6 +12,7 @@ const rdsConnection = new RdsConnection(config.get('db'));
 const eventPointTable = config.get('tables.pointHeatDefinition');
 const pointLogTable = config.get('tables.heatPointsLedger');
 const heatStateTable = config.get('tables.heatStateLedger');
+const heatLevelTable = config.get('tables.heatLevelThreshold');
 
 const addOptionalRefDates = ({ baseQuery, baseValues, startTime, endTime, querySuffix }) => {
     let query = baseQuery;
@@ -137,4 +138,13 @@ module.exports.obtainUserLevels = async (userIds) => {
         `where system_wide_user_id in (${opsUtil.extractArrayIndices(userIds)})`;
     const queryResult = await rdsConnection.selectQuery(fetchQuery, userIds);
     return queryResult.reduce((obj, row) => ({ ...obj, [row['system_wide_user_id']]: row['current_level_id'] }), {});
+};
+
+module.exports.fetchUserLevel = async (userId) => {
+    const fetchQuery = `select prior_period_points as user_points_prior, current_period_points as user_points_current, ` +
+        `level_name, level_color, level_color_code, minimum_points ` +
+        `from ${heatStateTable} inner join ${heatLevelTable} on ${heatStateTable}.current_level_id = ${heatLevelTable}.level_id ` +
+        `where system_wide_user_id = $1`;
+    const queryResult = await rdsConnection.selectQuery(fetchQuery, [userId]);
+    return queryResult.length > 0 ? camelCaseKeys(queryResult[0]) : null;
 };
