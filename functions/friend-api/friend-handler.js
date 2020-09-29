@@ -54,7 +54,7 @@ const stripDownToPermitted = (shareItems, transaction) => {
     }
 
     const strippedActivity = {
-        creationTime: moment(transaction.creationTimeMillis).valueOf()
+        creationTime: moment(transaction.creationTime).valueOf()
     };
 
     if (shareItems && shareItems.includes('LAST_AMOUNT')) {
@@ -110,7 +110,7 @@ const transformProfile = async (profile, friendshipDetails, userHeatMap) => {
  * @param {Object} userAccountMap An object mapping user system ids to thier account ids. Keys are user ids, values are account ids.
  */
 const appendSavingHeatToProfiles = async (profiles, friendshipDetails, savingHeatForUsers) => {
-        logger('Got savings heat from lambda:', savingHeatForUsers);
+    logger('Got savings heat from lambda:', savingHeatForUsers);
 
     const profilesWithSavingHeat = await Promise.all(
         profiles.map((profile) => transformProfile(profile, friendshipDetails, savingHeatForUsers))
