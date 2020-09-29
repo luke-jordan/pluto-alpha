@@ -179,6 +179,7 @@ module.exports.obtainFriends = async (event) => {
         const friendProfiles = await Promise.all(profileRequests);
         logger('Got friend profiles:', friendProfiles.length);
 
+        // eslint-disable-next-line no-shadow
         const userIds = [...friendProfiles.map(({ systemWideUserId }) => systemWideUserId), systemWideUserId];
         const savingHeatForUsers = await invokeSavingHeatLambda(userIds); // i.e., using user IDs 
 
