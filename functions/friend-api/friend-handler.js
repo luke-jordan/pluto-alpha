@@ -21,7 +21,8 @@ const GRANDFATHER_HEAT = {
     'Blazing': 10.1
 };
 
-const convertHeatToLegacy = (currentHeat) => (currentHeat && GRANDFATHER_HEAT[currentHeat.levelName]) || 0;
+// sending back as number will cause an overly terse ternary in app to crash, so must be string
+const convertHeatToLegacy = (currentHeat) => Number((currentHeat && GRANDFATHER_HEAT[currentHeat.levelName]) || 0).toFixed(2);
 
 const invokeLambda = (functionName, payload, sync = true) => ({
     FunctionName: functionName,
@@ -117,7 +118,7 @@ const appendSavingHeatToProfiles = async (profiles, friendshipDetails, savingHea
 
     logger('Got profiles with savings heat:', profilesWithSavingHeat);
 
-    return profilesWithSavingHeat;
+    return profilesWithSavingHeat.filter((profile) => !opsUtil.isObjectEmpty(profile));
 };
 
 /**
@@ -125,7 +126,7 @@ const appendSavingHeatToProfiles = async (profiles, friendshipDetails, savingHea
  * appendSavingHeatToProfiles process in that it does not seek friendships
  * @param {string} systemWideUserId 
  */
-const fetchOwnSavingHeat = async (systemWideUserId, savingHeatForUsers) => {
+const fetchOwnSavingHeat = (systemWideUserId, savingHeatForUsers) => {
     const ownHeatLevel = savingHeatForUsers[systemWideUserId];
     logger('Got own saving heat level: ', ownHeatLevel);
     const savingHeat = convertHeatToLegacy(ownHeatLevel);
@@ -184,7 +185,6 @@ module.exports.obtainFriends = async (event) => {
 
         const profilesWithSavingHeat = await appendSavingHeatToProfiles(friendProfiles, friendshipDetails, savingHeatForUsers);
 
-        // todo: reuse above infra for user
         const savingHeatForCallingUser = fetchOwnSavingHeat(systemWideUserId, savingHeatForUsers);
         profilesWithSavingHeat.push(savingHeatForCallingUser);
         
