@@ -214,7 +214,6 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
 
     it.skip('Fetches admin friends too', async () => {
         const shareItems = ['LAST_ACTIVITY', 'LAST_AMOUNT'];
-        const [firstUserId, secondUserId, thirdUserId] = [uuid(), uuid(), uuid()];
         const testEvent = helper.wrapEvent({}, testSystemId, 'SYSTEM_ADMIN');
        
         fetchProfileStub.withArgs({ systemWideUserId: firstUserId }).resolves(mockProfile(firstUserId));
@@ -260,7 +259,6 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
 
     it.skip('Fetches friends for admin provided user', async () => {
         const shareItems = ['LAST_ACTIVITY', 'LAST_AMOUNT'];
-        const [firstUserId, secondUserId, thirdUserId] = [uuid(), uuid(), uuid()];
         const testEvent = helper.wrapEvent({ systemWideUserId: testInitiatedUserId }, testSystemId, 'SYSTEM_ADMIN');
 
         fetchProfileStub.withArgs({ systemWideUserId: firstUserId }).resolves(mockProfile(firstUserId));

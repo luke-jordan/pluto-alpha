@@ -53,12 +53,9 @@ const stripDownToPermitted = (shareItems, transaction) => {
         return null;
     }
 
-    logger('BRAVO: ', transaction.creationTime)
     const strippedActivity = {
         creationTime: moment(transaction.creationTime).valueOf()
     };
-
-    logger('CHARLIE: ', strippedActivity)
 
     if (shareItems && shareItems.includes('LAST_AMOUNT')) {
         strippedActivity.amount = transaction.amount;
@@ -184,9 +181,7 @@ module.exports.obtainFriends = async (event) => {
         logger('Got friend profiles:', friendProfiles.length);
 
         const userIds = [...friendProfiles.map((profile) => profile.systemWideUserId), systemWideUserId];
-        const savingHeatForUsers = await invokeSavingHeatLambda(userIds); // i.e., using user IDs
-
-        logger('ALPHA: ', savingHeatForUsers)
+        const savingHeatForUsers = await invokeSavingHeatLambda(userIds); // i.e., using user IDs 
 
         const profilesWithSavingHeat = await appendSavingHeatToProfiles(friendProfiles, friendshipDetails, savingHeatForUsers);
 
