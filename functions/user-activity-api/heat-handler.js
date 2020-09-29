@@ -323,8 +323,7 @@ module.exports.fetchUserHeat = async (event) => {
             return { statusCode: 200, body: JSON.stringify({ currentLevel: userLevel }) };
         }
 
-        const { userIds } = params;
-        const userHeatMap = await fetchHeatForUsers(userIds, params);
+        const userHeatMap = await fetchHeatForUsers(params);
         
         // note: if return the promise directly, lambda runtime does not wrap properly, so errors propagate incorrectly
         logger('Returning user point map: ', JSON.stringify(userHeatMap));

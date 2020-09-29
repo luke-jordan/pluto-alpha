@@ -142,6 +142,7 @@ describe('*** USER ACTIVITY *** SAVING HEAT USER FUNCTIONS ***', async () => {
 
     const testCreationTime = moment().format();
     const testUpdatedTime = moment().format();
+    const testLatestTime = moment().format();
 
     const mockLevelThreshold = {
         'level_id': testLevelId,
@@ -219,18 +220,73 @@ describe('*** USER ACTIVITY *** SAVING HEAT USER FUNCTIONS ***', async () => {
 
     it('Obtains all users with state', async () => {
         queryStub.resolves([{ 'system_wide_user_id': testUserId }]);
+
         const resultOfFetch = await savingHeatRds.obtainAllUsersWithState();
         expect(resultOfFetch).to.deep.equal([testUserId]);
+
         expect(queryStub).to.have.been.calledOnceWithExactly('select system_wide_user_id from transaction_data.user_heat_state', []);
     });
 
     it('Obtains user levels', async () => {
         queryStub.resolves([{ 'system_wide_user_id': testUserId, 'current_level_id': testLevelId }]);
+
         const resultOfFetch = await savingHeatRds.obtainUserLevels([testUserId]);
         expect(resultOfFetch).to.deep.equal({ [testUserId]: testLevelId });
 
         const expectedQuery = 'select system_wide_user_id, current_level_id from transaction_data.user_heat_state where system_wide_user_id in ($1)';
         expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, [testUserId]);
+    });
+
+    it('Fetches user level', async () => {
+        queryStub.resolves([{
+            'user_points_prior': 9,
+            'user_points_current': 16,
+            'level_name': 'Cold',
+            'level_color': 'Blue',
+            'level_color_code': '#0000ff',
+            'minumum_points': 50
+        }]);
+
+        const resultOfFetch = await savingHeatRds.fetchUserLevel(testUserId);
+        expect(resultOfFetch).to.deep.equal({
+            userPointsPrior: 9,
+            userPointsCurrent: 16,
+            levelName: 'Cold',
+            levelColor: 'Blue',
+            levelColorCode: '#0000ff',
+            minumumPoints: 50
+        });
+
+        const expectedQuery = 'select prior_period_points as user_points_prior, current_period_points as user_points_current, ' +
+            'level_name, level_color, level_color_code, minimum_points from transaction_data.user_heat_state inner join ' +
+            'transaction_data.point_heat_level on transaction_data.user_heat_state.current_level_id = transaction_data.point_heat_level.level_id ' +
+            'where system_wide_user_id = $1';
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, [testUserId]);
+    });
+
+
+    it('Obtains latest activities', async () => {
+        queryStub.resolves([
+            { 'owner_user_id': 'user1', 'transaction_type': 'USER_SAVING_EVENT', 'latest_time': testLatestTime },
+            { 'owner_user_id': 'user2', 'transaction_type': 'BOOST_REDEMPTION', 'latest_time': testLatestTime },
+            { 'owner_user_id': 'user3', 'transaction_type': 'WITHDRAWAL', 'latest_time': testLatestTime }
+        ]);
+
+        const testUserIds = ['user1', 'user2', 'user3'];
+        const testTxtTypesToInclude = ['USER_SAVING_EVENT', 'BOOST_REDEMPTION', 'WITHDRAWAL'];
+
+        const resultOfFetch = await savingHeatRds.obtainLatestActivities(testUserIds, testTxtTypesToInclude);
+        expect(resultOfFetch).to.deep.equal({
+            user1: { USER_SAVING_EVENT: testLatestTime },
+            user2: { BOOST_REDEMPTION: testLatestTime },
+            user3: { WITHDRAWAL: testLatestTime }
+        });
+
+        const expectedQuery = 'select owner_user_id, transaction_type, max(transaction_data.core_transaction_ledger.creation_time) ' +
+            'as latest_time from transaction_data.core_transaction_ledger inner join account_data.core_account_ledger on ' + 
+            'transaction_data.core_transaction_ledger.account_id = account_data.core_account_ledger.account_id where owner_user_id in ' +
+            '($1, $2, $3) and transaction_type in ($4, $5, $6) group by owner_user_id, transaction_type';
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, [...testUserIds, ...testTxtTypesToInclude]);
     });
 
 });

@@ -133,7 +133,7 @@ module.exports.obtainAllUsersWithState = async () => {
 };
 
 // could possibly find a way to wrap this into queries above, but is a fairly rapid call
-module.exports.obtainUserLevels = async (userIds, includeLevelDetails = false) => {
+module.exports.obtainUserLevels = async (userIds) => {
     const fetchQuery = `select system_wide_user_id, current_level_id from ${heatStateTable} ` +
         `where system_wide_user_id in (${opsUtil.extractArrayIndices(userIds)})`;
     const queryResult = await rdsConnection.selectQuery(fetchQuery, userIds);
@@ -165,7 +165,7 @@ module.exports.obtainLatestActivities = async (userIds, txTypesToInclude) => {
     
     const usersConsolidated = new Map();
     queryResults.forEach((row) => {
-        currentUserState = { ...usersConsolidated.get(row['owner_user_id']) } || {};
+        const currentUserState = { ...usersConsolidated.get(row['owner_user_id']) } || {};
         currentUserState[row['transaction_type']] = row['latest_time'];
         usersConsolidated.set(row['owner_user_id'], currentUserState);
     });
