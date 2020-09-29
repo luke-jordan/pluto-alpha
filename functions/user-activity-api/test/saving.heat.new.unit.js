@@ -271,18 +271,18 @@ describe('*** USER ACTIVITY *** FETCH POINTS', () => {
         obtainUserLevelStub.resolves({ 'user1': 'hot-level-id', 'user5': 'blazing-level-id', 'user10': 'cold-level-id' });
 
         obtainActivitiesStub.resolves({
-            user1: { USER_SAVING_EVENT: mockLatestEventTime },
-            user5: { WITHDRAWAL: mockLatestEventTime },
-            user10: { USER_SAVING_EVENT: mockLatestEventTime }
+            user1: { USER_SAVING_EVENT: { creationTime: mockLatestEventTime }},
+            user5: { WITHDRAWAL: { creationTime: mockLatestEventTime }},
+            user10: { USER_SAVING_EVENT: { creationTime: mockLatestEventTime }}
         });
 
         const resultOfHandle = await handler.fetchUserHeat(mockEvent);
         expect(resultOfHandle).to.deep.equal({
             statusCode: 200,
             userHeatMap: {
-                user1: { currentLevel: 'hot-level-id', recentActivity: { USER_SAVING_EVENT: mockLatestEventTime }},
-                user5: { currentLevel: 'blazing-level-id', recentActivity: { WITHDRAWAL: mockLatestEventTime }},
-                user10: { currentLevel: 'cold-level-id', recentActivity: { USER_SAVING_EVENT: mockLatestEventTime }}
+                user1: { currentLevel: 'hot-level-id', recentActivity: { USER_SAVING_EVENT: { creationTime: mockLatestEventTime }}},
+                user5: { currentLevel: 'blazing-level-id', recentActivity: { WITHDRAWAL: { creationTime: mockLatestEventTime }}},
+                user10: { currentLevel: 'cold-level-id', recentActivity: { USER_SAVING_EVENT: { creationTime: mockLatestEventTime }}}
             }
         });
 

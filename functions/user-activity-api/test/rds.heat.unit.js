@@ -277,9 +277,9 @@ describe('*** USER ACTIVITY *** SAVING HEAT USER FUNCTIONS ***', async () => {
 
         const resultOfFetch = await savingHeatRds.obtainLatestActivities(testUserIds, testTxtTypesToInclude);
         expect(resultOfFetch).to.deep.equal({
-            user1: { USER_SAVING_EVENT: testLatestTime },
-            user2: { BOOST_REDEMPTION: testLatestTime },
-            user3: { WITHDRAWAL: testLatestTime }
+            user1: { USER_SAVING_EVENT: { creationTime: testLatestTime }},
+            user2: { BOOST_REDEMPTION: { creationTime: testLatestTime }},
+            user3: { WITHDRAWAL: { creationTime: testLatestTime }}
         });
 
         const expectedQuery = 'select owner_user_id, transaction_type, max(transaction_data.core_transaction_ledger.creation_time) ' +

@@ -2,6 +2,7 @@
 
 const logger = require('debug')('jupiter:friends:main');
 const config = require('config');
+const moment = require('moment');
 
 const opsUtil = require('ops-util-common');
 
@@ -20,7 +21,8 @@ const GRANDFATHER_HEAT = {
     'Blazing': 10.1
 };
 
-const convertHeatToLegacy = (currentHeat) => (currentHeat !== null && GRANDFATHER_HEAT[currentHeat.levelName]) || 0;
+// sending back as number will cause an overly terse ternary in app to crash, so must be string
+const convertHeatToLegacy = (currentHeat) => Number((currentHeat && GRANDFATHER_HEAT[currentHeat.levelName]) || 0).toFixed(2);
 
 const invokeLambda = (functionName, payload, sync = true) => ({
     FunctionName: functionName,
@@ -51,10 +53,12 @@ const stripDownToPermitted = (shareItems, transaction) => {
         return null;
     }
 
+    logger('BRAVO: ', transaction.creationTime)
     const strippedActivity = {
-        creationTime: transaction.creationTime,
-        settlementTime: transaction.settlementTime 
+        creationTime: moment(transaction.creationTime).valueOf()
     };
+
+    logger('CHARLIE: ', strippedActivity)
 
     if (shareItems && shareItems.includes('LAST_AMOUNT')) {
         strippedActivity.amount = transaction.amount;
@@ -109,7 +113,7 @@ const transformProfile = async (profile, friendshipDetails, userHeatMap) => {
  * @param {Object} userAccountMap An object mapping user system ids to thier account ids. Keys are user ids, values are account ids.
  */
 const appendSavingHeatToProfiles = async (profiles, friendshipDetails, savingHeatForUsers) => {
-        logger('Got savings heat from lambda:', savingHeatForUsers);
+    logger('Got savings heat from lambda:', savingHeatForUsers);
 
     const profilesWithSavingHeat = await Promise.all(
         profiles.map((profile) => transformProfile(profile, friendshipDetails, savingHeatForUsers))
@@ -117,7 +121,7 @@ const appendSavingHeatToProfiles = async (profiles, friendshipDetails, savingHea
 
     logger('Got profiles with savings heat:', profilesWithSavingHeat);
 
-    return profilesWithSavingHeat;
+    return profilesWithSavingHeat.filter((profile) => !opsUtil.isObjectEmpty(profile));
 };
 
 /**
@@ -125,7 +129,7 @@ const appendSavingHeatToProfiles = async (profiles, friendshipDetails, savingHea
  * appendSavingHeatToProfiles process in that it does not seek friendships
  * @param {string} systemWideUserId 
  */
-const fetchOwnSavingHeat = async (systemWideUserId, savingHeatForUsers) => {
+const fetchOwnSavingHeat = (systemWideUserId, savingHeatForUsers) => {
     const ownHeatLevel = savingHeatForUsers[systemWideUserId];
     logger('Got own saving heat level: ', ownHeatLevel);
     const savingHeat = convertHeatToLegacy(ownHeatLevel);
@@ -179,13 +183,13 @@ module.exports.obtainFriends = async (event) => {
         const friendProfiles = await Promise.all(profileRequests);
         logger('Got friend profiles:', friendProfiles.length);
 
-        // eslint-disable-next-line no-shadow
-        const userIds = [...friendProfiles.map(({ systemWideUserId }) => systemWideUserId), systemWideUserId];
-        const savingHeatForUsers = await invokeSavingHeatLambda(userIds); // i.e., using user IDs 
+        const userIds = [...friendProfiles.map((profile) => profile.systemWideUserId), systemWideUserId];
+        const savingHeatForUsers = await invokeSavingHeatLambda(userIds); // i.e., using user IDs
+
+        logger('ALPHA: ', savingHeatForUsers)
 
         const profilesWithSavingHeat = await appendSavingHeatToProfiles(friendProfiles, friendshipDetails, savingHeatForUsers);
 
-        // todo: reuse above infra for user
         const savingHeatForCallingUser = fetchOwnSavingHeat(systemWideUserId, savingHeatForUsers);
         profilesWithSavingHeat.push(savingHeatForCallingUser);
         
