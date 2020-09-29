@@ -190,6 +190,7 @@ describe('*** UNIT TEST ADMIN HEAT RDS ***', () => {
             levelColorCode: '#008000',
             minimumPoints: 5
         };
+
         expect(resultOfFetch).to.deep.equal([expectedResult]);
 
         const expectedQuery = 'select * from transaction_data.point_heat_level where client_id = $1 and float_id = $2';
@@ -211,6 +212,7 @@ describe('*** UNIT TEST ADMIN HEAT RDS ***', () => {
             numberPoints: 20,
             parameters: {}
         };
+
         expect(resultOfFetch).to.deep.equal([expectedResult]);
         
         const expectedQuery = 'select * from transaction_data.event_point_list where client_id = $1 and float_id = $2';

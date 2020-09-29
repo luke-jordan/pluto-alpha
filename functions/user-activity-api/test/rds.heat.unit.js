@@ -1,6 +1,10 @@
 'use strict';
 
+// const logger = require('debug')('jupiter:heat:test');
+const config = require('config');
 const moment = require('moment');
+const uuid = require('uuid/v4');
+
 const camelCaseKeys = require('camelcase-keys');
 
 const helper = require('./test.helper');
@@ -8,17 +12,20 @@ const helper = require('./test.helper');
 const chai = require('chai');
 const sinon = require('sinon');
 chai.use(require('sinon-chai'));
+chai.use(require('chai-as-promised'));
 const { expect } = chai;
 
 const proxyquire = require('proxyquire');
 
 const queryStub = sinon.stub();
 const insertStub = sinon.stub();
+const updateRecordStub = sinon.stub();
 
 class MockRdsConnection {
     constructor () {
         this.selectQuery = queryStub;
         this.insertRecords = insertStub;
+        this.updateRecordObject = updateRecordStub;
     }
 }
 
@@ -122,6 +129,164 @@ describe('*** USER ACTIVITY *** SAVING HEAT SUMMATION', async () => {
         expect(resultOfQuery).to.deep.equal(camelCaseKeys(mockHistory));
 
         expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['userX']);
+    });
+
+});
+
+describe('*** USER ACTIVITY *** SAVING HEAT USER FUNCTIONS ***', async () => {
+    const testLevelId = uuid();
+    const testUserId = uuid();
+
+    const testClientId = 'client_id';
+    const testFloatId = 'float_id';
+
+    const testCreationTime = moment().format();
+    const testUpdatedTime = moment().format();
+    const testLatestTime = moment().format();
+
+    const mockLevelThreshold = {
+        'level_id': testLevelId,
+        'client_id': testClientId,
+        'float_id': testFloatId,
+        'level_name': 'Hard',
+        'level_color': 'Blue',
+        'level_color_code': '#ff0000',
+        'minimum_points': 50
+    };
+
+    beforeEach(() => helper.resetStubs(queryStub, insertStub));
+
+    it('Obtains point levels', async () => {
+        queryStub.resolves([mockLevelThreshold]);
+        const resultOfFetch = await savingHeatRds.obtainPointLevels(testClientId, testFloatId);
+
+        const expectedResult = {
+            levelId: testLevelId,
+            clientId: testClientId,
+            floatId: testFloatId,
+            levelName: 'Hard',
+            levelColor: 'Blue',
+            levelColorCode: '#ff0000',
+            minimumPoints: 50
+        };
+
+        expect(resultOfFetch).to.deep.equal([expectedResult]);
+
+        const expectedQuery = 'select * from transaction_data.point_heat_level where client_id = $1 and float_id = $2 order by minimum_points desc';
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, [testClientId, testFloatId]);
+    });
+    
+    it('Establishes user state', async () => {
+        queryStub.resolves([]);
+        insertStub.resolves({ rows: [{ 'creation_time': testCreationTime }]});
+        const resultOfInsert = await savingHeatRds.establishUserState(testUserId);
+        expect(resultOfInsert).to.deep.equal({ rows: [{ 'creation_time': testCreationTime }]});
+        
+        const expectedSelectQuery = 'select current_period_points from transaction_data.user_heat_state where system_wide_user_id = $1';
+        const expectedInsertQuery = 'insert into transaction_data.user_heat_state (system_wide_user_id) values %L returning creation_time';
+
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedSelectQuery, [testUserId]);
+        expect(insertStub).to.have.been.calledOnceWithExactly(expectedInsertQuery, '${systemWideUserId}', [{ systemWideUserId: testUserId }]);
+        queryStub.reset();
+
+        queryStub.resolves([{ 'current_period_points': 17 }]);
+
+        // Does not create new state where state already exists
+        await expect(savingHeatRds.establishUserState(testUserId)).to.eventually.deep.equal('USER_EXISTS');
+    });
+
+    it('Updates user state', async () => {
+        updateRecordStub.resolves([{ 'updated_time': testUpdatedTime }]);
+
+        const updateParams = {
+            systemWideUserId: testUserId,
+            currentPeriodPoints: 11,
+            priorPeriodPoints: 7,
+            currentLevelId: testLevelId
+        };
+
+        const resultOfUpdate = await savingHeatRds.updateUserState(updateParams);
+        expect(resultOfUpdate).to.deep.equal({ result: 'UPDATED' });
+
+        const expectedUpdateDef = {
+            table: config.get('tables.heatStateLedger'),
+            key: { systemWideUserId: testUserId },
+            value: { currentPeriodPoints: 11, priorPeriodPoints: 7, currentLevelId: testLevelId },
+            returnClause: 'updated_time'
+        };
+
+        expect(updateRecordStub).to.have.been.calledOnceWithExactly(expectedUpdateDef);
+    });
+
+    it('Obtains all users with state', async () => {
+        queryStub.resolves([{ 'system_wide_user_id': testUserId }]);
+
+        const resultOfFetch = await savingHeatRds.obtainAllUsersWithState();
+        expect(resultOfFetch).to.deep.equal([testUserId]);
+
+        expect(queryStub).to.have.been.calledOnceWithExactly('select system_wide_user_id from transaction_data.user_heat_state', []);
+    });
+
+    it('Obtains user levels', async () => {
+        queryStub.resolves([{ 'system_wide_user_id': testUserId, 'current_level_id': testLevelId }]);
+
+        const resultOfFetch = await savingHeatRds.obtainUserLevels([testUserId]);
+        expect(resultOfFetch).to.deep.equal({ [testUserId]: testLevelId });
+
+        const expectedQuery = 'select system_wide_user_id, current_level_id from transaction_data.user_heat_state where system_wide_user_id in ($1)';
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, [testUserId]);
+    });
+
+    it('Fetches user level', async () => {
+        queryStub.resolves([{
+            'user_points_prior': 9,
+            'user_points_current': 16,
+            'level_name': 'Cold',
+            'level_color': 'Blue',
+            'level_color_code': '#0000ff',
+            'minumum_points': 50
+        }]);
+
+        const resultOfFetch = await savingHeatRds.fetchUserLevel(testUserId);
+        expect(resultOfFetch).to.deep.equal({
+            userPointsPrior: 9,
+            userPointsCurrent: 16,
+            levelName: 'Cold',
+            levelColor: 'Blue',
+            levelColorCode: '#0000ff',
+            minumumPoints: 50
+        });
+
+        const expectedQuery = 'select prior_period_points as user_points_prior, current_period_points as user_points_current, ' +
+            'level_name, level_color, level_color_code, minimum_points from transaction_data.user_heat_state inner join ' +
+            'transaction_data.point_heat_level on transaction_data.user_heat_state.current_level_id = transaction_data.point_heat_level.level_id ' +
+            'where system_wide_user_id = $1';
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, [testUserId]);
+    });
+
+
+    it('Obtains latest activities', async () => {
+        queryStub.resolves([
+            { 'owner_user_id': 'user1', 'transaction_type': 'USER_SAVING_EVENT', 'latest_time': testLatestTime },
+            { 'owner_user_id': 'user2', 'transaction_type': 'BOOST_REDEMPTION', 'latest_time': testLatestTime },
+            { 'owner_user_id': 'user3', 'transaction_type': 'WITHDRAWAL', 'latest_time': testLatestTime }
+        ]);
+
+        const testUserIds = ['user1', 'user2', 'user3'];
+        const testTxtTypesToInclude = ['USER_SAVING_EVENT', 'BOOST_REDEMPTION', 'WITHDRAWAL'];
+
+        const resultOfFetch = await savingHeatRds.obtainLatestActivities(testUserIds, testTxtTypesToInclude);
+        expect(resultOfFetch).to.deep.equal({
+            user1: { USER_SAVING_EVENT: { creationTime: testLatestTime }},
+            user2: { BOOST_REDEMPTION: { creationTime: testLatestTime }},
+            user3: { WITHDRAWAL: { creationTime: testLatestTime }}
+        });
+
+        const expectedQuery = 'select owner_user_id, transaction_type, max(transaction_data.core_transaction_ledger.creation_time) ' +
+            'as latest_time from transaction_data.core_transaction_ledger inner join account_data.core_account_ledger on ' + 
+            'transaction_data.core_transaction_ledger.account_id = account_data.core_account_ledger.account_id where owner_user_id in ' +
+            '($1, $2, $3) and transaction_type in ($4, $5, $6) group by owner_user_id, transaction_type';
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, [...testUserIds, ...testTxtTypesToInclude]);
     });
 
 });
