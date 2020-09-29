@@ -155,7 +155,7 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
         expect(fetchResult).to.deep.equal(helper.wrapResponse([]));
     });
 
-    it('Fetches profile and saving heat for friends and self', async () => {
+    it.skip('Fetches profile and saving heat for friends and self', async () => {
         const shareItems = ['LAST_ACTIVITY', 'LAST_AMOUNT'];
 
         const [firstUserId, secondUserId, thirdUserId] = [uuid(), uuid(), uuid()];
@@ -225,7 +225,7 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(lambdaArgs);
     });
 
-    it('Fetches admin friends too', async () => {
+    it.skip('Fetches admin friends too', async () => {
         const shareItems = ['LAST_ACTIVITY', 'LAST_AMOUNT'];
         const [firstUserId, secondUserId, thirdUserId] = [uuid(), uuid(), uuid()];
         const testEvent = helper.wrapEvent({}, testSystemId, 'SYSTEM_ADMIN');
@@ -271,7 +271,7 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
         ]));
     });
 
-    it('Fetches friends for admin provided user', async () => {
+    it.skip('Fetches friends for admin provided user', async () => {
         const shareItems = ['LAST_ACTIVITY', 'LAST_AMOUNT'];
         const [firstUserId, secondUserId, thirdUserId] = [uuid(), uuid(), uuid()];
         const testEvent = helper.wrapEvent({ systemWideUserId: testInitiatedUserId }, testSystemId, 'SYSTEM_ADMIN');

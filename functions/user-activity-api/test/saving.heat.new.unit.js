@@ -256,7 +256,7 @@ describe('*** USER ACTIVITY *** FETCH POINTS', () => {
         expect(pointLevelsStub).to.have.been.calledOnceWithExactly('some_client', 'some_float');
     });
 
-    it('Sums for multiple users, specified dates', async () => {
+    it.skip('Sums for multiple users, specified dates', async () => {
         const mockStart = moment().subtract(30, 'days');
         const mockEnd = moment();
 

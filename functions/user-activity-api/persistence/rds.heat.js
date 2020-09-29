@@ -143,7 +143,7 @@ module.exports.obtainUserLevels = async (userIds, includeLevelDetails = false) =
     const fetchQuery = `${includeLevelDetails ? fullDetailSelection : strippedSelection} ${whereClause}`;
     const queryResult = await rdsConnection.selectQuery(fetchQuery, userIds);
 
-    const rowExtraction = (row) => includeLevelDetails ? camelCaseKeys(row) : row['current_level_id'];    
+    const rowExtraction = (row) => (includeLevelDetails ? camelCaseKeys(row) : row['current_level_id']);    
     return queryResult.reduce((obj, row) => ({ ...obj, [row['system_wide_user_id']]: rowExtraction(row) }), {});
 };
 
@@ -173,7 +173,7 @@ module.exports.obtainLatestActivities = async (userIds, txTypesToInclude) => {
     const usersConsolidated = new Map();
     queryResults.forEach((row) => {
         const currentUserState = { ...usersConsolidated.get(row['owner_user_id']) } || {};
-        currentUserState[row['transaction_type']] = row['latest_time'];
+        currentUserState[row['transaction_type']] = { creationTime: row['latest_time'] };
         usersConsolidated.set(row['owner_user_id'], currentUserState);
     });
 

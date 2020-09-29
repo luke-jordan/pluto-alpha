@@ -2,6 +2,7 @@
 
 const logger = require('debug')('jupiter:friends:main');
 const config = require('config');
+const moment = require('moment');
 
 const opsUtil = require('ops-util-common');
 
@@ -52,8 +53,7 @@ const stripDownToPermitted = (shareItems, transaction) => {
     }
 
     const strippedActivity = {
-        creationTime: transaction.creationTime,
-        settlementTime: transaction.settlementTime 
+        creationTime: moment(transaction.creationTimeMillis).valueOf()
     };
 
     if (shareItems && shareItems.includes('LAST_AMOUNT')) {
@@ -179,7 +179,7 @@ module.exports.obtainFriends = async (event) => {
         const friendProfiles = await Promise.all(profileRequests);
         logger('Got friend profiles:', friendProfiles.length);
 
-        const userIds = [...friendProfiles.map(({ systemWideUserId }) => systemWideUserId), systemWideUserId];
+        const userIds = [...friendProfiles.map((profile) => profile.systemWideUserId), systemWideUserId];
         const savingHeatForUsers = await invokeSavingHeatLambda(userIds); // i.e., using user IDs 
 
         const profilesWithSavingHeat = await appendSavingHeatToProfiles(friendProfiles, friendshipDetails, savingHeatForUsers);
