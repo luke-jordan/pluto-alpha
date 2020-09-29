@@ -134,10 +134,17 @@ module.exports.obtainAllUsersWithState = async () => {
 
 // could possibly find a way to wrap this into queries above, but is a fairly rapid call
 module.exports.obtainUserLevels = async (userIds, includeLevelDetails = false) => {
-    const fetchQuery = `select system_wide_user_id, current_level_id from ${heatStateTable} ` +
-        `where system_wide_user_id in (${opsUtil.extractArrayIndices(userIds)})`;
+    const whereClause = `where system_wide_user_id in (${opsUtil.extractArrayIndices(userIds)})`;
+    
+    const fullDetailSelection = `select system_wide_user_id, level_name, level_color, level_color_code from ` +
+        `${heatStateTable} inner join ${heatLevelTable} on ${heatStateTable}.current_level_id = ${heatLevelTable}.level_id`;
+    const strippedSelection = `select system_wide_user_id, current_level_id from ${heatStateTable}`;
+    
+    const fetchQuery = `${includeLevelDetails ? fullDetailSelection : strippedSelection} ${whereClause}`;
     const queryResult = await rdsConnection.selectQuery(fetchQuery, userIds);
-    return queryResult.reduce((obj, row) => ({ ...obj, [row['system_wide_user_id']]: row['current_level_id'] }), {});
+
+    const rowExtraction = (row) => includeLevelDetails ? camelCaseKeys(row) : row['current_level_id'];    
+    return queryResult.reduce((obj, row) => ({ ...obj, [row['system_wide_user_id']]: rowExtraction(row) }), {});
 };
 
 module.exports.fetchUserLevel = async (userId) => {
@@ -165,7 +172,7 @@ module.exports.obtainLatestActivities = async (userIds, txTypesToInclude) => {
     
     const usersConsolidated = new Map();
     queryResults.forEach((row) => {
-        currentUserState = { ...usersConsolidated.get(row['owner_user_id']) } || {};
+        const currentUserState = { ...usersConsolidated.get(row['owner_user_id']) } || {};
         currentUserState[row['transaction_type']] = row['latest_time'];
         usersConsolidated.set(row['owner_user_id'], currentUserState);
     });

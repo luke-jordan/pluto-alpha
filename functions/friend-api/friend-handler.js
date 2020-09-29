@@ -20,7 +20,7 @@ const GRANDFATHER_HEAT = {
     'Blazing': 10.1
 };
 
-const convertHeatToLegacy = (currentHeat) => (currentHeat !== null && GRANDFATHER_HEAT[currentHeat.levelName]) || 0;
+const convertHeatToLegacy = (currentHeat) => (currentHeat && GRANDFATHER_HEAT[currentHeat.levelName]) || 0;
 
 const invokeLambda = (functionName, payload, sync = true) => ({
     FunctionName: functionName,

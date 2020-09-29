@@ -503,7 +503,8 @@ resource "aws_iam_policy" "lambda_invoke_saving_heat_access" {
                 "lambda:InvokeAsync"
             ],
             "Resource": [
-                "${aws_lambda_function.user_save_heat_fetch.arn}"
+                "${aws_lambda_function.user_save_heat_fetch.arn}",
+                "${aws_lambda_function.user_save_heat_read.arn}"
             ]
         }
     ]
