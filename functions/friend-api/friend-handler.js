@@ -11,12 +11,16 @@ const persistenceWrite = require('./persistence/write.friends');
 const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
-const Redis = require('ioredis');
-const redis = new Redis({
-    port: config.get('cache.port'),
-    host: config.get('cache.host'),
-    keyPrefix: `${config.get('cache.keyPrefixes.savingHeat')}::`
-});
+// note: remove what follows as soon as confident all end user apps are on new saving heat model
+// (it serves to convert the newly dynamic heats into the hard-coded levels the prior model required)
+const GRANDFATHER_HEAT = {
+    'Chilly': 0, 
+    'Tropical': 1.1, 
+    'Golden': 5.1, 
+    'Blazing': 10.1
+};
+
+const convertHeatToLegacy = (currentHeat) => (currentHeat !== null && GRANDFATHER_HEAT[currentHeat.levelName]) || 0;
 
 const invokeLambda = (functionName, payload, sync = true) => ({
     FunctionName: functionName,
@@ -24,21 +28,15 @@ const invokeLambda = (functionName, payload, sync = true) => ({
     Payload: JSON.stringify(payload)
 });
 
-const invokeSavingHeatLambda = async (accountIds) => {
+const invokeSavingHeatLambda = async (userIds) => {
     const includeLastActivityOfType = config.get('share.activities');
-    const savingHeatLambdaInvoke = invokeLambda(config.get('lambdas.calcSavingHeat'), { accountIds, includeLastActivityOfType });
+    const savingHeatLambdaInvoke = invokeLambda(config.get('lambdas.calcSavingHeat'), { userIds, includeLastActivityOfType });
     logger('Invoke savings heat lambda with arguments: ', savingHeatLambdaInvoke);
     const savingHeatResult = await lambda.invoke(savingHeatLambdaInvoke).promise();
     logger('Result of savings heat calculation: ', savingHeatResult);
     const heatPayload = JSON.parse(savingHeatResult.Payload);
-    const { details } = heatPayload;
-    return details;
-};
-
-const fetchSavingHeatFromCache = async (accountIds) => {
-    const cachedSavingHeatForAccounts = await redis.mget(...accountIds);
-    logger('Got cached savings heat for accounts:', cachedSavingHeatForAccounts);
-    return cachedSavingHeatForAccounts.filter((result) => result !== null).map((result) => JSON.parse(result));
+    const { userHeatMap } = heatPayload;
+    return userHeatMap;
 };
 
 const stripDownToPermitted = (shareItems, transaction) => {
@@ -67,17 +65,15 @@ const stripDownToPermitted = (shareItems, transaction) => {
     return strippedActivity;
 };
 
-const transformProfile = async (profile, friendshipDetails, accountMaps) => {
-    const { userAccountMap, accountAndSavingHeatMap } = accountMaps;
+const transformProfile = async (profile, friendshipDetails, userHeatMap) => {
+    const { systemWideUserId } = profile;
+
     const { friendships, mutualFriendCounts } = friendshipDetails;
-    // logger('Map thing: ', userAccountMap);
-    const profileAccountId = userAccountMap[profile.systemWideUserId];
-    // logger('Profile account ID: ', profileAccountId);
-    // logger('And from saving heat: ', accountAndSavingHeatMap[profileAccountId]);
-    const { savingHeat, recentActivity } = accountAndSavingHeatMap[profileAccountId];
-        
-    const targetFriendship = friendships.filter((friendship) => friendship.initiatedUserId === profile.systemWideUserId ||
-        friendship.acceptedUserId === profile.systemWideUserId)[0];
+    const { currentLevel, recentActivity } = userHeatMap[systemWideUserId];
+    const savingHeat = convertHeatToLegacy(currentLevel);
+    
+    const targetFriendship = friendships.filter((friendship) => friendship.initiatedUserId === systemWideUserId ||
+        friendship.acceptedUserId === systemWideUserId)[0];
 
     logger('Got target friendship:', targetFriendship);
 
@@ -87,8 +83,8 @@ const transformProfile = async (profile, friendshipDetails, accountMaps) => {
     
     const lastActivity = expectedActivities.reduce((obj, activity) => ({ ...obj, [activity]: extractShareableDetails(activity) }), {});
 
-    const mutualFriendCount = mutualFriendCounts.filter((count) => typeof count[profile.systemWideUserId] === 'number');
-    const numberOfMutualFriends = mutualFriendCount[0][profile.systemWideUserId];
+    const mutualFriendCount = mutualFriendCounts.filter((count) => typeof count[systemWideUserId] === 'number');
+    const numberOfMutualFriends = mutualFriendCount[0][systemWideUserId];
     logger('Mutual friends:', numberOfMutualFriends);
 
     const transformedProfile = {
@@ -112,35 +108,11 @@ const transformProfile = async (profile, friendshipDetails, accountMaps) => {
  * @param {Array} profiles An array of user profiles.
  * @param {Object} userAccountMap An object mapping user system ids to thier account ids. Keys are user ids, values are account ids.
  */
-const appendSavingHeatToProfiles = async (profiles, userAccountMap, friendshipDetails) => {
-    const accountIds = Object.values(userAccountMap);
-    
-    const cachedSavingHeatForAccounts = await fetchSavingHeatFromCache(accountIds);
-    // logger('Found cached savings heat:', cachedSavingHeatForAccounts);
-
-    const cachedAccounts = cachedSavingHeatForAccounts.map((savingHeat) => savingHeat.accountId);
-    const uncachedAccounts = accountIds.filter((accountId) => !cachedAccounts.includes(accountId));
-
-    // logger('Found uncached accounts:', uncachedAccounts);
-    logger('Got cached accounts:', cachedAccounts);
-
-    let savingHeatFromLambda = [];
-    if (uncachedAccounts.length > 0) {
-        savingHeatFromLambda = await invokeSavingHeatLambda(uncachedAccounts);
-    }
-
-    logger('Got savings heat from lambda:', savingHeatFromLambda);
-
-    const savingHeatForAccounts = [...savingHeatFromLambda, ...cachedSavingHeatForAccounts];
-    logger('Aggregated savings heat from cache and lambda:', savingHeatForAccounts);
-
-    const accountAndSavingHeatMap = savingHeatForAccounts.reduce((obj, savingHeat) => ({ ...obj, [savingHeat.accountId]: savingHeat }), {});
-    logger('Map: ', accountAndSavingHeatMap);
-
-    const accountMaps = { userAccountMap, accountAndSavingHeatMap };
+const appendSavingHeatToProfiles = async (profiles, friendshipDetails, savingHeatForUsers) => {
+        logger('Got savings heat from lambda:', savingHeatForUsers);
 
     const profilesWithSavingHeat = await Promise.all(
-        profiles.map((profile) => transformProfile(profile, friendshipDetails, accountMaps))
+        profiles.map((profile) => transformProfile(profile, friendshipDetails, savingHeatForUsers))
     );
 
     logger('Got profiles with savings heat:', profilesWithSavingHeat);
@@ -153,25 +125,10 @@ const appendSavingHeatToProfiles = async (profiles, userAccountMap, friendshipDe
  * appendSavingHeatToProfiles process in that it does not seek friendships
  * @param {string} systemWideUserId 
  */
-const fetchOwnSavingHeat = async (systemWideUserId) => {
-    const userAccountMap = await persistenceRead.fetchAccountIdForUser(systemWideUserId);
-    const accountId = userAccountMap[systemWideUserId];
-    logger(`Got account id: ${accountId}`);
-
-    let savingHeat = null;
-
-    const savingHeatFromCache = await fetchSavingHeatFromCache([accountId]);
-    logger('Got caller saving heat from cache:', savingHeatFromCache);
-
-    if (savingHeatFromCache.length === 0) {
-        const savingHeatFromLambda = await invokeSavingHeatLambda([accountId]);
-        logger('Got caller saving heat from lambda:', savingHeatFromLambda);
-        savingHeat = savingHeatFromLambda[0].savingHeat;
-    } else {
-        savingHeat = savingHeatFromCache[0].savingHeat;
-    }
-
-    logger('Got saving heat:', savingHeat);
+const fetchOwnSavingHeat = async (systemWideUserId, savingHeatForUsers) => {
+    const ownHeatLevel = savingHeatForUsers[systemWideUserId];
+    logger('Got own saving heat level: ', ownHeatLevel);
+    const savingHeat = convertHeatToLegacy(ownHeatLevel);
 
     return { relationshipId: 'SELF', savingHeat };
 };
@@ -222,14 +179,13 @@ module.exports.obtainFriends = async (event) => {
         const friendProfiles = await Promise.all(profileRequests);
         logger('Got friend profiles:', friendProfiles.length);
 
-        const userAccountArray = await Promise.all(friendUserIds.map((userId) => persistenceRead.fetchAccountIdForUser(userId)));
-        logger('Got user accounts from persistence:', userAccountArray);
-        const userAccountMap = userAccountArray.reduce((obj, userAccountObj) => ({ ...obj, ...userAccountObj }), {});
+        const userIds = [...friendProfiles.map(({ systemWideUserId }) => systemWideUserId), systemWideUserId];
+        const savingHeatForUsers = await invokeSavingHeatLambda(userIds); // i.e., using user IDs 
 
-        const profilesWithSavingHeat = await appendSavingHeatToProfiles(friendProfiles, userAccountMap, friendshipDetails);
+        const profilesWithSavingHeat = await appendSavingHeatToProfiles(friendProfiles, friendshipDetails, savingHeatForUsers);
 
         // todo: reuse above infra for user
-        const savingHeatForCallingUser = await fetchOwnSavingHeat(systemWideUserId);
+        const savingHeatForCallingUser = fetchOwnSavingHeat(systemWideUserId, savingHeatForUsers);
         profilesWithSavingHeat.push(savingHeatForCallingUser);
         
         return opsUtil.wrapResponse(profilesWithSavingHeat);
