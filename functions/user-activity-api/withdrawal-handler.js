@@ -165,6 +165,14 @@ const updateBankAccountVerificationStatus = async (systemWideUserId, verificatio
 const checkAndLogBankVerification = async (systemWideUserId) => {
     const cachedDetails = await redis.get(systemWideUserId);
     const bankDetails = JSON.parse(cachedDetails);
+
+    // remove when not in present context (i.e., need to lock down admin route again)
+    if (!bankDetails) {
+        logger('Nothing to do, likely admin call');
+        const logContext = { cause: 'No bank details, must be admin manual process' };
+        await publisher.publishUserEvent(systemWideUserId, 'BANK_VERIFICATION_MANUAL', { context: logContext });
+        return;
+    }
     
     if (Reflect.has(bankDetails, 'verificationStatus') && bankDetails.verificationStatus !== 'PENDING') {
         logger('Already done a check, no need to repeat, return');

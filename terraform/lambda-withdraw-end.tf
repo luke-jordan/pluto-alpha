@@ -1,6 +1,6 @@
 variable "withdraw_end_lambda_function_name" {
   default = "withdraw_end"
-  type = "string"
+  type = string
 }
 
 resource "aws_lambda_function" "withdraw_end" {
