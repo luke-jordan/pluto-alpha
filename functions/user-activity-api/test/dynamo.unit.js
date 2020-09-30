@@ -53,13 +53,25 @@ const expectedFloatParameters = {
     'clientCoShare': 0.1,
     'prudentialDiscount': 0.1,
     'timeZone': 'America/New_York',
-    'currency': 'USD'
+    'currency': 'USD',
+    'haltNewSaves': false
 };
 
 describe('** UNIT TESTING DYNAMO FETCH **', () => {
 
     before(() => {
-        const expectedColumns = ['accrualRateAnnualBps', 'bonusPoolShareOfAccrual', 'clientShareOfAccrual', 'prudentialFactor', 'defaultTimezone', 'currency', 'comparatorRates', 'bankDetails']; 
+        const expectedColumns = [
+            'accrualRateAnnualBps', 
+            'bonusPoolShareOfAccrual', 
+            'clientShareOfAccrual', 
+            'prudentialFactor', 
+            'defaultTimezone', 
+            'currency', 
+            'comparatorRates', 
+            'bankDetails', 
+            'haltNewSaves'
+        ]; 
+        
         fetchStub.withArgs(config.get('tables.clientFloatVars'), { clientId: testClientId, floatId: testFloatId }, expectedColumns).
             resolves(expectedFloatParameters);
     });
