@@ -106,26 +106,13 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
 
     const mockSavingHeatInCache = {
         savingHeat: `${expectedsavingHeat}`,
-        recentActivity: {
-            USER_SAVING_EVENT: {
-                creationTime: testActivityDate.format(),
-                amount: '100', 
-                currency: 'ZAR', 
-                unit: 'HUNDREDTH_CENT'
-            }
-        }
+        recentActivity: { USER_SAVING_EVENT: { creationTime: testActivityDate.format() }}
     };
 
     const expectedResultFromCache = (shareItems) => ({
         shareItems,
         savingHeat: `${expectedsavingHeat}`,
-        lastActivity: {
-            USER_SAVING_EVENT: {
-                creationTime: testActivityDate.format(),
-                amount: '100',
-                unit: 'HUNDREDTH_CENT'
-            }
-        }
+        lastActivity: { USER_SAVING_EVENT: { creationTime: testActivityDate.valueOf() }}
     });
 
     const mockResponseFromCache = (accountId) => JSON.stringify({ accountId, ...mockSavingHeatInCache });
@@ -212,7 +199,7 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(lambdaArgs);
     });
 
-    it.skip('Fetches admin friends too', async () => {
+    it('Fetches admin friends too', async () => {
         const shareItems = ['LAST_ACTIVITY', 'LAST_AMOUNT'];
         const testEvent = helper.wrapEvent({}, testSystemId, 'SYSTEM_ADMIN');
        
@@ -233,11 +220,7 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
             { [secondUserId]: 34 },
             { [thirdUserId]: 55 }
         ]);
-        redisGetStub.withArgs(firstAccId, secondAccId, thirdAccId).resolves([
-            mockResponseFromCache(firstAccId),
-            mockResponseFromCache(secondAccId),
-            mockResponseFromCache(thirdAccId)
-        ]);
+
         getFriendsStub.withArgs(testSystemId).resolves({
             [testSystemId]: [
                 mockFriendship(firstUserId, shareItems),
@@ -246,18 +229,22 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
             ]
         });
 
-        const fetchResult = await handler.obtainFriends(testEvent);
+        lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify(mockSavingHeatResponse) }) });
 
-        expect(fetchResult).to.exist;
-        expect(fetchResult).to.deep.equal(helper.wrapResponse([
+        momentStub.returns({ valueOf: () => testActivityDate.valueOf() });
+
+        const fetchResult = await handler.obtainFriends(testEvent);
+        const resultBody = helper.standardOkayChecks(fetchResult);
+       
+        expect(resultBody).to.deep.equal([
             { ...expectedFriendship(testRelationshipId), ...expectedResultFromCache(shareItems), numberOfMutualFriends: 21 },
             { ...expectedFriendship(testRelationshipId), ...expectedResultFromCache(shareItems), numberOfMutualFriends: 34 },
             { ...expectedFriendship(testRelationshipId), ...expectedResultFromCache(shareItems), numberOfMutualFriends: 55 },
             { relationshipId: 'SELF', savingHeat: `${expectedsavingHeat}` }
-        ]));
+        ]);
     });
 
-    it.skip('Fetches friends for admin provided user', async () => {
+    it('Fetches friends for admin provided user', async () => {
         const shareItems = ['LAST_ACTIVITY', 'LAST_AMOUNT'];
         const testEvent = helper.wrapEvent({ systemWideUserId: testInitiatedUserId }, testSystemId, 'SYSTEM_ADMIN');
 
@@ -278,11 +265,7 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
             { [secondUserId]: 14 },
             { [thirdUserId]: 23 }
         ]);
-        redisGetStub.withArgs(firstAccId, secondAccId, thirdAccId).resolves([
-            mockResponseFromCache(firstAccId),
-            mockResponseFromCache(secondAccId),
-            mockResponseFromCache(thirdAccId)
-        ]);
+
         getFriendsStub.withArgs(testInitiatedUserId).resolves({
             [testInitiatedUserId]: [
                 mockFriendship(firstUserId, shareItems),
@@ -290,6 +273,10 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
                 mockFriendship(thirdUserId, shareItems)
             ]
         });
+
+        lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify(mockSavingHeatResponse) }) });
+
+        momentStub.returns({ valueOf: () => testActivityDate.valueOf() });
 
         const fetchResult = await handler.obtainFriends(testEvent);
         
