@@ -225,7 +225,7 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
 
     it('Fails on missing context user id', async () => {
         const event = helper.wrapEvent({ accountId: testAccountId, amount: 10, unit: 'HUNDREDTH_CENT', currency: 'USD' });
-
+        
         const expectedResult = { statusCode: 403, message: 'User ID not found in context' };
 
         const resultOfSetting = await handler.setWithdrawalAmount(event);

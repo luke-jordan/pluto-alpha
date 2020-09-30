@@ -12,29 +12,60 @@ const { publishUserLog } = require('./publish-helper');
 
 const validTxStatus = ['INITIATED', 'PENDING', 'SETTLED', 'EXPIRED', 'CANCELLED'];
 
-const initiateTransaction = async ({ params, lambda }) => {
+const assembleTxInvocation = (lambdaKey, adminUserId, body) => adminUtil.invokeLambda(config.get(`lambdas.${lambdaKey}`), ({
+    requestContext: {
+        authorizer: { systemWideUserId: adminUserId, role: 'SYSTEM_ADMIN' }
+    },
+    body: stringify(body)
+}));
+
+const extractLambdaBody = (lambdaResult) => JSON.parse(JSON.parse(lambdaResult['Payload']).body);
+
+const initiateSaveTransaction = async ({ params, lambda }) => {
     const { adminUserId, systemWideUserId, transactionParameters } = params;
     const { accountId, amount, unit, currency } = transactionParameters;
     logger('Initiating a transaction with parameters: ', params);
 
-    const lambdaRequestPayload = {
-        requestContext: {
-            authorizer: { systemWideUserId: adminUserId, role: 'SYSTEM_ADMIN' }
-        },
-        body: stringify({
-            accountId, amount, unit, currency, systemWideUserId
-        })
-    };
+    const body = { accountId, amount, unit, currency, systemWideUserId };
+    const lambdaInvocation = assembleTxInvocation('saveInitiate', adminUserId, body);
 
-    const lambdaInvocation = adminUtil.invokeLambda(config.get('lambdas.saveInitiate'), lambdaRequestPayload);
     logger('Invoking relevant lambda with invocation: ', lambdaInvocation);
     const lambdaResult = await lambda.invoke(lambdaInvocation).promise();
     logger('Lambda result, raw : ', lambdaResult);
 
-    const lambdaResponsePayload = JSON.parse(lambdaResult['Payload']);
-    const saveBody = JSON.parse(lambdaResponsePayload.body);
+    const saveBody = extractLambdaBody(lambdaResult);
 
     return { result: 'SUCCESS', saveDetails: saveBody };
+};
+
+// this is pretty inefficient, obviously, but withdrawal is complex and the only context in which admin would/could/should
+// be allowed to initiate is the present, so may even remove once done, and do need things like bank acc verify even here
+const initiateWithdrawal = async ({ params, lambda }) => {
+    const { adminUserId, systemWideUserId, transactionParameters } = params;
+    const { accountId, amount: passedAmount, unit, currency } = transactionParameters;
+    
+    if (transactionParameters.bankAccountDetails) {
+        const bankAccBody = { bankDetails: transactionParameters.bankAccountDetails, accountId, systemWideUserId };
+        const bankAccInvocation = assembleTxInvocation('withdrawBankAcc', adminUserId, bankAccBody);
+        const bankAccResult = await lambda.invoke(bankAccInvocation).promise();
+        logger('Result of withdrawal bank acc: ', bankAccResult);
+    }
+
+    const amount = -Math.abs(passedAmount); // just in case
+    const amountBody = { accountId, amount, unit, currency, systemWideUserId };
+    const amountInvocation = assembleTxInvocation('withdrawAmount', adminUserId, amountBody);
+    const amountResult = await lambda.invoke(amountInvocation).promise();
+    logger('Result of amount initiate: ', amountResult);
+
+    // last bit needed to flip to confirmed, trigger final bank verify, etc
+    const withdrawalDetails = extractLambdaBody(amountResult);
+    const { transactionId } = withdrawalDetails;
+    const confirmBody = { transactionId, userDecision: 'WITHDRAW', systemWideUserId };
+    const confirmInvocation = assembleTxInvocation('withdrawConfirm', adminUserId, confirmBody);
+    const confirmResult = await lambda.invoke(confirmInvocation).promise();
+    logger('Final result of confirmation: ', confirmResult);
+
+    return { result: 'SUCCESS', withdrawalDetails };
 };
 
 // settlement is recorded by here, so this save counts in the count (i.e., no need to increment it here)
@@ -226,5 +257,9 @@ module.exports.processTransaction = async ({ params, publisher, persistence, lam
         return handleTxUpdate({ params, publisher, persistence, lambda });
     }
 
-    return initiateTransaction({ params, lambda });
+    if (params.initiateWithdrawal) {
+        return initiateWithdrawal({ params, lambda });
+    }
+
+    return initiateSaveTransaction({ params, lambda });
 };

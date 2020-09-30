@@ -1,6 +1,6 @@
 variable "admin_user_manage_lambda_function_name" {
   default = "admin_user_manage"
-  type = "string"
+  type = string
 }
 
 resource "aws_lambda_function" "admin_user_manage" {
@@ -26,9 +26,9 @@ resource "aws_lambda_function" "admin_user_manage" {
                   "region": "${var.aws_default_region[terraform.workspace]}"
               },
               "db": {
-                "host": "${local.database_config.host}",
-                "database": "${local.database_config.database}",
-                "port" :"${local.database_config.port}"
+                "host": local.database_config.host,
+                "database": local.database_config.database,
+                "port": local.database_config.port
               },
               "lambdas": {
                 "passwordUpdate": "password_update",
@@ -45,7 +45,7 @@ resource "aws_lambda_function" "admin_user_manage" {
                     "topicArn": "${var.user_event_topic_arn[terraform.workspace]}"
                 },
                 "hash": {
-                  "key": "${var.log_hashing_secret[terraform.workspace]}"
+                  "key": var.log_hashing_secret[terraform.workspace]
                 }
               },
               "templates": {
