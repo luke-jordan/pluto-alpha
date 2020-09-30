@@ -45,7 +45,7 @@ const createBalanceDict = (amount, unit, currency, timeMoment) => ({
   timezone: timeMoment.tz()
 });
 
-const assembleBalanceForUser = async (accountId, currency, timeForBalance, floatProjectionVars, daysToProject) => {
+const assembleBalanceForUser = async (accountId, currency, timeForBalance, floatParams, daysToProject) => {
     // logger('Retrieving balance at time: ', timeForBalance.unix());
     const [startingBalance, availableBoostCount] = await Promise.all([
       persistence.sumAccountBalance(accountId, currency, timeForBalance), persistence.countAvailableBoosts(accountId)
@@ -64,7 +64,7 @@ const assembleBalanceForUser = async (accountId, currency, timeForBalance, float
     resultObject.balanceStartDayOrLastSettled = createBalanceDict(startingBalance.amount, unit, currency, startTime);
 
     const endOfDayMoment = timeForBalance.clone().endOf('day');
-    const endOfTodayBalance = accrueBalanceByDay(startingBalance.amount, floatProjectionVars);
+    const endOfTodayBalance = accrueBalanceByDay(startingBalance.amount, floatParams);
     logger('Balance at end of today: ', endOfTodayBalance.toDecimalPlaces(0).toNumber());
     
     resultObject.balanceEndOfToday = createBalanceDict(endOfTodayBalance.toDecimalPlaces(0).toNumber(), unit, currency, endOfDayMoment);
@@ -79,7 +79,7 @@ const assembleBalanceForUser = async (accountId, currency, timeForBalance, float
       let currentProjectedBalance = endOfTodayBalance;
       const balanceSubsequentDays = [];
       for (let i = 1; i <= daysToProject; i += 1) {
-        currentProjectedBalance = accrueBalanceByDay(currentProjectedBalance, floatProjectionVars);
+        currentProjectedBalance = accrueBalanceByDay(currentProjectedBalance, floatParams);
         const endOfThatDay = endOfDayMoment.clone().add(i, 'days');
         const endOfIthDayDict = createBalanceDict(currentProjectedBalance.toDecimalPlaces(0).toNumber(), unit, currency, endOfThatDay);
         // logger('Adding end of day dict: ', endOfIthDayDict);
@@ -89,15 +89,19 @@ const assembleBalanceForUser = async (accountId, currency, timeForBalance, float
       resultObject.balanceSubsequentDays = balanceSubsequentDays;
     }
 
-    if (floatProjectionVars.comparatorRates) {
-      const referenceRateDeductions = floatProjectionVars.bonusPoolShareOfAccrual + floatProjectionVars.clientShareOfAccrual;
-      const referenceRate = Math.floor(floatProjectionVars.accrualRateAnnualBps * (1 - referenceRateDeductions));
-      resultObject.comparatorRates = { referenceRate, ...floatProjectionVars.comparatorRates };
+    if (floatParams.comparatorRates) {
+      const referenceRateDeductions = floatParams.bonusPoolShareOfAccrual + floatParams.clientShareOfAccrual;
+      const referenceRate = Math.floor(floatParams.accrualRateAnnualBps * (1 - referenceRateDeductions));
+      resultObject.comparatorRates = { referenceRate, ...floatParams.comparatorRates };
     }
 
     const pendingTransactions = await persistence.fetchPendingTransactions(accountId);
     if (Array.isArray(pendingTransactions) && pendingTransactions.length > 0) {
       resultObject.pendingTransactions = pendingTransactions;
+    }
+
+    if (floatParams.haltNewSaves) {
+      resultObject.haltNewSaves = floatParams.haltNewSaves;
     }
 
     return resultObject;
@@ -158,11 +162,11 @@ module.exports.balance = async (event) => {
     const currency = params.currency;
 
     // logger(`Fetching config vars for client ${clientId} and float ${floatId}`);
-    const floatProjectionVars = await dynamodb.fetchFloatVarsForBalanceCalc(clientId, floatId);
-    logger('Retrieved float config vars: ', floatProjectionVars);
+    const floatParams = await dynamodb.fetchFloatVarsForBalanceCalc(clientId, floatId);
+    logger('Retrieved float config vars: ', floatParams);
 
     // leaving these in here, just in case we decide to drop the enforcement above
-    const timezone = params.timezone || floatProjectionVars.defaultTimezone;
+    const timezone = params.timezone || floatParams.defaultTimezone;
     const providedTime = moment(params.atEpochMillis);
     // const timeForBalance = params.atEpochMillis ? moment.valueOf(params.atEpochMillis).tz(timezone) : moment.tz(timezone);
     const timeForBalance = params.atEpochMillis ? providedTime.tz(timezone) : moment.tz(timezone);
@@ -172,7 +176,7 @@ module.exports.balance = async (event) => {
     const passedDays = Number.isSafeInteger(params.daysToProject) ? params.daysToProject : config.get('projection.defaultDays');
     const daysToProject = Math.min(passedDays, config.get('projection.maxDays'));
 
-    const resultObject = await assembleBalanceForUser(accountId, currency, timeForBalance, floatProjectionVars, daysToProject);
+    const resultObject = await assembleBalanceForUser(accountId, currency, timeForBalance, floatParams, daysToProject);
     
     // logger('Sending back result object: ', resultObject);
     return {
