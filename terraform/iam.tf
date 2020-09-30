@@ -669,7 +669,10 @@ resource "aws_iam_policy" "admin_user_manage_lambda_policy" {
                 "${aws_lambda_function.save_initiate.arn}",
                 "${aws_lambda_function.save_admin_settle.arn}",
                 "${aws_lambda_function.outbound_comms_send.arn}",
-                "${aws_lambda_function.message_preferences.arn}"
+                "${aws_lambda_function.message_preferences.arn}",
+                "${aws_lambda_function.withdraw_initiate.arn}",
+                "${aws_lambda_function.withdraw_update.arn}",
+                "${aws_lambda_function.withdraw_end.arn}"
             ]
         },
         {
