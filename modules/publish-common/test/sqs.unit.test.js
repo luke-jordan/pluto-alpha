@@ -62,22 +62,24 @@ const handler = proxyquire('../index', {
 
 describe('*** UNIT TEST SQS EVENT QUEUEING ***', () => {
 
+    const mockSQSRequest = (payload) => ({
+        MessageAttributes: {
+            MessageBodyDataType: { DataType: 'String', StringValue: 'JSON' }
+        },
+        MessageBody: JSON.stringify(payload),
+        QueueUrl: 'test/queue/url'
+    });
+
+    const mockSQSResponse = {
+        ResponseMetadata: { RequestId: uuid() },
+        MD5OfMessageBody: uuid(),
+        MD5OfMessageAttributes: uuid(),
+        MessageId: uuid()
+    };
+
+    beforeEach(() => [sqsSendStub, getQueueUrlStub].map((stub) => stub.reset()));
+
     it('Queues events properly', async () => {
-        const expectedSQSParams = {
-            MessageAttributes: {
-                MessageBodyDataType: { DataType: 'String', StringValue: 'JSON' }
-            },
-            MessageBody: JSON.stringify({ some: 'value' }),
-            QueueUrl: 'test/queue/url'
-        };
-
-        const mockSQSResponse = {
-            ResponseMetadata: { RequestId: uuid() },
-            MD5OfMessageBody: uuid(),
-            MD5OfMessageAttributes: uuid(),
-            MessageId: uuid()
-        };
-
         getQueueUrlStub.returns({ promise: () => ({ QueueUrl: 'test/queue/url' })});
         sqsSendStub.returns({ promise: () => mockSQSResponse });
         
@@ -89,6 +91,21 @@ describe('*** UNIT TEST SQS EVENT QUEUEING ***', () => {
         expect(resultOfQueue).to.exist;
         expect(resultOfQueue).to.deep.equal({ successCount: 1, failureCount: 0 });
         expect(getQueueUrlStub).to.have.been.calledOnceWithExactly({ QueueName: 'test-queue-name' });
-        expect(sqsSendStub).to.have.been.calledOnceWithExactly(expectedSQSParams);
+        expect(sqsSendStub).to.have.been.calledOnceWithExactly(mockSQSRequest(payload));
+    });
+
+    it('Sends event to dead letter queue', async () => {
+        getQueueUrlStub.returns({ promise: () => ({ QueueUrl: 'test/queue/url' })});
+        sqsSendStub.returns({ promise: () => mockSQSResponse });
+
+        const queueName = 'test-queue-name';
+        const mockEvent = { some: 'value' };
+
+        const resultOfQueue = await handler.sendToDlq(queueName, mockEvent);
+
+        expect(resultOfQueue).to.exist;
+        expect(resultOfQueue).to.deep.equal({ result: 'SUCCESS' });
+        expect(getQueueUrlStub).to.have.been.calledOnceWithExactly({ QueueName: 'test-queue-name' });
+        expect(sqsSendStub).to.have.been.calledOnceWithExactly(mockSQSRequest({ event: mockEvent }));
     });
 });
