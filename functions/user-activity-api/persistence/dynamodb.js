@@ -25,7 +25,8 @@ const relevantFloatColumns = [
     'defaultTimezone', 
     'currency', 
     'comparatorRates', 
-    'bankDetails'
+    'bankDetails',
+    'haltNewSaves'
 ];
 
 const initiateCacheConnection = async () => {

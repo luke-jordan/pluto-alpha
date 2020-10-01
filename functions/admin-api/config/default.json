@@ -39,6 +39,9 @@
         "modifyReferralCode": "referral_modify",
         "verifyReferralCode": "referral_verify",
         "saveInitiate": "save_initiate",
+        "withdrawBankAcc": "withdraw_initiate",
+        "withdrawAmount": "withdraw_update",
+        "withdrawConfirm": "withdraw_end",
         "sendOutboundMessages": "outbound_comms_send",
         "boostProcessEvent": "boost_event_process"
     },

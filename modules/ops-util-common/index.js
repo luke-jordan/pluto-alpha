@@ -231,7 +231,7 @@ module.exports.isDirectInvokeAdminOrSelf = (event, userIdKey = 'systemWideUserId
         return false;
     }
 
-    return Reflect.has(userDetails, 'systemWideUserId');
+    return typeof userDetails.systemWideUserId === 'string' && userDetails.systemWideUserId.trim().length > 0;
 };
 
 module.exports.extractPathAndParams = (event) => {

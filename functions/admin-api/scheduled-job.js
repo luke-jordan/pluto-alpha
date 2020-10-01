@@ -154,6 +154,10 @@ const extractParamsForFloatAccrualEmail = (accrualParamsAndResults) => {
 };
 
 const invokeAccrualAndPublish = async (clientFloatInfo) => {
+    if (clientFloatInfo.haltFloatAccrual) {
+        return;
+    }
+
     const accrualPayload = await assembleAccrualPayload(clientFloatInfo);
 
     const accrualInvocation = {
