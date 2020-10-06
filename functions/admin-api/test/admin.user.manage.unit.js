@@ -500,6 +500,8 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
         getAccountDetailsStub.resolves({ accountId: testAccountId, flags: ['TEST::OLD::FLAG'] });
         updateAccountFlagsStub.resolves(moment(testUpdatedTime));
 
+        publishEventStub.resolves({ result: 'SUCCESS' });
+
         const requestBody = {
             adminUserId: testAdminId,
             accountId: testAccountId,
@@ -515,7 +517,6 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
         const resultBody = helper.standardOkayChecks(resultOfUpdate);
 
         expect(resultBody).to.deep.equal({ result: 'SUCCESS' });
-
         expect(getAccountDetailsStub).to.have.been.calledOnceWithExactly(testUserId);
 
         const expectedUpdateParams = {
@@ -524,17 +525,86 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
             newFlags: ['TEST::NEW::FLAG'],
             oldFlags: ['TEST::OLD::FLAG']
         };
-
         expect(updateAccountFlagsStub).to.have.been.calledOnceWithExactly(expectedUpdateParams);
+
+        const expectedPublishArgs = {
+            initiator: testAdminId,
+            context: {
+                accountId: testAccountId,
+                oldFlags: ['TEST::OLD::FLAG'],
+                newFlags: ['TEST::NEW::FLAG'],
+                reasonToLog: 'Updating user flags'
+            }
+        };
+        expect(publishEventStub).to.have.been.calledOnceWithExactly(testUserId, 'ADMIN_CHANGED_ACCOUNT_FLAGS', expectedPublishArgs);
     });
 
-    // it('Updates log records', async () => {
+    it('Updates log records', async () => {
+        publishEventStub.resolves({ result: 'SUCCESS' }); 
 
-    // });
+        const requestBody = {
+            adminUserId: testAdminId,
+            accountId: testAccountId,
+            systemWideUserId: testUserId,
+            fieldToUpdate: 'RECORDLOG',
+            eventType: 'USER_SAVING_EVENT', 
+            note: 'User has saved for the first time',
+            file: 'file-name.pdf',
+            reasonToLog: 'Updating user flags'
+        };
 
-    // it('Updates user message preferences', async () => {
+        const testEvent = helper.wrapEvent(requestBody, testAdminId, 'SYSTEM_ADMIN');
 
-    // });
+        const resultOfUpdate = await handler.manageUser(testEvent);
+        const resultBody = helper.standardOkayChecks(resultOfUpdate);
+
+        expect(resultBody).to.deep.equal({ result: 'SUCCESS' });
+
+        const expectedPublishArgs = {
+            initiator: testAdminId,
+            context: {
+                systemWideUserId: testUserId,
+                note: 'User has saved for the first time',
+                file: 'file-name.pdf'
+            }
+        };
+        expect(publishEventStub).to.have.been.calledOnceWithExactly(testUserId, 'USER_SAVING_EVENT', expectedPublishArgs);
+    });
+
+    it('Updates user message preferences', async () => {
+        lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({ result: 'SUCCESS' })});
+
+        const requestBody = {
+            adminUserId: testAdminId,
+            accountId: testAccountId,
+            systemWideUserId: testUserId,
+            fieldToUpdate: 'MESSAGE_PREFERENCES',
+            reasonToLog: 'Updating user message preferences'
+        };
+
+        const testEvent = helper.wrapEvent(requestBody, testAdminId, 'SYSTEM_ADMIN');
+
+        const resultOfUpdate = await handler.manageUser(testEvent);
+
+        // Internal lambda response wrapped in handler response
+        const resultBody = helper.standardOkayChecks(resultOfUpdate);
+        const parsedBody = helper.standardOkayChecks(resultBody);
+
+        expect(parsedBody).to.deep.equal({ result: 'SUCCESS' });
+
+        const expectedPayload = {
+            body: JSON.stringify({ 'systemWideUserId': testUserId, 'haltPushMessages': true }),
+            requestContext: {
+                authorizer: {
+                    role: 'SYSTEM_ADMIN',
+                    systemWideUserId: testAdminId
+                }
+            }
+        };
+
+        const expectedInvocation = helper.wrapLambdaInvoc(config.get('lambdas.msgPrefsSet'), false, expectedPayload);
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
+    });
 
 });
 
