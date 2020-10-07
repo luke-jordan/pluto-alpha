@@ -17,13 +17,13 @@ const helper = require('./test.helper');
 
 const momentStub = sinon.stub();
 const publishEventStub = sinon.stub();
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 const updateBsheetTagStub = sinon.stub();
 const insertAccountLogStub = sinon.stub();
 
 class MockLambdaClient {
     constructor () {
-        this.invoke = lamdbaInvokeStub;
+        this.invoke = lambdaInvokeStub;
     }
 }
 
@@ -54,7 +54,7 @@ const testCreationTime = moment().format();
 // todo: find a more efficient way to test this
 describe('*** UNIT TEST USER MANAGEMENT ERRORS AND INVALID EVENTS ***', () => {
 
-    beforeEach(() => helper.resetStubs(lamdbaInvokeStub, publishEventStub, insertAccountLogStub, updateBsheetTagStub));
+    beforeEach(() => helper.resetStubs(lambdaInvokeStub, publishEventStub, insertAccountLogStub, updateBsheetTagStub));
 
     it('User balance sheet update returns error on persistence failure', async () => {
 
@@ -90,7 +90,7 @@ describe('*** UNIT TEST USER MANAGEMENT ERRORS AND INVALID EVENTS ***', () => {
             newIdentifier: 'NEW_IDENTIFIER'
         });
 
-        helper.expectNoCalls(publishEventStub, insertAccountLogStub, lamdbaInvokeStub);
+        helper.expectNoCalls(publishEventStub, insertAccountLogStub, lambdaInvokeStub);
     });
 
     it('Fails on unauthorized user', async () => {
@@ -109,7 +109,7 @@ describe('*** UNIT TEST USER MANAGEMENT ERRORS AND INVALID EVENTS ***', () => {
         const resultOfUpdate = await handler.manageUser(testEvent);
         logger('Result of update:', resultOfUpdate);
 
-        helper.expectNoCalls(updateBsheetTagStub, publishEventStub, insertAccountLogStub, lamdbaInvokeStub);
+        helper.expectNoCalls(updateBsheetTagStub, publishEventStub, insertAccountLogStub, lambdaInvokeStub);
     });
 
     it('User update fails on invalid parameters', async () => {
@@ -136,7 +136,7 @@ describe('*** UNIT TEST USER MANAGEMENT ERRORS AND INVALID EVENTS ***', () => {
             await expect(handler.manageUser(helper.wrapEvent(params, testUserId, 'SYSTEM_ADMIN'))).to.eventually.deep.equal(expectedResult);
         });
 
-        helper.expectNoCalls(updateBsheetTagStub, publishEventStub, insertAccountLogStub, lamdbaInvokeStub);
+        helper.expectNoCalls(updateBsheetTagStub, publishEventStub, insertAccountLogStub, lambdaInvokeStub);
     });
 
     it('User status update fails on invalid parameters', async () => {
@@ -163,7 +163,7 @@ describe('*** UNIT TEST USER MANAGEMENT ERRORS AND INVALID EVENTS ***', () => {
             await expect(handler.manageUser(helper.wrapEvent(params, testUserId, 'SYSTEM_ADMIN'))).to.eventually.deep.equal(expectedResult);
         });
 
-        helper.expectNoCalls(updateBsheetTagStub, publishEventStub, insertAccountLogStub, lamdbaInvokeStub);
+        helper.expectNoCalls(updateBsheetTagStub, publishEventStub, insertAccountLogStub, lambdaInvokeStub);
     });
 
     it('User balance sheet update fails on missing account ID', async () => {
@@ -183,7 +183,7 @@ describe('*** UNIT TEST USER MANAGEMENT ERRORS AND INVALID EVENTS ***', () => {
         };
 
         await expect(handler.manageUser(helper.wrapEvent(requestBody, testUserId, 'SYSTEM_ADMIN'))).to.eventually.deep.equal(expectedResult);
-        helper.expectNoCalls(updateBsheetTagStub, publishEventStub, insertAccountLogStub, lamdbaInvokeStub);
+        helper.expectNoCalls(updateBsheetTagStub, publishEventStub, insertAccountLogStub, lambdaInvokeStub);
     });
 
     it('User balance sheet update fails on missing new identifier', async () => {
@@ -203,7 +203,7 @@ describe('*** UNIT TEST USER MANAGEMENT ERRORS AND INVALID EVENTS ***', () => {
         };
 
         await expect(handler.manageUser(helper.wrapEvent(requestBody, testUserId, 'SYSTEM_ADMIN'))).to.eventually.deep.equal(expectedResult);
-        helper.expectNoCalls(updateBsheetTagStub, publishEventStub, insertAccountLogStub, lamdbaInvokeStub);
+        helper.expectNoCalls(updateBsheetTagStub, publishEventStub, insertAccountLogStub, lambdaInvokeStub);
     });
 
     it('Catches thrown errors', async () => {
@@ -234,10 +234,10 @@ describe('*** UNIT TEST USER MANAGEMENT ERRORS AND INVALID EVENTS ***', () => {
             body: JSON.stringify('Invocation error')
         };
 
-        lamdbaInvokeStub.throws(new Error('Invocation error'));
+        lambdaInvokeStub.throws(new Error('Invocation error'));
 
         await expect(handler.manageUser(helper.wrapEvent(requestBody, testUserId, 'SYSTEM_ADMIN'))).to.eventually.deep.equal(expectedResult);
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
         helper.expectNoCalls(updateBsheetTagStub, publishEventStub, insertAccountLogStub);
     });
 });

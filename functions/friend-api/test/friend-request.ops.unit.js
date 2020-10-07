@@ -16,7 +16,7 @@ const expect = chai.expect;
 
 const helper = require('./test-helper');
 
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 const fetchProfileStub = sinon.stub();
 const ignoreRequestStub = sinon.stub();
 const connectUserStub = sinon.stub();
@@ -37,7 +37,7 @@ const testCreationTime = moment().format();
 
 class MockLambdaClient {
     constructor () {
-        this.invoke = lamdbaInvokeStub;
+        this.invoke = lambdaInvokeStub;
     }
 }
 
@@ -69,7 +69,7 @@ const handler = proxyquire('../friend-request-handler', {
 });
 
 const resetStubs = () => helper.resetStubs(fetchProfileStub, fetchRequestByCodeStub, connectUserStub, countMutualFriendsStub, 
-    publishUserEventStub, fetchAllRequestsStub, ignoreRequestStub, lamdbaInvokeStub);
+    publishUserEventStub, fetchAllRequestsStub, ignoreRequestStub, lambdaInvokeStub);
 
 describe('*** UNIT TEST TARGET USER CONNECTION ***', async () => {
     const testRequestCode = 'BEAR CELL';
@@ -262,7 +262,7 @@ describe('*** FRIENDSHIP UTIL FUNCTIONS ***', () => {
         const lambdaArgs = helper.wrapLambdaInvoc(config.get('lambdas.lookupByContactDetails'), false, { phoneOrEmail: 'user@email.com', countryCode: 'ZAF' });
         const testEvent = helper.wrapParamsWithPath({ phoneOrEmail: 'user@email.com' }, 'seek', testSystemId);
 
-        lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify({ systemWideUserId: testSystemId })})})});
+        lambdaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify({ systemWideUserId: testSystemId })})})});
         fetchProfileStub.withArgs({ systemWideUserId: testSystemId }).resolves(testProfile);
 
         const result = await handler.directRequestManagement(testEvent);
@@ -272,7 +272,7 @@ describe('*** FRIENDSHIP UTIL FUNCTIONS ***', () => {
         expect(result).to.have.property('body');
         const parsedResult = JSON.parse(result.body);
         expect(parsedResult).to.deep.equal({ systemWideUserId: testSystemId, targetUserName: 'Tien-ming Gioro' });
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(lambdaArgs);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(lambdaArgs);
         expect(fetchProfileStub).to.have.been.calledOnceWithExactly({ systemWideUserId: testSystemId });
     });
 
@@ -282,14 +282,14 @@ describe('*** FRIENDSHIP UTIL FUNCTIONS ***', () => {
         const lambdaArgs = helper.wrapLambdaInvoc(config.get('lambdas.lookupByContactDetails'), false, { phoneOrEmail: expectedEmail, countryCode: 'ZAF' });
         const testEvent = helper.wrapParamsWithPath({ phoneOrEmail: inputEmail }, 'seek', testSystemId);
 
-        lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify({ systemWideUserId: testSystemId })})})});
+        lambdaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify({ systemWideUserId: testSystemId })})})});
         fetchProfileStub.withArgs({ systemWideUserId: testSystemId }).resolves(testProfile);
 
         const result = await handler.directRequestManagement(testEvent);
 
         expect(result).to.exist;
         expect(result.statusCode).to.equal(200);
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(lambdaArgs);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(lambdaArgs);
     });
 
     it('Also transforms phone numbers appropriately', async () => {
@@ -299,14 +299,14 @@ describe('*** FRIENDSHIP UTIL FUNCTIONS ***', () => {
         const lambdaArgs = helper.wrapLambdaInvoc(config.get('lambdas.lookupByContactDetails'), false, { phoneOrEmail: expectedPhone, countryCode: 'ZAF' });
         const testEvent = helper.wrapParamsWithPath({ phoneOrEmail: inputPhone }, 'seek', testSystemId);
 
-        lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify({ systemWideUserId: testSystemId })})})});
+        lambdaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify({ systemWideUserId: testSystemId })})})});
         fetchProfileStub.withArgs({ systemWideUserId: testSystemId }).resolves(testProfile);
 
         const result = await handler.directRequestManagement(testEvent);
 
         expect(result).to.exist;
         expect(result.statusCode).to.equal(200);
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(lambdaArgs);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(lambdaArgs);
     });
 
     it('Obtains referral code', async () => {
@@ -318,13 +318,13 @@ describe('*** FRIENDSHIP UTIL FUNCTIONS ***', () => {
 
         fetchProfileStub.withArgs({ systemWideUserId: testSystemId }).resolves(testProfile);
         const wrappedReferralResponse = { Payload: JSON.stringify({ body: JSON.stringify({ codeDetails: testReferralDetails }) }) };
-        lamdbaInvokeStub.returns({ promise: () => wrappedReferralResponse });
+        lambdaInvokeStub.returns({ promise: () => wrappedReferralResponse });
 
         const rawResult = await handler.directRequestManagement(testEvent);
         const referralCode = helper.standardOkayChecks(rawResult);
         expect(referralCode).to.deep.equal(testReferralDetails);
         expect(fetchProfileStub).to.have.been.calledOnceWithExactly({ systemWideUserId: testSystemId });
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(lambdaArgs);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(lambdaArgs);
     });
 
 });

@@ -17,7 +17,7 @@ const expect = chai.expect;
 const helper = require('./test.helper');
 
 const momentStub = sinon.stub();
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 const adjustTxStatusStub = sinon.stub();
 const adjustTxAmountStub = sinon.stub();
 const fetchBsheetTagStub = sinon.stub();
@@ -35,7 +35,7 @@ const sendSmsStub = sinon.stub();
 
 class MockLambdaClient {
     constructor () {
-        this.invoke = lamdbaInvokeStub;
+        this.invoke = lambdaInvokeStub;
     }
 }
 
@@ -77,7 +77,7 @@ const testUpdatedTime = moment().format();
 describe('*** UNIT TEST USER MANAGEMENT ***', () => {
 
     beforeEach(() => helper.resetStubs(
-        fetchTxDetailsStub, lamdbaInvokeStub, publishEventStub, insertAccountLogStub, 
+        fetchTxDetailsStub, lambdaInvokeStub, publishEventStub, insertAccountLogStub, 
         updateBsheetTagStub, fetchBsheetTagStub, countSettledTxStub
     ));
 
@@ -92,7 +92,7 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
             })
         };
 
-        lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse });
+        lambdaInvokeStub.returns({ promise: () => mockLambdaResponse });
         publishEventStub.resolves({ result: 'SUCCESS' });
         insertAccountLogStub.resolves({ creationTime: testCreationTime });
         fetchTxDetailsStub.resolves({ accountId: testAccountId, humanReference: 'JSAVE111', amount: 100000, unit: 'HUNDREDTH_CENT', currency: 'USD', tags: [] });
@@ -182,7 +182,7 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
 
         expect(resultOfUpdate).to.exist;
         expect(resultOfUpdate).to.deep.equal(expectedResult);
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
         expect(publishEventStub).to.have.been.calledTwice;
         expect(publishEventStub).to.have.been.calledWith(testUserId, 'SAVING_PAYMENT_SUCCESSFUL', expectedSaveSettledLog);
         expect(publishEventStub).to.have.been.calledWith(testUserId, 'ADMIN_SETTLED_SAVE', expectedAdminSettledLog);
@@ -288,7 +288,7 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
         };
         const mockPayload = JSON.stringify({ statusCode: 200, body: JSON.stringify(mockSaveResult) });
 
-        lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 200, Payload: mockPayload })});
+        lambdaInvokeStub.returns({ promise: () => ({ StatusCode: 200, Payload: mockPayload })});
 
         const testEvent = helper.wrapEvent(testRequestBody, testAdminId, 'SYSTEM_ADMIN');
         const resultOfUpdate = await handler.manageUser(testEvent);
@@ -300,7 +300,7 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
         const expectedInvokeBody = { accountId: testAccountId, amount: 1000000, unit: 'HUNDREDTH_CENT', currency: 'USD', systemWideUserId: testUserId };
         const expectedInvokeEvent = { requestContext: testEvent.requestContext, body: stringify(expectedInvokeBody) };
         const expectedInvocation = helper.wrapLambdaInvoc('save_initiate', false, expectedInvokeEvent);
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
     });
 
     it('Handles pending transactions', async () => {
@@ -314,7 +314,7 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
             })
         };
 
-        lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse });
+        lambdaInvokeStub.returns({ promise: () => mockLambdaResponse });
         publishEventStub.resolves({ result: 'SUCCESS' });
         adjustTxStatusStub.resolves({ settlementStatus: 'PENDING', updatedTime: testUpdatedTime });
 
@@ -365,7 +365,7 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
         expect(resultOfUpdate).to.deep.equal(expectedResult);
         expect(publishEventStub).to.have.been.calledWith(testUserId, 'ADMIN_UPDATED_TX', expectedPublishArgs);
         expect(insertAccountLogStub).to.have.been.calledOnceWithExactly(expectedLog);
-        expect(lamdbaInvokeStub).to.have.not.been.called;
+        expect(lambdaInvokeStub).to.have.not.been.called;
     });
 
     it('User transaction status update fails on invalid parameters', async () => {
@@ -396,15 +396,15 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
         params.newTxStatus = 'INVALID_STATUS';
         await expect(handler.manageUser(helper.wrapEvent(params, testUserId, 'SYSTEM_ADMIN'))).to.eventually.deep.equal(expectedResult);
 
-        helper.expectNoCalls(updateBsheetTagStub, publishEventStub, insertAccountLogStub, lamdbaInvokeStub);
+        helper.expectNoCalls(updateBsheetTagStub, publishEventStub, insertAccountLogStub, lambdaInvokeStub);
     });
 
     it('Updates user password, email route', async () => {
         const pwdInvocationResult = helper.mockLambdaResponse({ newPassword: 'DANCING_TIGER_1123' }, 200);
-        lamdbaInvokeStub.onFirstCall().returns({ promise: () => pwdInvocationResult });
+        lambdaInvokeStub.onFirstCall().returns({ promise: () => pwdInvocationResult });
 
         const profileInvocationResult = helper.mockLambdaResponse({ emailAddress: 'example@email.com' }, 200);
-        lamdbaInvokeStub.onSecondCall().returns({ promise: () => profileInvocationResult });
+        lambdaInvokeStub.onSecondCall().returns({ promise: () => profileInvocationResult });
 
         sendSystemEmailStub.resolves({ result: 'SUCCESS' });
        
@@ -435,9 +435,9 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
         const expectedProfilePayload = { systemWideUserId: testUserId, includeContactMethod: true };
         const expectedProfileInvocation = helper.wrapLambdaInvoc('profile_fetch', false, expectedProfilePayload);
 
-        expect(lamdbaInvokeStub).to.have.been.calledTwice;
-        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(expectedPwdInvocation);
-        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(expectedProfileInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledTwice;
+        expect(lambdaInvokeStub).to.have.been.calledWithExactly(expectedPwdInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledWithExactly(expectedProfileInvocation);
 
         const expectedEmailParams = {
             subject: 'Jupiter Password',
@@ -451,10 +451,10 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
 
     it('Updates user password, sms route', async () => {
         const pwdInvocationResult = helper.mockLambdaResponse({ newPassword: 'NOBLE_PASSPHRASE_5813' }, 200);
-        lamdbaInvokeStub.onFirstCall().returns({ promise: () => pwdInvocationResult });
+        lambdaInvokeStub.onFirstCall().returns({ promise: () => pwdInvocationResult });
 
         const profileInvocationResult = helper.mockLambdaResponse({ phoneNumber: '278162726373' }, 200);
-        lamdbaInvokeStub.onSecondCall().returns({ promise: () => profileInvocationResult });
+        lambdaInvokeStub.onSecondCall().returns({ promise: () => profileInvocationResult });
        
         sendSmsStub.resolves({ result: 'SUCCESS' });
 
@@ -486,9 +486,9 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
         const expectedProfilePayload = { systemWideUserId: testUserId, includeContactMethod: true };
         const expectedProfileInvocation = helper.wrapLambdaInvoc('profile_fetch', false, expectedProfilePayload);
 
-        expect(lamdbaInvokeStub).to.have.been.calledTwice;
-        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(expectedPwdInvocation);
-        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(expectedProfileInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledTwice;
+        expect(lambdaInvokeStub).to.have.been.calledWithExactly(expectedPwdInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledWithExactly(expectedProfileInvocation);
 
         const expectedMsg = `Your password has been successfully reset. Please use the following ` +
             `password to login to your account: NOBLE_PASSPHRASE_5813. Please create a new password once logged in.`;
@@ -572,7 +572,7 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
     });
 
     it('Updates user message preferences', async () => {
-        lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({ result: 'SUCCESS' })});
+        lambdaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({ result: 'SUCCESS' })});
 
         const requestBody = {
             adminUserId: testAdminId,
@@ -603,18 +603,18 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
         };
 
         const expectedInvocation = helper.wrapLambdaInvoc(config.get('lambdas.msgPrefsSet'), false, expectedPayload);
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
     });
 
 });
 
 describe('*** UNIT TEST USER STATUS MGMT', async () => {
 
-    beforeEach(() => helper.resetStubs(fetchTxDetailsStub, lamdbaInvokeStub, publishEventStub, insertAccountLogStub, updateBsheetTagStub, fetchBsheetTagStub));
+    beforeEach(() => helper.resetStubs(fetchTxDetailsStub, lambdaInvokeStub, publishEventStub, insertAccountLogStub, updateBsheetTagStub, fetchBsheetTagStub));
 
     it('Updates user kyc status, and publishes log', async () => {
 
-        lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({result: 'SUCCESS'}, 200) });
+        lambdaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({result: 'SUCCESS'}, 200) });
 
         const expectedResult = {
             statusCode: 200,
@@ -654,14 +654,14 @@ describe('*** UNIT TEST USER STATUS MGMT', async () => {
 
         expect(resultOfUpdate).to.exist;
         expect(resultOfUpdate).to.deep.equal(expectedResult);
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
         expect(publishEventStub).to.have.been.calledOnceWithExactly(testUserId, 'VERIFIED_AS_PERSON', expectedLogOptions);
         expect(insertAccountLogStub).to.have.not.been.called;
     });
 
     it('Updated user status', async () => {
         
-        lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({result: 'SUCCESS'}, 200) });
+        lambdaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({result: 'SUCCESS'}, 200) });
 
         const expectedResult = {
             statusCode: 200,
@@ -696,7 +696,7 @@ describe('*** UNIT TEST USER STATUS MGMT', async () => {
 
         expect(resultOfUpdate).to.exist;
         expect(resultOfUpdate).to.deep.equal(expectedResult);
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
         helper.expectNoCalls(publishEventStub, insertAccountLogStub);
     });
 
@@ -765,7 +765,7 @@ describe('*** UNIT TEST USER STATUS MGMT', async () => {
         });
         expect(publishEventStub).to.have.been.calledOnceWithExactly(testUserId, 'ADMIN_UPDATED_BSHEET_TAG', expectedPublishArgs);
         expect(insertAccountLogStub).to.have.been.calledOnceWithExactly(expectedLog);
-        expect(lamdbaInvokeStub).to.have.not.been.called;
+        expect(lambdaInvokeStub).to.have.not.been.called;
     });
 
 });   

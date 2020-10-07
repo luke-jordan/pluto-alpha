@@ -17,7 +17,7 @@ const helper = require('./test-helper');
 
 const redisGetStub = sinon.stub();
 const getFriendsStub = sinon.stub();
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 const fetchAccountStub = sinon.stub();
 const fetchProfileStub = sinon.stub();
 const countMutualFriendsStub = sinon.stub();
@@ -36,7 +36,7 @@ class MockRedis {
 
 class MockLambdaClient {
     constructor () {
-        this.invoke = lamdbaInvokeStub;
+        this.invoke = lambdaInvokeStub;
     }
 }
 
@@ -61,7 +61,7 @@ const handler = proxyquire('../friend-handler', {
     'moment': momentStub
 });
 
-const resetStubs = () => helper.resetStubs(getFriendsStub, fetchProfileStub, fetchAccountStub, lamdbaInvokeStub, redisGetStub);
+const resetStubs = () => helper.resetStubs(getFriendsStub, fetchProfileStub, fetchAccountStub, lambdaInvokeStub, redisGetStub);
 
 describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
     const testActivityDate = moment();
@@ -148,7 +148,7 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
         userIds.forEach((systemWideUserId) => fetchProfileStub.withArgs({ systemWideUserId }).resolves(mockProfile(systemWideUserId)));
         userIds.forEach((userId, index) => fetchAccountStub.withArgs(userId).resolves({ [userId]: accountIds[index] }));
 
-        lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify(mockSavingHeatResponse) }) });
+        lambdaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify(mockSavingHeatResponse) }) });
         
         redisGetStub.withArgs(testAccountId).resolves([mockResponseFromCache(testAccountId)]);
         redisGetStub.withArgs(firstAccId, secondAccId, thirdAccId).resolves([mockResponseFromCache(firstAccId), null, null]);
@@ -196,7 +196,7 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
         ];
 
         expect(resultBody).to.deep.equal(expectedBody);
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(lambdaArgs);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(lambdaArgs);
     });
 
     it('Fetches admin friends too', async () => {
@@ -229,7 +229,7 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
             ]
         });
 
-        lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify(mockSavingHeatResponse) }) });
+        lambdaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify(mockSavingHeatResponse) }) });
 
         momentStub.returns({ valueOf: () => testActivityDate.valueOf() });
 
@@ -274,7 +274,7 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
             ]
         });
 
-        lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify(mockSavingHeatResponse) }) });
+        lambdaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify(mockSavingHeatResponse) }) });
 
         momentStub.returns({ valueOf: () => testActivityDate.valueOf() });
 

@@ -23,10 +23,10 @@ const momentStub = sinon.stub();
 const publishStub = sinon.stub();
 const publishMultiStub = sinon.stub();
 
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 class MockLambdaClient {
     constructor () {
-        this.invoke = lamdbaInvokeStub;
+        this.invoke = lambdaInvokeStub;
     }
 }
 
@@ -54,7 +54,7 @@ const handler = proxyquire('../boost-create-handler', {
 });
 
 const resetStubs = () => testHelper.resetStubs(insertBoostStub, findBoostStub, findAccountsStub, 
-    updateBoostAccountStub, alterBoostStub, lamdbaInvokeStub, publishMultiStub, momentStub);
+    updateBoostAccountStub, alterBoostStub, lambdaInvokeStub, publishMultiStub, momentStub);
 
 const testStartTime = moment();
 
@@ -105,7 +105,7 @@ describe('** UNIT TEST CREATING AN ML DETERMINED BOOST ***', () => {
             message: { instructionId: 'created-msg-instruction-id', creationTimeMillis: moment().valueOf() }
         };
     
-        lamdbaInvokeStub.returns({ promise: () => testHelper.mockLambdaResponse(mockMsgInstructReturnBody) });
+        lambdaInvokeStub.returns({ promise: () => testHelper.mockLambdaResponse(mockMsgInstructReturnBody) });
         alterBoostStub.resolves({ updatedTime: moment() });
 
         const mockMsgIdDict = [{ accountId: 'ALL', status: 'OFFERED', msgInstructionId: 'created-msg-instruction-id' }];
@@ -153,7 +153,7 @@ describe('** UNIT TEST CREATING AN ML DETERMINED BOOST ***', () => {
             templates: { template: { 'DEFAULT': msgTemplate } }
         };
 
-        const lambdaPayload = JSON.parse(lamdbaInvokeStub.getCall(0).args[0].Payload);
+        const lambdaPayload = JSON.parse(lambdaInvokeStub.getCall(0).args[0].Payload);
         
         expect(lambdaPayload).to.deep.equal(expectedMsgInstruct);
         expect(alterBoostStub).to.have.been.calledOnceWithExactly('test-boost-id', mockMsgIdDict, false);
@@ -214,7 +214,7 @@ describe('** UNIT TEST CREATING AN EVENT TRIGGERED BOOST ***', () => {
             message: { instructionId: 'created-msg-instruction-id', creationTimeMillis: moment().valueOf() }
         };
     
-        lamdbaInvokeStub.returns({ promise: () => testHelper.mockLambdaResponse(mockMsgInstructReturnBody) });
+        lambdaInvokeStub.returns({ promise: () => testHelper.mockLambdaResponse(mockMsgInstructReturnBody) });
         alterBoostStub.resolves({ updatedTime: moment() });
 
         const mockMsgIdDict = [{ accountId: 'ALL', status: 'OFFERED', msgInstructionId: 'created-msg-instruction-id' }];
@@ -263,7 +263,7 @@ describe('** UNIT TEST CREATING AN EVENT TRIGGERED BOOST ***', () => {
             triggerParameters: msgTrigger
         };
 
-        const lambdaPayload = JSON.parse(lamdbaInvokeStub.getCall(0).args[0].Payload);
+        const lambdaPayload = JSON.parse(lambdaInvokeStub.getCall(0).args[0].Payload);
         
         expect(lambdaPayload).to.deep.equal(expectedMsgInstruct);
         expect(alterBoostStub).to.have.been.calledOnceWithExactly('test-boost-id', mockMsgIdDict, false);
@@ -299,7 +299,7 @@ describe('** UNIT TEST SOME BOOST VALIDATION ***', () => {
     const commonAssertions = () => {
         expect(insertBoostStub).to.have.not.been.called;
         expect(alterBoostStub).to.have.not.been.called;
-        expect(lamdbaInvokeStub).to.have.not.been.called;
+        expect(lambdaInvokeStub).to.have.not.been.called;
     };
 
     it('Handles test call', async () => {

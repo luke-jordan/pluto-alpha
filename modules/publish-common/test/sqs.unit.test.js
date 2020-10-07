@@ -11,7 +11,7 @@ const proxyquire = require('proxyquire').noCallThru();
 
 const sqsSendStub = sinon.stub();
 const getQueueUrlStub = sinon.stub();
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 const getObjectStub = sinon.stub();
 const sendEmailStub = sinon.stub();
 const snsPublishStub = sinon.stub();
@@ -30,7 +30,7 @@ class MockS3Client {
 
 class MockLambdaClient {
     constructor () {
-        this.invoke = lamdbaInvokeStub;
+        this.invoke = lambdaInvokeStub;
     }
 }
 

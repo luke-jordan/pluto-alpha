@@ -37,10 +37,10 @@ const momentStub = sinon.stub();
 const publishStub = sinon.stub();
 const publishMultiStub = sinon.stub();
 
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 class MockLambdaClient {
     constructor () {
-        this.invoke = lamdbaInvokeStub;
+        this.invoke = lambdaInvokeStub;
     }
 }
 
@@ -102,7 +102,7 @@ const rds = proxyquire('../persistence/rds.boost', {
 const resetStubs = () => testHelper.resetStubs(
     insertBoostStub, findBoostStub, findAccountsStub, 
     updateBoostAccountStub, publishStub, fetchUncreatedBoostsStub,
-    lamdbaInvokeStub, publishMultiStub, queryStub, multiTableStub, uuidStub
+    lambdaInvokeStub, publishMultiStub, queryStub, multiTableStub, uuidStub
 );
 
 describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
@@ -155,7 +155,7 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
         momentStub.withArgs(referralWindowEnd.valueOf()).returns(referralWindowEnd);
 
         const testCreatedAudienceId = uuid();
-        lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ 
+        lambdaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ 
             body: JSON.stringify({ audienceId: testCreatedAudienceId })
         })})});
 
@@ -209,7 +209,7 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
             }
         };
         const wrappedInvoke = testHelper.wrapLambdaInvoc('audience_selection', false, expectedAudiencePayload);
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(wrappedInvoke);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(wrappedInvoke);
 
         // const objectToRds = insertBoostStub.getCall(0).args[0];
         // logger('Sent to RDS: ', objectToRds);

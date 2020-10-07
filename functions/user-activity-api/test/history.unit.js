@@ -25,7 +25,7 @@ const fetchPendingTxStub = sinon.stub();
 
 const getAccountFigureStub = sinon.stub();
 
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 const calculateEstimatedInterestEarnedStub = sinon.stub();
 const fetchFloatVarsForBalanceCalcStub = sinon.stub();
 
@@ -35,7 +35,7 @@ const MockInterestHelper = {
 
 class MockLambdaClient {
     constructor () {
-        this.invoke = lamdbaInvokeStub;
+        this.invoke = lambdaInvokeStub;
     }
 }
 
@@ -160,7 +160,7 @@ describe('*** UNIT TEST HISTORY LIST FETCHING ***', () => {
     };
 
     beforeEach(() => {
-        helper.resetStubs(momentStub, findAccountStub, fetchPriorTxStub, lamdbaInvokeStub, getAccountFigureStub, calculateEstimatedInterestEarnedStub, fetchFloatVarsForBalanceCalcStub);
+        helper.resetStubs(momentStub, findAccountStub, fetchPriorTxStub, lambdaInvokeStub, getAccountFigureStub, calculateEstimatedInterestEarnedStub, fetchFloatVarsForBalanceCalcStub);
     });
 
     it('Fetches user balance, accrued interest, previous user transactions, and major user events', async () => {
@@ -212,13 +212,13 @@ describe('*** UNIT TEST HISTORY LIST FETCHING ***', () => {
             startOf: () => testTime
         });
 
-        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId })).
+        lambdaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId })).
             returns({ promise: () => mockLambdaResponse(expectedProfile) });
 
-        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.userHistory'), false, testHistoryEvent)).
+        lambdaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.userHistory'), false, testHistoryEvent)).
             returns({ promise: () => mockUserLogs });
 
-        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.fetchUserBalance'), false, testBalancePayload)).
+        lambdaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.fetchUserBalance'), false, testBalancePayload)).
             returns({ promise: () => mockLambdaResponse(expectedBalance) });
 
         getAccountFigureStub.withArgs({ systemWideUserId: testUserId, operation: 'total_earnings::WHOLE_CENT::USD'}).
@@ -249,8 +249,8 @@ describe('*** UNIT TEST HISTORY LIST FETCHING ***', () => {
         expect(result).to.exist;
         expect(result).to.have.property('statusCode', 200);
         // expect(result.body).to.deep.equal(JSON.stringify(expectedResult)); // momentStub isn't stubbing out a specific instance. to be seen to. all else is as expected. 
-        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchUserBalance'), false, testBalancePayload));
-        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userHistory'), false, testHistoryEvent));
+        expect(lambdaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchUserBalance'), false, testBalancePayload));
+        expect(lambdaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userHistory'), false, testHistoryEvent));
         
         expect(getAccountFigureStub).to.have.been.calledTwice;
         expect(getAccountFigureStub).to.have.been.calledWithExactly({ systemWideUserId: testUserId, operation: 'total_earnings::WHOLE_CENT::USD'});
@@ -303,13 +303,13 @@ describe('*** UNIT TEST HISTORY LIST FETCHING ***', () => {
         // TODO: check for a better way of stubbing moment
         momentStub.returns(mockMoment);
 
-        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId })).returns({
+        lambdaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId })).returns({
             promise: () => mockLambdaResponse(expectedProfile)
         });
 
-        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.userHistory'), false, testHistoryEvent)).returns({ promise: () => mockUserLogs });
+        lambdaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.userHistory'), false, testHistoryEvent)).returns({ promise: () => mockUserLogs });
 
-        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.fetchUserBalance'), false, testBalancePayload)).returns({
+        lambdaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.fetchUserBalance'), false, testBalancePayload)).returns({
             promise: () => mockLambdaResponse(expectedBalance)
         });
 
@@ -370,8 +370,8 @@ describe('*** UNIT TEST HISTORY LIST FETCHING ***', () => {
         expect(result).to.have.property('statusCode', 200);
         // expect(result.body).to.deep.equal(JSON.stringify(expectedResult)); // momentStub isn't stubbing out a specific instance. to be seen to. all else is as expected.
         expect(momentStub).to.have.been.callCount(4);
-        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchUserBalance'), false, testBalancePayload));
-        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userHistory'), false, testHistoryEvent));
+        expect(lambdaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchUserBalance'), false, testBalancePayload));
+        expect(lambdaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userHistory'), false, testHistoryEvent));
 
         expect(getAccountFigureStub).to.have.been.calledTwice;
         expect(getAccountFigureStub).to.have.been.calledWithExactly({ systemWideUserId: testUserId, operation: 'total_earnings::WHOLE_CENT::USD'});
@@ -392,14 +392,14 @@ describe('*** UNIT TEST HISTORY LIST FETCHING ***', () => {
 
         expect(result).to.exist;
         expect(result).to.have.property('statusCode', 403);
-        expect(lamdbaInvokeStub).to.have.not.been.called;
+        expect(lambdaInvokeStub).to.have.not.been.called;
         expect(getAccountFigureStub).to.have.not.been.called;
         expect(findAccountStub).to.have.not.been.called;
         expect(fetchPriorTxStub).to.have.not.been.called;
     });
 
     it('Catches thrown errors', async () => {
-        lamdbaInvokeStub.throws(new Error('ERROR'));
+        lambdaInvokeStub.throws(new Error('ERROR'));
 
         const testEvent = {
             requestContext: {

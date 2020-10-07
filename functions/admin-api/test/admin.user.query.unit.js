@@ -21,7 +21,7 @@ const MIN_AMOUNT = 5000000;
 const momentStub = sinon.stub();
 const pendingTxStub = sinon.stub();
 const countUsersStub = sinon.stub();
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 const fetchBsheetTagStub = sinon.stub();
 const fetchTxDetailsStub = sinon.stub();
 
@@ -30,7 +30,7 @@ const listUserAccountsStub = sinon.stub();
 
 class MockLambdaClient {
     constructor () {
-        this.invoke = lamdbaInvokeStub;
+        this.invoke = lambdaInvokeStub;
     }
 }
 
@@ -149,7 +149,7 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
         })
     };
 
-    beforeEach(() => helper.resetStubs(lamdbaInvokeStub, findUserByRefStub, fetchBsheetTagStub, listUserAccountsStub));
+    beforeEach(() => helper.resetStubs(lambdaInvokeStub, findUserByRefStub, fetchBsheetTagStub, listUserAccountsStub));
 
     it('Looks up user by national ID, happy path', async () => {
         const testTime = moment();
@@ -176,19 +176,19 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
             subtract: () => testTime
         });
 
-        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.systemWideIdLookup'), false, { nationalId: testNationalId })).returns({ 
+        lambdaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.systemWideIdLookup'), false, { nationalId: testNationalId })).returns({ 
             promise: () => helper.mockLambdaResponse({ systemWideUserId: testUserId })
         });
 
-        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId, includeContactMethod: true })).returns({
+        lambdaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId, includeContactMethod: true })).returns({
             promise: () => helper.mockLambdaResponse(expectedProfile)
         });
 
-        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.userHistory'), false, testHistoryEvent)).returns({
+        lambdaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.userHistory'), false, testHistoryEvent)).returns({
             promise: () => expectedHistory
         });
 
-        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.fetchUserBalance'), false, testBalancePayload)).returns({
+        lambdaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.fetchUserBalance'), false, testBalancePayload)).returns({
             promise: () => helper.mockLambdaResponse(mockBalance)
         });
 
@@ -220,10 +220,10 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
         const resultBody = helper.standardOkayChecks(result, true);
         expect(resultBody).to.deep.equal(expectedResult);
 
-        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.systemWideIdLookup'), false, { nationalId: testNationalId }));
-        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchUserBalance'), false, testBalancePayload));
-        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userHistory'), false, testHistoryEvent));
-        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId, includeContactMethod: true }));
+        expect(lambdaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.systemWideIdLookup'), false, { nationalId: testNationalId }));
+        expect(lambdaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchUserBalance'), false, testBalancePayload));
+        expect(lambdaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userHistory'), false, testHistoryEvent));
+        expect(lambdaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId, includeContactMethod: true }));
         expect(pendingTxStub).to.have.been.calledWith(testUserId, sinon.match.any);
     });
 
@@ -248,9 +248,9 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
         findUserByRefStub.resolves(mockUserList);
 
         // args are covered above
-        lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse(expectedProfile) });
-        lamdbaInvokeStub.onSecondCall().returns({ promise: () => expectedHistory });
-        lamdbaInvokeStub.onThirdCall().returns({ promise: () => helper.mockLambdaResponse({ ...expectedBalance }) });
+        lambdaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse(expectedProfile) });
+        lambdaInvokeStub.onSecondCall().returns({ promise: () => expectedHistory });
+        lambdaInvokeStub.onThirdCall().returns({ promise: () => helper.mockLambdaResponse({ ...expectedBalance }) });
         fetchBsheetTagStub.resolves('BOLU');
 
         momentStub.returns(testTime);
@@ -266,10 +266,10 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
         expect(assembledBalance).to.deep.equal({ ...expectedBalance, bsheetIdentifier: 'BOLU' });
 
         expect(findUserByRefStub).to.have.been.calledWith({ searchValue: 'BOLU', bsheetPrefix: config.get('bsheet.prefix') });
-        expect(lamdbaInvokeStub).to.have.been.calledThrice;
+        expect(lambdaInvokeStub).to.have.been.calledThrice;
 
         expect(listUserAccountsStub).to.not.have.been.called;
-        // expect(lamdbaInvokeStub).to.not.have.been.called;
+        // expect(lambdaInvokeStub).to.not.have.been.called;
     });
 
     it('Finds and returns based list of potential matches', async () => {
@@ -306,7 +306,7 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
         expect(findUserByRefStub).to.have.been.calledWith({ searchValue: 'BOLU', bsheetPrefix: config.get('bsheet.prefix') });
         expect(listUserAccountsStub).to.have.been.calledOnceWithExactly({ specifiedUserIds: ['someaccount', 'otheraccount'], includeNoSave: true });
 
-        expect(lamdbaInvokeStub).to.not.have.been.called;
+        expect(lambdaInvokeStub).to.not.have.been.called;
     });
     
 });

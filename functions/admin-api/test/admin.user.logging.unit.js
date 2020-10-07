@@ -13,7 +13,7 @@ const expect = chai.expect;
 
 const helper = require('./test.helper');
 
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 const publishEventStub = sinon.stub();
 
 const getObjectStub = sinon.stub();
@@ -23,7 +23,7 @@ const momentStub = sinon.stub();
 
 class MockLambdaClient {
     constructor () {
-        this.invoke = lamdbaInvokeStub;
+        this.invoke = lambdaInvokeStub;
     }
 }
 
@@ -55,7 +55,7 @@ describe('*** UNIT TEST FETCH USER FILE ***', () => {
     const testEndDate = moment().valueOf();
 
     beforeEach(() => {
-        helper.resetStubs(lamdbaInvokeStub, getObjectStub);
+        helper.resetStubs(lambdaInvokeStub, getObjectStub);
     });
 
     it('Fetches and encodes file appropriately', async () => {
@@ -86,7 +86,7 @@ describe('*** UNIT TEST FETCH USER FILE ***', () => {
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.have.property('statusCode', 403);
         expect(resultOfFetch.headers).to.deep.equal(helper.expectedHeaders);
-        expect(lamdbaInvokeStub).to.have.not.been.called;
+        expect(lambdaInvokeStub).to.have.not.been.called;
         expect(getObjectStub).to.have.not.been.called;
     });
 
@@ -157,7 +157,7 @@ describe('*** UNIT TEST FETCH USER FILE ***', () => {
             Key: `${testSystemId}/user_documents.pdf`
         };
 
-        lamdbaInvokeStub.returns({ promise: () => expectedLogFromLambda });
+        lambdaInvokeStub.returns({ promise: () => expectedLogFromLambda });
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => mockBase64EncodedFile }}) });
         momentStub.returns({ valueOf: () => testEndDate });
 
@@ -174,7 +174,7 @@ describe('*** UNIT TEST FETCH USER FILE ***', () => {
         expect(userLog).to.have.property('statusCode', 200);
         expect(userLog.headers).to.deep.equal(helper.expectedHeaders);
         expect(userLog.body).to.deep.equal(JSON.stringify(expectedResult));
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(helper.wrapLambdaInvoc(config.get('lambdas.userHistory'), false, expectedLogPayload));
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(helper.wrapLambdaInvoc(config.get('lambdas.userHistory'), false, expectedLogPayload));
         expect(getObjectStub).to.have.been.calledOnceWithExactly(expectedS3Params);
     });
 });

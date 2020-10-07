@@ -17,12 +17,12 @@ const expect = chai.expect;
 
 const getMessagesStub = sinon.stub();
 const updateMessageStub = sinon.stub();
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 const publishEventStub = sinon.stub();
 
 const fetchDynamoRowStub = sinon.stub();
 
-const resetStubs = () => testHelper.resetStubs(getMessagesStub, updateMessageStub, fetchDynamoRowStub, lamdbaInvokeStub, publishEventStub);
+const resetStubs = () => testHelper.resetStubs(getMessagesStub, updateMessageStub, fetchDynamoRowStub, lambdaInvokeStub, publishEventStub);
 
 const profileTable = config.get('tables.dynamoProfileTable');
 
@@ -35,7 +35,7 @@ const testExpiryMoment = moment().add(6, 'hours');
 
 class MockLambdaClient {
     constructor () {
-        this.invoke = lamdbaInvokeStub;
+        this.invoke = lambdaInvokeStub;
     }
 }
 
@@ -141,7 +141,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
         getMessagesStub.withArgs(testUserId, ['CARD']).resolves([mockMessage]);
 
         const queryResult = testHelper.mockLambdaResponse({ results: [{ amount: 1000000, unit: 'HUNDREDTH_CENT', currency: 'USD' }] });
-        lamdbaInvokeStub.returns({ promise: () => queryResult});
+        lambdaInvokeStub.returns({ promise: () => queryResult});
 
         const authContext = { authorizer: { systemWideUserId: testUserId }};
         const filledMessage = await handler.getNextMessageForUser({ requestContext: authContext });
@@ -150,14 +150,14 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
         const messageBody = filledMessageBody.messagesToDisplay[0].body;
         expect(messageBody).to.equal(expectedMessage);
 
-        expect(lamdbaInvokeStub).to.have.been.calledTwice;
-        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(assembleLambdaInvoke('interest::HUNDREDTH_CENT::USD::0'));
+        expect(lambdaInvokeStub).to.have.been.calledTwice;
+        expect(lambdaInvokeStub).to.have.been.calledWithExactly(assembleLambdaInvoke('interest::HUNDREDTH_CENT::USD::0'));
         
         // a little clumsy, but alternative is introducing uuid stubs and much else, so
         const expectedUpdateInvocationBody = { messageId: mockMessage.messageId, userAction: 'FETCHED', lastDisplayedBody: expectedMessage };
-        const updatePayload = JSON.parse(lamdbaInvokeStub.getCall(1).args[0].Payload);
+        const updatePayload = JSON.parse(lambdaInvokeStub.getCall(1).args[0].Payload);
         expect(updatePayload).to.deep.equal(expectedUpdateInvocationBody);
-        // expect(lamdbaInvokeStub).to.have.been.calledWithExactly(expectedInvoke);
+        // expect(lambdaInvokeStub).to.have.been.calledWithExactly(expectedInvoke);
         
         expect(publishEventStub).to.have.been.calledOnceWithExactly(testUserId, 'MESSAGE_FETCHED', sinon.match.any);
     });
@@ -169,13 +169,13 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
         )]);
 
         const queryResult = testHelper.mockLambdaResponse({ results: [{ amount: 1000000, unit: 'HUNDREDTH_CENT', currency: 'USD' }] });
-        lamdbaInvokeStub.returns({ promise: () => queryResult});
+        lambdaInvokeStub.returns({ promise: () => queryResult});
 
         const filledMessage = await handler.fetchAndFillInNextMessage({ destinationUserId: testUserId });
         expect(filledMessage).to.exist;
         expect(filledMessage[0].body).to.equal(expectedMessage);
 
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(assembleLambdaInvoke('last_saved_amount::USD'));
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(assembleLambdaInvoke('last_saved_amount::USD'));
     });
 
     it('Fills in referral code properly', async () => {
@@ -184,7 +184,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
         const msgBody = minimalMsgFromTemplate(
             'Hello #{user_full_name}. We are offering a referral bonus of $10. Give someone #{user_referral_code} as your code'
         );
-        lamdbaInvokeStub.returns({ promise: () => 'UNNECESSARY_HERE' }); // avoiding spurious errors
+        lambdaInvokeStub.returns({ promise: () => 'UNNECESSARY_HERE' }); // avoiding spurious errors
 
         const filledMessage = await handler.assembleMessage(msgBody);
         expect(filledMessage.body).to.equal(expectedMessage);
@@ -203,7 +203,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
         }]);
 
         const queryResult = testHelper.mockLambdaResponse({ results: [{ amount: 80000000, unit: 'HUNDREDTH_CENT', currency: 'USD' }] });
-        lamdbaInvokeStub.returns({ promise: () => queryResult});
+        lambdaInvokeStub.returns({ promise: () => queryResult});
         fetchDynamoRowStub.withArgs(profileTable, { systemWideUserId: testDestinationUserId }, ['personal_name', 'family_name', 'called_name']).resolves({
             systemWideUserId: testUserId, 
             personalName: 'Luke', 
@@ -222,7 +222,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
         expect(filledMessage).to.exist;
         expect(filledMessage[0].body).to.equal(expectedMessage);
         expect(fetchDynamoRowStub).to.have.been.calledTwice;
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(testHelper.wrapLambdaInvoc('user_history_aggregate', false, { aggregates: ['balance::HUNDREDTH_CENT::USD'], systemWideUserId: testDestinationUserId }));
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(testHelper.wrapLambdaInvoc('user_history_aggregate', false, { aggregates: ['balance::HUNDREDTH_CENT::USD'], systemWideUserId: testDestinationUserId }));
     });
 
     it('Handles last capitalization properly', async () => {
@@ -232,14 +232,14 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
         )]);
 
         const queryResult = testHelper.mockLambdaResponse({ results: [{ amount: 100500, unit: 'HUNDREDTH_CENT', currency: 'USD' }] });
-        lamdbaInvokeStub.returns({ promise: () => queryResult});
+        lambdaInvokeStub.returns({ promise: () => queryResult});
 
         const filledMessage = await handler.fetchAndFillInNextMessage({ destinationUserId: testUserId });
         expect(filledMessage).to.exist;
         expect(filledMessage[0].body).to.equal(expectedMessage);
 
         // this gets the last capitalization event so by definition it doesn't need a unit to convert into
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(assembleLambdaInvoke('capitalization::USD'));
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(assembleLambdaInvoke('capitalization::USD'));
     });
 
     it('Handles next level target properly', async () => {
@@ -248,7 +248,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
 
         const testAmountPairs = async (balanceInCent, expectedInMessage) => {
             const queryResult = testHelper.mockLambdaResponse({ results: [{ amount: balanceInCent, unit: 'WHOLE_CENT', currency: 'USD' }] });
-            lamdbaInvokeStub.returns({ promise: () => queryResult});
+            lambdaInvokeStub.returns({ promise: () => queryResult});
     
             const filledMessage = await handler.fetchAndFillInNextMessage({ destinationUserId: testUserId });
             expect(filledMessage[0].body).to.equal(`Hello Luke. You need to get to $${expectedInMessage}`);
@@ -267,7 +267,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
         )]);
 
         const queryResult = testHelper.mockLambdaResponse({ results: [{ amount: 800000, unit: 'WHOLE_CENT', currency: 'ZAR' }] });
-        lamdbaInvokeStub.returns({ promise: () => queryResult});
+        lambdaInvokeStub.returns({ promise: () => queryResult});
     
         fetchDynamoRowStub.withArgs(profileTable, { systemWideUserId: testUserId }, relevantProfileCols).resolves({ 
             systemWideUserId: testUserId, 
@@ -281,7 +281,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
         expect(filledMessage).to.exist;
         expect(filledMessage[0].body).to.equal(expectedMessage);
 
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(assembleLambdaInvoke('balance::HUNDREDTH_CENT::ZAR'));
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(assembleLambdaInvoke('balance::HUNDREDTH_CENT::ZAR'));
     });
 
     it('Sorts messages by priority properly', async () => {
@@ -291,7 +291,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
         getMessagesStub.withArgs(testUserId, ['CARD']).resolves([minimalMsgFromTemplate(temlpate, 10), minimalMsgFromTemplate(temlpate, 5)]);
 
         const queryResult = testHelper.mockLambdaResponse({ results: [{ amount: 800000, unit: 'WHOLE_CENT', currency: 'USD' }] });
-        lamdbaInvokeStub.returns({ promise: () => queryResult});
+        lambdaInvokeStub.returns({ promise: () => queryResult});
 
         const filledMessage = await handler.fetchAndFillInNextMessage({ destinationUserId: testUserId });
         logger('Filled message:', filledMessage);
@@ -340,7 +340,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
             'Hello #{user_first_name}. Your balance this week after earning more interest and boosts is #{current_balance}.'
         )]);
         const queryResult = testHelper.mockLambdaResponse({ results: [{ amount: 800000, unit: 'WHOLE_CENT', currency: 'USD' }] });
-        lamdbaInvokeStub.returns({ promise: () => queryResult});
+        lambdaInvokeStub.returns({ promise: () => queryResult});
         fetchDynamoRowStub.withArgs(profileTable, { systemWideUserId: testUserId }, relevantProfileCols).resolves({ 
             systemWideUserId: testUserId, 
             personalName: 'Luke', 
@@ -356,7 +356,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
         expect(filledMessage).to.exist;
         expect(filledMessage[0].body).to.equal(expectedMessage);
 
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(assembleLambdaInvoke('balance::HUNDREDTH_CENT::USD'));
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(assembleLambdaInvoke('balance::HUNDREDTH_CENT::USD'));
     });
 
     it('Handles messages within flow (non-anchor)', async () => {
@@ -366,14 +366,14 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
         )]);
 
         const queryResult = testHelper.mockLambdaResponse({ results: [{ amount: 1000000, unit: 'HUNDREDTH_CENT', currency: 'USD' }] });
-        lamdbaInvokeStub.returns({ promise: () => queryResult});
+        lambdaInvokeStub.returns({ promise: () => queryResult});
 
         const filledMessage = await handler.fetchAndFillInNextMessage({ destinationUserId: testUserId, withinFlowFromMsgId: testMessageId });
         logger('Filled message: ', filledMessage);
         expect(filledMessage).to.exist;
         expect(filledMessage[0].body).to.equal(expectedMessage);
 
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(assembleLambdaInvoke('total_earnings::HUNDREDTH_CENT::USD'));
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(assembleLambdaInvoke('total_earnings::HUNDREDTH_CENT::USD'));
     });
 });
 
@@ -478,7 +478,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
         });
 
         getMessagesStub.withArgs(testUserId, ['CARD']).resolves([firstMsgFromRds, secondMsgFromRds]);
-        lamdbaInvokeStub.returns({ promise: () => ({ result: 'SUCCESS' })});
+        lambdaInvokeStub.returns({ promise: () => ({ result: 'SUCCESS' })});
         
         const fetchResult = await handler.getNextMessageForUser(testHelper.wrapEvent({ }, testUserId, 'ORDINARY_USER'));
         expect(fetchResult).to.exist;
@@ -491,9 +491,9 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
         
         expect(getMessagesStub).to.have.been.calledOnceWithExactly(testUserId, ['CARD']);
         
-        expect(lamdbaInvokeStub).to.have.been.calledTwice;
-        expect(lamdbaInvokeStub).to.have.been.calledWith(mockInvocation(firstMsgFromRds.messageId, expectedFirstMessage.body));
-        expect(lamdbaInvokeStub).to.have.been.calledWith(mockInvocation(secondMsgFromRds.messageId, expectedSecondMsg.body));
+        expect(lambdaInvokeStub).to.have.been.calledTwice;
+        expect(lambdaInvokeStub).to.have.been.calledWith(mockInvocation(firstMsgFromRds.messageId, expectedFirstMessage.body));
+        expect(lambdaInvokeStub).to.have.been.calledWith(mockInvocation(secondMsgFromRds.messageId, expectedSecondMsg.body));
     });
 
     it('Within flow message parameter works', async () => {
@@ -507,18 +507,18 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
         });
 
         getMessagesStub.withArgs(testUserId, ['CARD']).resolves([firstMsgFromRds, secondMsgFromRds]);
-        lamdbaInvokeStub.returns({ promise: () => ({ result: 'SUCCESS' })});
+        lambdaInvokeStub.returns({ promise: () => ({ result: 'SUCCESS' })});
         
         const fetchResult = await handler.getNextMessageForUser({ queryStringParameters, requestContext });
         logger('Result of assembly:', fetchResult);
-        logger('lis args:', lamdbaInvokeStub.getCall(0).args);
+        logger('lis args:', lambdaInvokeStub.getCall(0).args);
         expect(fetchResult).to.exist;
         const bodyOfFetch = testHelper.standardOkayChecks(fetchResult);
         expect(bodyOfFetch).to.deep.equal({ messagesToDisplay: [expectedFirstMessage, expectedSecondMsg] });
         expect(getMessagesStub).to.have.been.calledOnceWithExactly(testUserId, ['CARD']);
-        expect(lamdbaInvokeStub).to.have.been.calledTwice;
-        expect(lamdbaInvokeStub).to.have.been.calledWith(mockInvocation(firstMsgFromRds.messageId, expectedFirstMessage.body));
-        expect(lamdbaInvokeStub).to.have.been.calledWith(mockInvocation(secondMsgFromRds.messageId, expectedSecondMsg.body));
+        expect(lambdaInvokeStub).to.have.been.calledTwice;
+        expect(lambdaInvokeStub).to.have.been.calledWith(mockInvocation(firstMsgFromRds.messageId, expectedFirstMessage.body));
+        expect(lambdaInvokeStub).to.have.been.calledWith(mockInvocation(secondMsgFromRds.messageId, expectedSecondMsg.body));
         expect(publishEventStub).to.have.been.calledWith(testUserId, 'MESSAGE_FETCHED', sinon.match.any);
     });
 
@@ -536,7 +536,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
         });
 
         getMessagesStub.onFirstCall().resolves([firstMsgFromRds, failingMsg]);
-        lamdbaInvokeStub.returns({ promise: () => ({ result: 'SUCCESS' })});
+        lambdaInvokeStub.returns({ promise: () => ({ result: 'SUCCESS' })});
         publishEventStub.resolves({ result: 'SUCCESS' });
 
         const fetchResult = await handler.getNextMessageForUser({ queryStringParameters, requestContext });
@@ -547,9 +547,9 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
         expect(bodyOfFetch).to.deep.equal({ messagesToDisplay: [expectedFirstMessage] });
         expect(getMessagesStub).to.have.been.calledOnceWithExactly(testUserId, ['CARD']);
         
-        expect(lamdbaInvokeStub).to.have.been.calledTwice;
-        expect(lamdbaInvokeStub).to.have.been.calledWith(mockInvocation(firstMsgFromRds.messageId, 'FETCHED', firstMsgFromRds.messageBody));
-        expect(lamdbaInvokeStub).to.have.been.calledWith(mockInvocation(secondMsgFromRds.messageId, 'EXPIRED'));
+        expect(lambdaInvokeStub).to.have.been.calledTwice;
+        expect(lambdaInvokeStub).to.have.been.calledWith(mockInvocation(firstMsgFromRds.messageId, 'FETCHED', firstMsgFromRds.messageBody));
+        expect(lambdaInvokeStub).to.have.been.calledWith(mockInvocation(secondMsgFromRds.messageId, 'EXPIRED'));
         
         expect(publishEventStub).to.have.been.calledTwice;
         expect(publishEventStub).to.have.been.calledWith(testUserId, 'MESSAGE_FAILED', sinon.match.any);
@@ -564,16 +564,16 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
         });
 
         getMessagesStub.withArgs(testUserId, ['CARD']).resolves([firstMsgFromRds, secondMsgFromRds, anotherHighPriorityMsg]);
-        lamdbaInvokeStub.returns({ promise: () => ({ result: 'SUCCESS' })});
+        lambdaInvokeStub.returns({ promise: () => ({ result: 'SUCCESS' })});
         
         const fetchResult = await handler.getNextMessageForUser(testHelper.wrapEvent({ }, testUserId, 'ORDINARY_USER'));
         expect(fetchResult).to.exist;
         const bodyOfFetch = testHelper.standardOkayChecks(fetchResult);
         expect(bodyOfFetch).to.deep.equal({ messagesToDisplay: [expectedFirstMessage, expectedSecondMsg] });
         expect(getMessagesStub).to.have.been.calledOnceWithExactly(testUserId, ['CARD']);
-        expect(lamdbaInvokeStub).to.have.been.calledTwice;
-        expect(lamdbaInvokeStub).to.have.been.calledWith(mockInvocation(firstMsgFromRds.messageId, expectedFirstMessage.body));
-        expect(lamdbaInvokeStub).to.have.been.calledWith(mockInvocation(secondMsgFromRds.messageId, expectedSecondMsg.body));
+        expect(lambdaInvokeStub).to.have.been.calledTwice;
+        expect(lambdaInvokeStub).to.have.been.calledWith(mockInvocation(firstMsgFromRds.messageId, expectedFirstMessage.body));
+        expect(lambdaInvokeStub).to.have.been.calledWith(mockInvocation(secondMsgFromRds.messageId, expectedSecondMsg.body));
     });
 
 });
