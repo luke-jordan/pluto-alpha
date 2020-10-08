@@ -25,10 +25,10 @@ const momentStub = sinon.stub();
 const publishStub = sinon.stub();
 const publishMultiStub = sinon.stub();
 
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 class MockLambdaClient {
     constructor () {
-        this.invoke = lamdbaInvokeStub;
+        this.invoke = lambdaInvokeStub;
     }
 }
 
@@ -55,7 +55,7 @@ const handler = proxyquire('../boost-create-handler', {
     '@noCallThru': true
 });
 
-const resetStubs = () => testHelper.resetStubs(insertBoostStub, findBoostStub, findAccountsStub, updateBoostAccountStub, alterBoostStub, lamdbaInvokeStub, publishMultiStub);
+const resetStubs = () => testHelper.resetStubs(insertBoostStub, findBoostStub, findAccountsStub, updateBoostAccountStub, alterBoostStub, lambdaInvokeStub, publishMultiStub);
 
 const testStartTime = moment();
 const testEndTime = moment();
@@ -131,7 +131,7 @@ describe('*** UNIT TEST BOOST CREATION *** Persists ML params', () => {
         const testPersistedTime = moment();
         momentStub.withArgs().returns(testStartTime);
 
-        lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ 
+        lambdaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ 
             body: JSON.stringify({ message: { instructionId: testInstructionId } })
         })})});
 
@@ -196,7 +196,7 @@ describe('*** UNIT TEST BOOST CREATION *** Persists ML params', () => {
             }
         };
         const msgInstructionInvocation = testHelper.wrapLambdaInvoc('message_instruct_create', false, expectedInstructionPayload);
-        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(msgInstructionInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledWithExactly(msgInstructionInvocation);
 
         const expectedBoost = { ...mockBoostToFromPersistence };
         expectedBoost.audienceId = testAudienceId;

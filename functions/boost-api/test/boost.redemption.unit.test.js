@@ -11,13 +11,13 @@ const expect = chai.expect;
 chai.use(require('sinon-chai'));
 
 const publishStub = sinon.stub();
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 
 const momentStub = sinon.stub();
 
 class MockLambdaClient {
     constructor () {
-        this.invoke = lamdbaInvokeStub;
+        this.invoke = lambdaInvokeStub;
     }
 }
 
@@ -39,7 +39,7 @@ const testBonusPoolId = 'some-pool';
 
 describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
 
-    beforeEach(() => testHelper.resetStubs(lamdbaInvokeStub, publishStub));
+    beforeEach(() => testHelper.resetStubs(lambdaInvokeStub, publishStub));
 
     it('Redeem a simple boost, from user saving enough', async () => {
         const testUserId = uuid();
@@ -78,7 +78,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             [testBoostId]: mockTransferResult
         };
 
-        lamdbaInvokeStub.returns({ promise: () => testHelper.mockLambdaResponse(expectedAllocationResult) });
+        lambdaInvokeStub.returns({ promise: () => testHelper.mockLambdaResponse(expectedAllocationResult) });
         momentStub.returns(mockMoment);
         publishStub.resolves({ result: 'SUCCESS' });
 
@@ -121,7 +121,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
         expect(resultOfRedemption).to.exist;
         expect(resultOfRedemption).to.deep.equal(expectedResult);
 
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedAllocationInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(expectedAllocationInvocation);
         expect(publishStub).to.have.been.calledOnce;
 
         const expectedPublishOptions = {
@@ -187,7 +187,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             [testBoostId]: mockTransferResult
         };
 
-        lamdbaInvokeStub.onFirstCall().returns({ promise: () => testHelper.mockLambdaResponse(expectedAllocationResult) });
+        lambdaInvokeStub.onFirstCall().returns({ promise: () => testHelper.mockLambdaResponse(expectedAllocationResult) });
         
         // then we get the message instructions for each of the users, example within instruction:
         // message: `Congratulations! By signing up using your friend's referral code, you have earned a R10 boost to your savings`,
@@ -207,7 +207,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
         });
 
         // logger('Expected message invocation: ', triggerMessagesInvocation);
-        lamdbaInvokeStub.onSecondCall().returns({ promise: () => testHelper.mockLambdaResponse({ result: 'SUCCESS' }) });
+        lambdaInvokeStub.onSecondCall().returns({ promise: () => testHelper.mockLambdaResponse({ result: 'SUCCESS' }) });
 
         // then we do a user log, on each side (tested via the expect call underneath)
         const publishOptions = {
@@ -264,9 +264,9 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
         expect(resultOfRedemption).to.exist;
         expect(resultOfRedemption).to.deep.equal(expectedResult);
 
-        expect(lamdbaInvokeStub).to.have.been.calledTwice;
-        expect(lamdbaInvokeStub).to.have.been.calledWith(expectedAllocationInvocation);
-        expect(lamdbaInvokeStub).to.have.been.calledWith(triggerMessagesInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledTwice;
+        expect(lambdaInvokeStub).to.have.been.calledWith(expectedAllocationInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledWith(triggerMessagesInvocation);
     });
 
     it('Handles revocation', async () => {
@@ -301,7 +301,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             [testBoostId]: { result: 'SUCCESS', floatTxIds: [uuid(), uuid(), uuid(), uuid()], accountTxIds: [uuid(), uuid()] }
         };
 
-        lamdbaInvokeStub.returns({ promise: () => testHelper.mockLambdaResponse(mockTransferResult) });
+        lambdaInvokeStub.returns({ promise: () => testHelper.mockLambdaResponse(mockTransferResult) });
 
         const mockBoost = {
             boostId: testBoostId,
@@ -343,7 +343,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
         expect(resultOfRedemption).to.exist;
         expect(resultOfRedemption).to.deep.equal(expectedResult);
 
-        testHelper.testLambdaInvoke(lamdbaInvokeStub, expectedAllocationInvocation);
+        testHelper.testLambdaInvoke(lambdaInvokeStub, expectedAllocationInvocation);
 
         // then we do a user log, on each side (tested via the expect call underneath)
         const publishOptions = {

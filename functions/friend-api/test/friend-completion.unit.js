@@ -17,7 +17,7 @@ const expect = chai.expect;
 const helper = require('./test-helper');
 
 const redisGetStub = sinon.stub();
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 const fetchAccountStub = sinon.stub();
 const fetchRequestStub = sinon.stub();
 const fetchProfileStub = sinon.stub();
@@ -44,7 +44,7 @@ class MockRedis {
 
 class MockLambdaClient {
     constructor () {
-        this.invoke = lamdbaInvokeStub;
+        this.invoke = lambdaInvokeStub;
     }
 }
 
@@ -75,7 +75,7 @@ const handler = proxyquire('../friend-request-handler', {
 });
 
 const resetStubs = () => helper.resetStubs(fetchProfileStub, insertFriendshipStub, findPossibleRequestStub,
-    fetchRequestStub, lamdbaInvokeStub, publishUserEventStub, connectTargetViaIdStub, insertFriendRequestStub);
+    fetchRequestStub, lambdaInvokeStub, publishUserEventStub, connectTargetViaIdStub, insertFriendRequestStub);
 
 describe('*** UNIT TEST FRIENDSHIP CREATION ***', () => {
     const testCreationTime = moment().format();
@@ -259,7 +259,7 @@ describe('*** UNIT TEST FRIENDSHIPS FROM REFERRAL CODE ***', () => {
         };
 
         const referralResult = { Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify({ result: 'SUCCESS', codeDetails: testReferralDetails })})};
-        lamdbaInvokeStub.returns({ promise: () => referralResult });
+        lambdaInvokeStub.returns({ promise: () => referralResult });
         findPossibleRequestStub.resolves(null);
         insertFriendRequestStub.resolves(friendReqFromPersistence);
 
@@ -267,7 +267,7 @@ describe('*** UNIT TEST FRIENDSHIPS FROM REFERRAL CODE ***', () => {
 
         expect(initializationResult).to.exist;
         expect(initializationResult).to.deep.equal({ result: 'CREATED' });
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(referralInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(referralInvocation);
         expect(findPossibleRequestStub).to.have.been.calledOnceWithExactly(testInitiatedUserId, testUserEmail);
         expect(insertFriendRequestStub).to.have.been.calledOnceWithExactly(friendReqToPersistence);
     });
@@ -281,7 +281,7 @@ describe('*** UNIT TEST FRIENDSHIPS FROM REFERRAL CODE ***', () => {
         };
 
         const referralResult = { Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify({ result: 'SUCCESS', codeDetails: testReferralDetails })})};
-        lamdbaInvokeStub.returns({ promise: () => referralResult });
+        lambdaInvokeStub.returns({ promise: () => referralResult });
         findPossibleRequestStub.resolves(friendReqFromPersistence);
         connectTargetViaIdStub.resolves({ updatedTime: testUpdatedTime });
 
@@ -289,7 +289,7 @@ describe('*** UNIT TEST FRIENDSHIPS FROM REFERRAL CODE ***', () => {
 
         expect(initializationResult).to.exist;
         expect(initializationResult).to.deep.equal({ result: 'CONNECTED' });
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(referralInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(referralInvocation);
         expect(findPossibleRequestStub).to.have.been.calledOnceWithExactly(testInitiatedUserId, testUserEmail);
         expect(insertFriendRequestStub).to.have.not.been.called;
     });
@@ -306,13 +306,13 @@ describe('*** UNIT TEST FRIENDSHIPS FROM REFERRAL CODE ***', () => {
         };
 
         const referralResult = { Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify({ result: 'SUCCESS', codeDetails: referralDetails })})};
-        lamdbaInvokeStub.returns({ promise: () => referralResult });
+        lambdaInvokeStub.returns({ promise: () => referralResult });
 
         const initializationResult = await handler.initiateRequestFromReferralCode(testEvent);
 
         expect(initializationResult).to.exist;
         expect(initializationResult).to.deep.equal({ result: 'FAILURE' });
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(referralInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(referralInvocation);
         expect(findPossibleRequestStub).to.have.not.been.called;
         expect(insertFriendRequestStub).to.have.not.been.called;
     });
@@ -326,13 +326,13 @@ describe('*** UNIT TEST FRIENDSHIPS FROM REFERRAL CODE ***', () => {
         };
 
         const referralResult = { Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify({ result: 'CODE_NOT_FOUND' })})};
-        lamdbaInvokeStub.returns({ promise: () => referralResult });
+        lambdaInvokeStub.returns({ promise: () => referralResult });
 
         const initializationResult = await handler.initiateRequestFromReferralCode(testEvent);
 
         expect(initializationResult).to.exist;
         expect(initializationResult).to.deep.equal({ result: 'NO_USER_CODE_FOUND' });
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(referralInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(referralInvocation);
         expect(findPossibleRequestStub).to.have.not.been.called;
         expect(insertFriendRequestStub).to.have.not.been.called;
     });
@@ -345,13 +345,13 @@ describe('*** UNIT TEST FRIENDSHIPS FROM REFERRAL CODE ***', () => {
             emailAddress: testUserEmail
         };
 
-        lamdbaInvokeStub.throws(new Error('Error!'));
+        lambdaInvokeStub.throws(new Error('Error!'));
 
         const initializationResult = await handler.initiateRequestFromReferralCode(testEvent);
 
         expect(initializationResult).to.exist;
         expect(initializationResult).to.deep.equal({ result: 'FAILURE' });
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(referralInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(referralInvocation);
         expect(findPossibleRequestStub).to.have.not.been.called;
         expect(insertFriendRequestStub).to.have.not.been.called;
     });

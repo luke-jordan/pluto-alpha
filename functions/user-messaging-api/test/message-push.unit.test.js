@@ -24,7 +24,7 @@ const chunkPushNotificationsStub = sinon.stub();
 const getPendingOutboundMessagesStub = sinon.stub();
 const bulkUpdateStatusStub = sinon.stub();
 const assembleMessageStub = sinon.stub();
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 const publishUserEventStub = sinon.stub();
 const sendSmsStub = sinon.stub();
 
@@ -39,7 +39,7 @@ class MockExpo {
 
 class MockLambdaClient {
     constructor () {
-        this.invoke = lamdbaInvokeStub;
+        this.invoke = lambdaInvokeStub;
     }
 }
 
@@ -66,7 +66,7 @@ const handler = proxyquire('../message-push-handler', {
 });
 
 const resetStubs = () => helper.resetStubs(sendPushNotificationsAsyncStub, chunkPushNotificationsStub, getPendingOutboundMessagesStub,
-    bulkUpdateStatusStub, getPushTokenStub, assembleMessageStub, publishUserEventStub, lamdbaInvokeStub, sendSmsStub);
+    bulkUpdateStatusStub, getPushTokenStub, assembleMessageStub, publishUserEventStub, lambdaInvokeStub, sendSmsStub);
 
 describe('*** UNIT TESTING PUSH NOTIFICATION SENDING ***', () => {
     const mockUserId = uuid();
@@ -320,9 +320,9 @@ describe('*** UNIT EMAIL MESSAGE DISPATCH ***', () => {
         bulkUpdateStatusStub.resolves([{ updatedTime: testUpdateTime }]);
         
         const profileResponse = helper.mockLambdaResponse({ statusCode: 200, body: stringify(testEmailProfile) });
-        mockMessages.forEach((_, index) => lamdbaInvokeStub.onCall(index).returns({ promise: () => profileResponse }));
+        mockMessages.forEach((_, index) => lambdaInvokeStub.onCall(index).returns({ promise: () => profileResponse }));
         
-        lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({ result: 'SUCCESS', failedMessageIds: [] })});
+        lambdaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({ result: 'SUCCESS', failedMessageIds: [] })});
         
         const mockAssembledMsgs = mockMessages.map((msg) => mockAssembledMsg(msg.messageId, msg.destinationUserId));
         mockAssembledMsgs.forEach((msg, index) => assembleMessageStub.onCall(index).resolves(msg));
@@ -347,7 +347,7 @@ describe('*** UNIT EMAIL MESSAGE DISPATCH ***', () => {
         expect(bulkUpdateStatusStub).to.have.been.calledWith(mockMessages.map((msg) => msg.messageId), 'SENDING');
         expect(bulkUpdateStatusStub).to.have.been.calledWith(mockMessages.map((msg) => msg.messageId), 'SENT');
         
-        expect(lamdbaInvokeStub.callCount).to.equal(mockMessages.length + 1);
+        expect(lambdaInvokeStub.callCount).to.equal(mockMessages.length + 1);
         expect(assembleMessageStub.callCount).to.equal(mockMessages.length);
 
         expect(publishUserEventStub).to.have.callCount(mockMessages.length);
@@ -363,8 +363,8 @@ describe('*** UNIT EMAIL MESSAGE DISPATCH ***', () => {
         getPendingOutboundMessagesStub.withArgs('EMAIL', BATCH_SIZE).resolves([mockMessage]);
         bulkUpdateStatusStub.resolves([{ updatedTime: testUpdateTime }]);
         
-        lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testPhoneProfile) })});
-        lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({ result: 'ERR', message: 'No valid emails found' })});
+        lambdaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testPhoneProfile) })});
+        lambdaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({ result: 'ERR', message: 'No valid emails found' })});
 
         assembleMessageStub.resolves(mockAssembledMsg(mockMessage.messageId, mockMessage.destinationUserId));
         publishUserEventStub.resolves({ result: 'SUCCESS' });
@@ -386,7 +386,7 @@ describe('*** UNIT EMAIL MESSAGE DISPATCH ***', () => {
         expect(bulkUpdateStatusStub).to.have.been.calledWith([mockMessage.messageId], 'SENDING');
         expect(bulkUpdateStatusStub).to.have.been.calledWith([mockMessage.messageId], 'SENT');
 
-        expect(lamdbaInvokeStub.callCount).to.equal(2);
+        expect(lambdaInvokeStub.callCount).to.equal(2);
         expect(assembleMessageStub.callCount).to.equal(1);
     });
 
@@ -406,7 +406,7 @@ describe('*** UNIT EMAIL MESSAGE DISPATCH ***', () => {
 
         expect(getPendingOutboundMessagesStub).to.have.been.calledTwice;
         expect(bulkUpdateStatusStub).to.have.not.been.called;
-        expect(lamdbaInvokeStub).to.have.not.been.called;
+        expect(lambdaInvokeStub).to.have.not.been.called;
         expect(assembleMessageStub).to.have.not.been.called;
         expect(publishUserEventStub).to.have.not.been.called;
     });
@@ -424,7 +424,7 @@ describe('*** UNIT EMAIL MESSAGE DISPATCH ***', () => {
         expect(result).to.deep.equal(expectedResult);
 
         expect(getPendingOutboundMessagesStub).have.been.calledWithExactly('EMAIL', BATCH_SIZE);
-        expect(lamdbaInvokeStub).to.have.not.been.called;
+        expect(lambdaInvokeStub).to.have.not.been.called;
         expect(assembleMessageStub).to.have.not.been.called;
         expect(publishUserEventStub).to.have.not.been.called;
     });
@@ -492,8 +492,8 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
         getPendingOutboundMessagesStub.resolves([mockUserMessage]);
         bulkUpdateStatusStub.resolves([{ updatedTime: testUpdateTime }]);
 
-        lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testUserProfile) }) });
-        lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({ result: 'SUCCESS', failedMessageIds: [] })});
+        lambdaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testUserProfile) }) });
+        lambdaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({ result: 'SUCCESS', failedMessageIds: [] })});
         
         assembleMessageStub.resolves(mockMessageBase);
         publishUserEventStub.resolves({ result: 'SUCCESS' });
@@ -521,9 +521,9 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
         expect(bulkUpdateStatusStub).to.have.been.calledWith([testMessageId], 'SENT');
         expect(bulkUpdateStatusStub.callCount).to.equal(4);
 
-        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc('profile_fetch', false, { systemWideUserId: testUserId, includeContactMethod: true }));
-        expect(lamdbaInvokeStub).to.have.been.calledWith(emailMessagesInvocation);
-        expect(lamdbaInvokeStub).to.have.been.calledTwice;
+        expect(lambdaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc('profile_fetch', false, { systemWideUserId: testUserId, includeContactMethod: true }));
+        expect(lambdaInvokeStub).to.have.been.calledWith(emailMessagesInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledTwice;
 
         expect(assembleMessageStub).to.have.been.calledWith(mockUserMessage);
         
@@ -559,8 +559,8 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
 
         bulkUpdateStatusStub.resolves([{ updatedTime: testUpdateTime }]);
 
-        lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testUserProfile) }) });
-        lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({ result: 'SUCCESS', failedMessageIds: [] })});
+        lambdaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testUserProfile) }) });
+        lambdaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({ result: 'SUCCESS', failedMessageIds: [] })});
         
         assembleMessageStub.resolves(mockMessageBase);
         publishUserEventStub.resolves({ result: 'SUCCESS' });
@@ -627,9 +627,9 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
 
         getNoPushStub.resolves([]);
 
-        lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testEmailProfile) }) });
-        lamdbaInvokeStub.onSecondCall().returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testPhoneProfile) }) });
-        lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({ result: 'SUCCESS', failedMessageIds: [] })});
+        lambdaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testEmailProfile) }) });
+        lambdaInvokeStub.onSecondCall().returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testPhoneProfile) }) });
+        lambdaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({ result: 'SUCCESS', failedMessageIds: [] })});
 
         sendSmsStub.resolves({ result: 'SUCCESS' });
 
@@ -655,9 +655,9 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
             Payload: stringify({ emailMessages: [expectedEmail], emailWrapper: expectedWrapper })
         };
 
-        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc('profile_fetch', false, { systemWideUserId: 'user-1', includeContactMethod: true }));
-        expect(lamdbaInvokeStub).to.have.been.calledWith(expectedOutboundInvocation);
-        expect(lamdbaInvokeStub.callCount).to.equal(3);
+        expect(lambdaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc('profile_fetch', false, { systemWideUserId: 'user-1', includeContactMethod: true }));
+        expect(lambdaInvokeStub).to.have.been.calledWith(expectedOutboundInvocation);
+        expect(lambdaInvokeStub.callCount).to.equal(3);
 
         expect(sendSmsStub).to.have.been.calledOnceWithExactly({ phoneNumber: '+278384748264', message: 'Greetings. Welcome to Jupiter.' });
 
@@ -686,7 +686,7 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
         expect(getPendingOutboundMessagesStub).have.been.calledWith('EMAIL');
 
         expect(bulkUpdateStatusStub).to.have.not.been.called;
-        expect(lamdbaInvokeStub).to.have.not.been.called;
+        expect(lambdaInvokeStub).to.have.not.been.called;
         expect(assembleMessageStub).to.have.not.been.called;
         expect(publishUserEventStub).to.have.not.been.called;
         expect(getPushTokenStub).to.have.not.been.called;

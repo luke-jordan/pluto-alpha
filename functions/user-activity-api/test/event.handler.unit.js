@@ -13,7 +13,7 @@ const proxyquire = require('proxyquire').noCallThru();
 
 const helper = require('./test.helper');
 
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 const snsPublishStub = sinon.stub();
 const getQueueUrlStub = sinon.stub();
 
@@ -37,7 +37,7 @@ const redisSetStub = sinon.stub();
 
 class MockLambdaClient {
     constructor () { 
-        this.invoke = lamdbaInvokeStub; 
+        this.invoke = lambdaInvokeStub; 
     }
 }
 
@@ -91,7 +91,7 @@ const expectNoCalls = (...stubs) => {
 };
 
 const resetStubs = () => helper.resetStubs(
-    lamdbaInvokeStub, getQueueUrlStub, updateTagsStub, updateTxFlagsStub, fetchBSheetAccStub, fetchTransactionStub,
+    lambdaInvokeStub, getQueueUrlStub, updateTagsStub, updateTxFlagsStub, fetchBSheetAccStub, fetchTransactionStub,
     redisGetStub, redisSetStub, getHumanRefStub, sumAccountBalanceStub, sendEmailStub, sendSmsStub, 
     publishUserEventStub, sendEventToQueueStub, addToDlqStub
 );
@@ -111,14 +111,14 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         logger('Result: ', resultOfHandle);
         expect(resultOfHandle).to.exist;
         expect(resultOfHandle).to.deep.equal([{ statusCode: 200 }]);
-        expectNoCalls(lamdbaInvokeStub, sendEventToQueueStub, sendEmailStub, redisGetStub);
+        expectNoCalls(lambdaInvokeStub, sendEventToQueueStub, sendEmailStub, redisGetStub);
     });
 
     it('Ignores one among multiple account open events properly', async () => {
         const snsEvent = wrapEventSqs({ userId: mockUserId, eventType: 'PASSWORD_SET' });
         const resultOfHandle = await eventHandler.handleBatchOfQueuedEvents(snsEvent);
         expect(resultOfHandle).to.deep.equal([{ statusCode: 200 }]); // for now
-        expectNoCalls(lamdbaInvokeStub, sendEventToQueueStub, sendEmailStub, redisGetStub);
+        expectNoCalls(lambdaInvokeStub, sendEventToQueueStub, sendEmailStub, redisGetStub);
     });
 
     it('Registers account with third party, persists account id from third party, connects or creates friend requests', async () => {
@@ -161,8 +161,8 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         redisGetStub.onFirstCall().returns(JSON.stringify(testUserProfile));
         getHumanRefStub.resolves([{ humanRef: 'MKZ0010', accountId: 'some-id', tags: [] }]);
 
-        lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 202 })});
-        lamdbaInvokeStub.withArgs(friendReqInvocation).returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify(testFriendRequests)})})});
+        lambdaInvokeStub.returns({ promise: () => ({ StatusCode: 202 })});
+        lambdaInvokeStub.withArgs(friendReqInvocation).returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify(testFriendRequests)})})});
 
         const sqsEvent = wrapEventSqs({ userId: testUserId, eventType: 'USER_CREATED_ACCOUNT', timestamp: testMoment.valueOf() });
         const resultOfHandle = await eventHandler.handleBatchOfQueuedEvents(sqsEvent);
@@ -171,7 +171,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         expect(redisGetStub).to.have.been.calledOnceWithExactly(`USER_PROFILE::${testUserId}`);
         expect(getHumanRefStub).to.have.been.calledOnceWithExactly(testUserId);
         
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWith(friendReqInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWith(friendReqInvocation);
 
         const boostPayload = { eventType: 'USER_CREATED_ACCOUNT', userId: testUserId, accountId: 'some-id', eventContext: { accountId: 'some-id' }, timeInMillis: testMoment.valueOf() };
         expect(sendEventToQueueStub).to.have.been.calledOnceWith('boost_process_queue', [boostPayload]);
@@ -197,7 +197,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
 
         redisGetStub.onFirstCall().returns(JSON.stringify(testUserProfile));
         getHumanRefStub.resolves([{ humanRef: 'MKZ0010', accountId: 'some-id', tags: [] }]);
-        lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ accountNumber: 'MKZ0010' }) })});
+        lambdaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ accountNumber: 'MKZ0010' }) })});
         
         const accountEvent = { userId: testUserId, eventType: 'USER_CREATED_ACCOUNT', timestamp: testMoment.valueOf() };
         const resultOfHandle = await eventHandler.handleUserEvent(accountEvent);
@@ -208,7 +208,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         expect(getHumanRefStub).to.have.been.calledOnceWithExactly(testUserId);
     
         // note: balance sheet account _open_ is currently still via lambda event
-        expect(lamdbaInvokeStub).to.have.been.calledTwice; // friendship call content covered above
+        expect(lambdaInvokeStub).to.have.been.calledTwice; // friendship call content covered above
 
         const bsheetInvocation = helper.wrapLambdaInvoc(config.get('lambdas.createBalanceSheetAccount'), false, {
             idNumber: testUserProfile.nationalId,
@@ -216,7 +216,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
             firstNames: testUserProfile.personalName,
             humanRef: 'MKZ0010'
         });
-        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(bsheetInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledWithExactly(bsheetInvocation);
 
         expect(sendEventToQueueStub).to.have.been.calledOnce; // call payload is above
     });
@@ -244,7 +244,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
 
         redisGetStub.onFirstCall().returns(JSON.stringify(testUserProfile));
         getHumanRefStub.resolves([{ humanRef: 'MKZ0010', accountId: 'some-id', tags: [] }]);
-        lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ accountNumber: 'MKZ0010' }) })});
+        lambdaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ accountNumber: 'MKZ0010' }) })});
         updateTagsStub.resolves({ updatedTime: testUpdateTime });
 
         const accountEvent = { userId: testUserId, eventType: 'VERIFIED_AS_PERSON' };
@@ -252,7 +252,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         expect(resultOfHandle).to.exist;
 
         expect(getHumanRefStub).to.have.been.calledOnceWithExactly(testUserId);
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(bsheetInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(bsheetInvocation);
         expect(updateTagsStub).to.have.been.calledOnceWithExactly(testUserId, 'FINWORKS::MKZ0010');
         expect(redisGetStub).to.have.been.calledOnce; // args covered above
     });
@@ -274,7 +274,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         expect(resultOfHandle).to.exist;
 
         expect(getHumanRefStub).to.have.been.calledOnceWithExactly(testUserId);
-        expect(lamdbaInvokeStub).to.not.have.been.called;
+        expect(lambdaInvokeStub).to.not.have.been.called;
         expect(updateTagsStub).to.not.have.been.called;
         expect(redisGetStub).to.have.been.calledOnce; // args covered above
     });
@@ -313,8 +313,8 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
 
 
         getHumanRefStub.resolves([{ accountId: 'some-id', tags: [] }]); // ie some error removes human ref
-        lamdbaInvokeStub.onFirstCall().returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify(testUserProfile)})})});        
-        lamdbaInvokeStub.onSecondCall().returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify({ statusCode: 500 })})})});
+        lambdaInvokeStub.onFirstCall().returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify(testUserProfile)})})});        
+        lambdaInvokeStub.onSecondCall().returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify({ statusCode: 500 })})})});
         getQueueUrlStub.returns({ promise: () => ({ QueueUrl: 'test/queue/url' })});
 
         const sqsEvent = wrapEventSqs({ userId: testUserId, eventType: 'VERIFIED_AS_PERSON' });
@@ -323,8 +323,8 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
 
         expect(resultOfHandle).to.exist;
         expect(resultOfHandle).to.deep.equal([{ statusCode: 500 }]);
-        expect(lamdbaInvokeStub).to.have.been.calledWith(userProfileInvocation);
-        expect(lamdbaInvokeStub).to.have.been.calledWith(FWAccCreationInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledWith(userProfileInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledWith(FWAccCreationInvocation);
         expect(updateTagsStub).to.have.not.been.called;
         expect(addToDlqStub).to.have.been.calledOnce;
     });
@@ -357,8 +357,8 @@ describe('*** UNIT TEST SAVING EVENT HANDLING ***', () => {
             Payload: JSON.stringify({ operation, transactionDetails })
         };
 
-        lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 202 })});
-        lamdbaInvokeStub.withArgs(bsheetInvocation).returns({ promise: () => ({ Payload: JSON.stringify({ result: 'ADDED' })})});
+        lambdaInvokeStub.returns({ promise: () => ({ StatusCode: 202 })});
+        lambdaInvokeStub.withArgs(bsheetInvocation).returns({ promise: () => ({ Payload: JSON.stringify({ result: 'ADDED' })})});
 
         sendEmailStub.resolves({ result: 'SUCCESS' });
         
@@ -370,7 +370,7 @@ describe('*** UNIT TEST SAVING EVENT HANDLING ***', () => {
     const commonAssertions = (resultOfHandle) => {
         expect(resultOfHandle).to.deep.equal({ statusCode: 200 });
         expect(sendEmailStub).to.have.been.calledOnce;
-        expect(lamdbaInvokeStub).to.have.been.calledOnce; // for status
+        expect(lambdaInvokeStub).to.have.been.calledOnce; // for status
         expect(sendEventToQueueStub).to.have.been.calledTwice; // for boost and for balance sheet
         expect(fetchBSheetAccStub).to.have.been.calledOnce;
         expect(updateTxFlagsStub).to.have.been.calledOnce;
@@ -403,11 +403,11 @@ describe('*** UNIT TEST SAVING EVENT HANDLING ***', () => {
         // we just need the user status
         const testProfile = { body: JSON.stringify({ personalName: 'John', familyName: 'Nkomo', userStatus: 'ACCOUNT_OPENED' }) };
         redisGetStub.withArgs(`USER_PROFILE::${mockUserId}`).resolves(null);
-        lamdbaInvokeStub.onFirstCall().returns({ promise: () => ({ Payload: JSON.stringify(testProfile) }) });
+        lambdaInvokeStub.onFirstCall().returns({ promise: () => ({ Payload: JSON.stringify(testProfile) }) });
 
         const statusInstruct = { systemWideUserId: mockUserId, updatedUserStatus: { changeTo: 'USER_HAS_INITIATED_SAVE', reasonToLog: 'Saving event started' }};
         const statusUpdateInvoke = helper.wrapLambdaInvoc('profile_status_update', true, statusInstruct);
-        lamdbaInvokeStub.withArgs(statusUpdateInvoke).returns({ promise: () => ({ StatusCode: 202 })});
+        lambdaInvokeStub.withArgs(statusUpdateInvoke).returns({ promise: () => ({ StatusCode: 202 })});
 
         sendEmailStub.resolves({ result: 'SUCCESS' });
 
@@ -415,8 +415,8 @@ describe('*** UNIT TEST SAVING EVENT HANDLING ***', () => {
         expect(resultOfCall).to.deep.equal({ statusCode: 200 });
 
         const userProfileInvocation = helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: mockUserId, includeContactMethod: false });
-        expect(lamdbaInvokeStub).to.have.been.calledTwice;
-        expect(lamdbaInvokeStub).to.have.been.calledWith(userProfileInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledTwice;
+        expect(lambdaInvokeStub).to.have.been.calledWith(userProfileInvocation);
     });
 
     it('Handles saving event happy path correctly', async () => {
@@ -495,7 +495,7 @@ describe('*** UNIT TEST SAVING EVENT HANDLING ***', () => {
         expect(addToDlqStub).to.have.been.calledOnce;
         expect(sendEmailStub).to.not.have.been.called;
         expect(fetchBSheetAccStub).to.not.have.been.called;
-        expect(lamdbaInvokeStub).to.not.have.been.called;
+        expect(lambdaInvokeStub).to.not.have.been.called;
         expect(publishUserEventStub).to.not.have.been.called;
     });
 
@@ -518,7 +518,7 @@ describe('*** UNIT TEST WITHDRAWAL, FRIENDSHIP, BOOST EVENTS ***', () => {
         const expectedBankDetails = { account: 'Hello', accountHolder: 'John Nkomo' };
 
         redisGetStub.withArgs(`WITHDRAWAL_DETAILS::${mockUserId}`).resolves(JSON.stringify(cachedBankDetails));
-        lamdbaInvokeStub.withArgs(userProfileInvocation).returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify(testProfile)})})});
+        lambdaInvokeStub.withArgs(userProfileInvocation).returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify(testProfile)})})});
 
         sendEmailStub.resolves({ result: 'SUCCESS' });
 
@@ -541,7 +541,7 @@ describe('*** UNIT TEST WITHDRAWAL, FRIENDSHIP, BOOST EVENTS ***', () => {
 
         const statusInstruct = { systemWideUserId: mockUserId, updatedUserStatus: { changeTo: 'USER_HAS_WITHDRAWN', reasonToLog: 'User withdrew funds' }};
         const statusUpdateInvoke = helper.wrapLambdaInvoc('profile_status_update', true, statusInstruct);
-        lamdbaInvokeStub.withArgs(statusUpdateInvoke).returns({ promise: () => ({ StatusCode: 202 })});
+        lambdaInvokeStub.withArgs(statusUpdateInvoke).returns({ promise: () => ({ StatusCode: 202 })});
         
         const withdrawalEvent = {
             userId: mockUserId,
@@ -566,9 +566,9 @@ describe('*** UNIT TEST WITHDRAWAL, FRIENDSHIP, BOOST EVENTS ***', () => {
         
         expect(sendEmailStub).to.have.been.calledOnce; // todo : coverage
 
-        expect(lamdbaInvokeStub).to.have.callCount(2);
-        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(userProfileInvocation);
-        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(statusUpdateInvoke);
+        expect(lambdaInvokeStub).to.have.callCount(2);
+        expect(lambdaInvokeStub).to.have.been.calledWithExactly(userProfileInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledWithExactly(statusUpdateInvoke);
 
         expect(sendEventToQueueStub).to.have.been.calledTwice;
         expect(sendEventToQueueStub).to.have.been.calledWithExactly('boost_process_queue', [boostProcessPayload], true);
@@ -623,7 +623,7 @@ describe('*** UNIT TEST WITHDRAWAL, FRIENDSHIP, BOOST EVENTS ***', () => {
         const testAccountId = uuid();
         const timeNow = moment().valueOf();
 
-        lamdbaInvokeStub.throws(new Error('Negative contact'));
+        lambdaInvokeStub.throws(new Error('Negative contact'));
         getQueueUrlStub.returns({ promise: () => ({ QueueUrl: 'test/queue/url' })});
         addToDlqStub.resolves({ result: 'SENT' });
 
@@ -643,7 +643,7 @@ describe('*** UNIT TEST WITHDRAWAL, FRIENDSHIP, BOOST EVENTS ***', () => {
         logger('Result of investment on error:', resultOfHandle);
 
         expect(resultOfHandle).to.deep.equal([{ statusCode: 500 }]);
-        expect(lamdbaInvokeStub).to.have.been.calledOnce;
+        expect(lambdaInvokeStub).to.have.been.calledOnce;
         expect(sendEmailStub).to.have.not.been.called;
         expect(fetchBSheetAccStub).to.have.not.been.called;
         expect(updateTxFlagsStub).to.have.not.been.called;
@@ -687,8 +687,8 @@ describe('*** UNIT TEST WITHDRAWAL, FRIENDSHIP, BOOST EVENTS ***', () => {
         
         // const expectedInvokeAccepted = helper.wrapLambdaInvoc('boost_event_process', true, mockBoostEvent(friendshipEventInitiated));
         // const expectedInvokeInitiated = helper.wrapLambdaInvoc('boost_event_process', true, mockBoostEvent(friendshipEventAccepting));
-        // expect(lamdbaInvokeStub).to.have.been.calledWith(expectedInvokeAccepted);
-        // expect(lamdbaInvokeStub).to.have.been.calledWith(expectedInvokeInitiated);
+        // expect(lambdaInvokeStub).to.have.been.calledWith(expectedInvokeAccepted);
+        // expect(lambdaInvokeStub).to.have.been.calledWith(expectedInvokeInitiated);
     });
 
 });

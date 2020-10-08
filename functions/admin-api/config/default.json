@@ -43,7 +43,8 @@
         "withdrawAmount": "withdraw_update",
         "withdrawConfirm": "withdraw_end",
         "sendOutboundMessages": "outbound_comms_send",
-        "boostProcessEvent": "boost_event_process"
+        "boostProcessEvent": "boost_event_process",
+        "msgPrefsSet": "message_preferences"
     },
     "queues": {
         "boostProcess": "boost_process_queue"

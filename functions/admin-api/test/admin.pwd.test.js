@@ -17,11 +17,11 @@ const momentStub = sinon.stub();
 const sendSmsStub = sinon.stub();
 const sendEmailStub = sinon.stub();
 const publishEventStub = sinon.stub();
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 
 class MockLambdaClient {
     constructor () {
-        this.invoke = lamdbaInvokeStub;
+        this.invoke = lambdaInvokeStub;
     }
 }
 
@@ -46,7 +46,7 @@ describe('*** UNIT TEST ADMIN PASSWORD RESET ***', () => {
     const testAdminId = uuid();
     const testUserId = uuid();
 
-    beforeEach(() => helper.resetStubs(lamdbaInvokeStub, publishEventStub, sendEmailStub, sendSmsStub));
+    beforeEach(() => helper.resetStubs(lambdaInvokeStub, publishEventStub, sendEmailStub, sendSmsStub));
 
     const expectedProfile = {
         systemWideUserId: testUserId,
@@ -104,8 +104,8 @@ describe('*** UNIT TEST ADMIN PASSWORD RESET ***', () => {
         publishEventStub.resolves({ result: 'SUCCESS' });
         sendEmailStub.resolves({ result: 'SUCCESS' });
         sendSmsStub.resolves({ result: 'SUCCESS' });
-        lamdbaInvokeStub.onFirstCall().returns({ promise: () => mockPwdLambdaResponse });
-        lamdbaInvokeStub.onSecondCall().returns({ promise: () => helper.mockLambdaResponse(mockUserProfile) });
+        lambdaInvokeStub.onFirstCall().returns({ promise: () => mockPwdLambdaResponse });
+        lambdaInvokeStub.onSecondCall().returns({ promise: () => helper.mockLambdaResponse(mockUserProfile) });
 
         const requestBody = {
             adminUserId: testAdminId,
@@ -122,9 +122,9 @@ describe('*** UNIT TEST ADMIN PASSWORD RESET ***', () => {
         expect(resultOfUpdate).to.deep.equal(expectedDispatchResult);
 
         expect(publishEventStub).to.have.been.calledOnce;
-        expect(lamdbaInvokeStub).to.have.been.calledTwice;
-        expect(lamdbaInvokeStub).to.have.been.calledWith(expectedProfileInvocation);
-        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId, includeContactMethod: true }));
+        expect(lambdaInvokeStub).to.have.been.calledTwice;
+        expect(lambdaInvokeStub).to.have.been.calledWith(expectedProfileInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId, includeContactMethod: true }));
         expect(sendEmailStub).to.have.been.calledOnceWithExactly(expectedEmailArgs);
         expect(sendSmsStub).to.have.not.been.called;
     });
@@ -136,8 +136,8 @@ describe('*** UNIT TEST ADMIN PASSWORD RESET ***', () => {
         publishEventStub.resolves({ result: 'SUCCESS' });
         sendEmailStub.resolves({ result: 'SUCCESS' });
         sendSmsStub.resolves({ result: 'SUCCESS' });
-        lamdbaInvokeStub.onFirstCall().returns({ promise: () => mockPwdLambdaResponse });
-        lamdbaInvokeStub.onSecondCall().returns({ promise: () => helper.mockLambdaResponse(mockUserProfile) });
+        lambdaInvokeStub.onFirstCall().returns({ promise: () => mockPwdLambdaResponse });
+        lambdaInvokeStub.onSecondCall().returns({ promise: () => helper.mockLambdaResponse(mockUserProfile) });
 
         const requestBody = {
             adminUserId: testAdminId,
@@ -154,9 +154,9 @@ describe('*** UNIT TEST ADMIN PASSWORD RESET ***', () => {
         expect(resultOfUpdate).to.deep.equal(expectedDispatchResult);
      
         expect(publishEventStub).to.have.been.calledOnce;
-        expect(lamdbaInvokeStub).to.have.been.calledTwice;
-        expect(lamdbaInvokeStub).to.have.been.calledWith(expectedProfileInvocation);
-        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId, includeContactMethod: true }));
+        expect(lambdaInvokeStub).to.have.been.calledTwice;
+        expect(lambdaInvokeStub).to.have.been.calledWith(expectedProfileInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId, includeContactMethod: true }));
         expect(sendSmsStub).to.have.been.calledOnceWithExactly({ phoneNumber: '+278132324268', message: mockDispatchMsg });
         expect(sendEmailStub).to.have.not.been.called;
     });

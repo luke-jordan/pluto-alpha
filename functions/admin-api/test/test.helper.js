@@ -94,6 +94,7 @@ module.exports.wrapLambdaInvoc = (functionName, async, payload) => ({
 });
 
 module.exports.mockLambdaResponse = (body, statusCode = 200) => ({
+    StatusCode: 200,
     Payload: JSON.stringify({
         statusCode,
         body: JSON.stringify(body)
