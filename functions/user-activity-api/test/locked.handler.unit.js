@@ -189,6 +189,7 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
         fetchTxStub.resolves(testTx);
         lockTxStub.resolves({ updatedTime: testUpdatedTime });
 
+        fetchAccountsStub.resolves([testAccountId]);
         fetchFloatVarsStub.resolves({ bonusPoolSystemWideId: 'principal_bonus_pool' });
 
         lambdaInvokeStub.onFirstCall().returns({ promise: () => mockLambdaResponse(testUserProfile) });
@@ -261,7 +262,7 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
         };
 
         expect(publishStub).to.have.been.calledOnceWithExactly(testSystemId, 'USER_LOCKED_SAVE', expectedLogOptions);
-        expect(fetchAccountsStub).to.have.not.been.called;
+        expect(fetchAccountsStub).to.have.been.calledOnceWithExactly(testSystemId);
     });
 
     it('Http route, locks user saving event, verifies user-account ownership', async () => {
