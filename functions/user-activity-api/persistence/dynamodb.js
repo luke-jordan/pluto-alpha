@@ -27,7 +27,7 @@ const relevantFloatColumns = [
     'comparatorRates', 
     'bankDetails',
     'lockedSaveBonus',
-    'bonusPoolSystemWideId'
+    'bonusPoolSystemWideId',
     'haltNewSaves'
 ];
 
