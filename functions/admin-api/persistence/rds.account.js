@@ -87,6 +87,12 @@ module.exports.listAccounts = async ({ specifiedUserIds, includeNoSave, sinceMom
     return resultOfList.map((row) => camelCaseKeys(row));
 };
 
+module.exports.getAccountDetails = async (systemWideUserId) => {
+    const selectQuery = `select account_id, flags from ${config.get('tables.accountTable')} where owner_user_id = $1`;
+    const resultOfFetch = await rdsConnection.selectQuery(selectQuery, [systemWideUserId]);
+    return Array.isArray(resultOfFetch) && resultOfFetch.length > 0 ? camelCaseKeys(resultOfFetch[0]) : [];
+};
+
 module.exports.fetchPendingTransactionsForAllUsers = async (startTime, endTime) => {
     logger(`Fetching pending transactions for all users between start time: ${startTime} and end time: ${endTime}`);
 

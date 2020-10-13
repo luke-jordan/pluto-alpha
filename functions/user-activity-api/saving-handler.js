@@ -141,6 +141,15 @@ module.exports.initiatePendingSave = async (event) => {
       return { statusCode: 403 };
     }
 
+    // for present purposes, i.e., preventing further saves as winding down
+    if (config.get('payment.checkForHalt')) {
+      const { clientId, floatId } = ownerInfo;
+      const clientFloatVars = await dynamo.fetchFloatVarsForBalanceCalc(clientId, floatId);
+      if (clientFloatVars.haltNewSaves) { 
+        return invalidRequestResponse('Error! This float is no longer accepting saves');
+      }
+    }
+
     if (duplicateSave) {
       logger('Duplicate transaction found, was created at: ', duplicateSave.creationTime, 'full details: ', duplicateSave);
       const returnResult = {

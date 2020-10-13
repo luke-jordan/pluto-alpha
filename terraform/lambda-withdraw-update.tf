@@ -1,6 +1,6 @@
 variable "withdraw_update_lambda_function_name" {
   default = "withdraw_update"
-  type = "string"
+  type = string
 }
 
 resource "aws_lambda_function" "withdraw_update" {

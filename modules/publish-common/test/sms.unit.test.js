@@ -10,11 +10,11 @@ chai.use(require('sinon-chai'));
 
 const proxyquire = require('proxyquire');
 
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 
 class MockLambdaClient {
     constructor () {
-        this.invoke = lamdbaInvokeStub;
+        this.invoke = lambdaInvokeStub;
     }
 }
 
@@ -41,59 +41,59 @@ describe('*** UNIT TEST GENERIC SMS FUNCTION ***', () => {
     });
 
     beforeEach(() => {
-        lamdbaInvokeStub.reset();
+        lambdaInvokeStub.reset();
     });
 
     it('Sends sms message, sync', async () => {
         const mockLambdaPayload = { message: testMessage, phoneNumber: testPhoneNumber };
         const expectedInvocation = wrapLambdaInvoc(config.get('lambdas.sendOutboundMessages'), false, mockLambdaPayload);
-        lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse({ result: 'SUCCESS' })});
+        lambdaInvokeStub.returns({ promise: () => mockLambdaResponse({ result: 'SUCCESS' })});
 
         const resultOfDispatch = await eventPublisher.sendSms({ phoneNumber: testPhoneNumber, message: testMessage, sendSync: true });
   
         expect(resultOfDispatch).to.exist;
         expect(resultOfDispatch).to.deep.equal({ result: 'SUCCESS' });
 
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
     });
 
     it('Sends sms message, async', async () => {
         const mockLambdaPayload = { message: testMessage, phoneNumber: testPhoneNumber };
         const expectedInvocation = wrapLambdaInvoc(config.get('lambdas.sendOutboundMessages'), true, mockLambdaPayload);
-        lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 202, Payload: ''}) });
+        lambdaInvokeStub.returns({ promise: () => ({ StatusCode: 202, Payload: ''}) });
 
         const resultOfDispatch = await eventPublisher.sendSms({ phoneNumber: testPhoneNumber, message: testMessage });
   
         expect(resultOfDispatch).to.exist;
         expect(resultOfDispatch).to.deep.equal({ result: 'SUCCESS' });
 
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
     });
 
     it('Fails on bad Lambda response', async () => {
         const mockLambdaPayload = { message: testMessage, phoneNumber: testPhoneNumber };
         const expectedInvocation = wrapLambdaInvoc(config.get('lambdas.sendOutboundMessages'), true, mockLambdaPayload);
-        lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse({ result: 'ERROR' }, 500)});
+        lambdaInvokeStub.returns({ promise: () => mockLambdaResponse({ result: 'ERROR' }, 500)});
 
         const resultOfDispatch = await eventPublisher.sendSms({ phoneNumber: testPhoneNumber, message: testMessage });
 
         expect(resultOfDispatch).to.exist;
         expect(resultOfDispatch).to.deep.equal({ result: 'FAILURE' });
 
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
     });
 
     it('Catches thrown error', async () => {
         const mockLambdaPayload = { message: testMessage, phoneNumber: testPhoneNumber };
         const expectedInvocation = wrapLambdaInvoc(config.get('lambdas.sendOutboundMessages'), true, mockLambdaPayload);
-        lamdbaInvokeStub.throws(new Error('Connection error'));
+        lambdaInvokeStub.throws(new Error('Connection error'));
 
         const resultOfDispatch = await eventPublisher.sendSms({ phoneNumber: testPhoneNumber, message: testMessage });
 
         expect(resultOfDispatch).to.exist;
         expect(resultOfDispatch).to.deep.equal({ result: 'FAILURE' });
 
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
     });
 
 });

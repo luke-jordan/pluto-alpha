@@ -20,11 +20,11 @@ const getCurrentInstructionsStub = sinon.stub();
 const alterInstructionStatesStub = sinon.stub();
 const momentStub = sinon.stub();
 const uuidStub = sinon.stub();
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 
 class MockLambdaClient {
     constructor () {
-        this.invoke = lamdbaInvokeStub;
+        this.invoke = lambdaInvokeStub;
     }
 }
 
@@ -95,7 +95,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
 
     beforeEach(() => {
         testHelper.resetStubs(insertMessageInstructionStub, updateMessageInstructionStub,
-            getCurrentInstructionsStub, alterInstructionStatesStub, lamdbaInvokeStub, momentStub, uuidStub);
+            getCurrentInstructionsStub, alterInstructionStatesStub, lambdaInvokeStub, momentStub, uuidStub);
         resetEvent();
         uuidStub.returns(mockInstructionId);
         momentStub.returns(testTime.clone());
@@ -128,7 +128,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         });
 
         expect(insertMessageInstructionStub).to.have.been.calledOnce;
-        expect(lamdbaInvokeStub).to.have.not.been.called;
+        expect(lambdaInvokeStub).to.have.not.been.called;
     });
 
     it('Inserts new message intruction and populates messages table', async () => {
@@ -141,7 +141,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
             Payload: JSON.stringify({instructions: [{ instructionId: mockInstructionId }]})
         };
 
-        lamdbaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});
+        lambdaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});
         insertMessageInstructionStub.resolves([{ instructionId: mockInstructionId, creationTime: mockCreationTime }]);
 
         const resultOfInsertion = await handler.insertMessageInstruction(mockInstruction);
@@ -153,7 +153,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         });
 
         expect(insertMessageInstructionStub).to.have.been.calledOnceWithExactly(mockPersistableObject(mockInstruction));
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(mockInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(mockInvocation);
     });
 
     it('Inserts new message intruction and tests message process', async () => {
@@ -163,7 +163,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
             LogType: 'None',
             Payload: stringify({instructions: [{ instructionId: mockInstructionId, destinationUserId: mockUserId }]})
         };
-        lamdbaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});
+        lambdaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});
         insertMessageInstructionStub.resolves([{ instructionId: mockInstructionId, creationTime: mockCreationTime }]);
         mockInstruction.fireTestMessage = true;
 
@@ -177,7 +177,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
             message: { instructionId: mockInstructionId, creationTime: mockCreationTime }
         });
         expect(insertMessageInstructionStub).to.have.been.calledOnceWithExactly(mockPersistableObject(mockInstruction));
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(mockInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(mockInvocation);
     });
 
     it('Sets trigger context for simple event driven', async () => {
@@ -194,7 +194,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
             Payload: stringify({instructions: [{ instructionId: mockInstructionId, destinationUserId: mockUserId }]})
         };
 
-        lamdbaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});
+        lambdaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});
         insertMessageInstructionStub.resolves([{ instructionId: mockInstructionId, creationTime: mockCreationTime }]);
 
         const resultOfInsertion = await handler.insertMessageInstruction(mockInstruction);
@@ -208,7 +208,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         });
         
         expect(insertMessageInstructionStub).to.have.been.calledOnceWithExactly(testInstruction);
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(mockInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(mockInvocation);
     });
 
     it('Conduct whole insertion for complex event driven', async () => {
@@ -240,7 +240,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         testInstruction.triggerParameters = mockTriggerParameters; 
 
         expect(insertMessageInstructionStub).to.have.been.calledOnceWithExactly(testInstruction);
-        expect(lamdbaInvokeStub).to.not.have.been.called;
+        expect(lambdaInvokeStub).to.not.have.been.called;
     });
 
     it('Handles message sequences', async () => {
@@ -274,7 +274,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
             message: { instructionId: mockInstructionId, creationTime: mockCreationTime }
         });
         expect(insertMessageInstructionStub).to.have.been.calledOnce;
-        expect(lamdbaInvokeStub).to.have.not.been.called;
+        expect(lambdaInvokeStub).to.have.not.been.called;
     });
 
     it('Fails on unauthorized instruction insertion', async () => {
@@ -290,7 +290,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         expect(resultOfInsertion).to.have.property('headers');
         expect(resultOfInsertion.headers).to.deep.equal(testHelper.expectedHeaders);
         expect(insertMessageInstructionStub).to.have.not.been.called;
-        expect(lamdbaInvokeStub).to.have.not.been.called;
+        expect(lambdaInvokeStub).to.have.not.been.called;
     });
 
     it('should throw an error on missing required property value', async () => {
@@ -367,7 +367,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         testHelper.standardOkayChecks(resultOfInsertion, { message: 'Missing required property in message template definition: display' }, 500);
 
         expect(insertMessageInstructionStub).to.have.not.been.called;
-        expect(lamdbaInvokeStub).to.have.not.been.called;
+        expect(lambdaInvokeStub).to.have.not.been.called;
     });
 
     it('Fails where message sequence is not in array', async () => {
@@ -399,7 +399,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         testHelper.standardOkayChecks(resultOfInsertion, { message: expectedMessage }, 500);
 
         expect(insertMessageInstructionStub).to.have.not.been.called;
-        expect(lamdbaInvokeStub).to.have.not.been.called;
+        expect(lambdaInvokeStub).to.have.not.been.called;
     });
 
     it('Fails where message sequence array is empty', async () => {
@@ -431,7 +431,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         testHelper.standardOkayChecks(resultOfInsertion, { message: expectedMessage }, 500);
 
         expect(insertMessageInstructionStub).to.have.not.been.called;
-        expect(lamdbaInvokeStub).to.have.not.been.called;
+        expect(lambdaInvokeStub).to.have.not.been.called;
     });
 
     it('Fails on missing properties in messages within sequence', async () => {
@@ -465,7 +465,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         testHelper.standardOkayChecks(resultOfInsertion, { message: expectedMessage }, 500);
 
         expect(insertMessageInstructionStub).to.have.not.been.called;
-        expect(lamdbaInvokeStub).to.have.not.been.called;
+        expect(lambdaInvokeStub).to.have.not.been.called;
     });
 
     it('Fails where initial message in sequence has no subsequent messages', async () => {
@@ -495,7 +495,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         testHelper.standardOkayChecks(resultOfInsertion, { message: expectedMessage }, 500);
 
         expect(insertMessageInstructionStub).to.have.not.been.called;
-        expect(lamdbaInvokeStub).to.have.not.been.called;
+        expect(lambdaInvokeStub).to.have.not.been.called;
     });
 
     it('Fails on non continuous message sequence', async () => {
@@ -527,7 +527,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         testHelper.standardOkayChecks(resultOfInsertion, { message: expectedMessage }, 500);
 
         expect(insertMessageInstructionStub).to.have.not.been.called;
-        expect(lamdbaInvokeStub).to.have.not.been.called;
+        expect(lambdaInvokeStub).to.have.not.been.called;
     });
 
     it('should throw an error on missing templates', async () => {
@@ -555,7 +555,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         testHelper.standardOkayChecks(resultOfInsertion, { message: expectedMessage }, 500);
         
         expect(insertMessageInstructionStub).to.have.not.been.called;
-        expect(lamdbaInvokeStub).to.have.not.been.called;
+        expect(lambdaInvokeStub).to.have.not.been.called;
     });
 });
 
@@ -567,7 +567,7 @@ describe('*** UNIT TEST SCHEDULED MESSAGE INSERTION ***', () => {
 
     beforeEach(() => {
         testHelper.resetStubs(insertMessageInstructionStub, updateMessageInstructionStub, 
-            getCurrentInstructionsStub, alterInstructionStatesStub, lamdbaInvokeStub, momentStub, uuidStub);
+            getCurrentInstructionsStub, alterInstructionStatesStub, lambdaInvokeStub, momentStub, uuidStub);
         uuidStub.returns(mockInstructionId);
     });
 
@@ -599,7 +599,7 @@ describe('*** UNIT TEST SCHEDULED MESSAGE INSERTION ***', () => {
         });
 
         expect(insertMessageInstructionStub).to.have.been.calledOnce;
-        expect(lamdbaInvokeStub).to.have.not.been.called;
+        expect(lambdaInvokeStub).to.have.not.been.called;
     });
 });
 
@@ -612,7 +612,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION UPDATE ***', () => {
 
     beforeEach(() => {
         testHelper.resetStubs(insertMessageInstructionStub, updateMessageInstructionStub, 
-            getCurrentInstructionsStub, alterInstructionStatesStub, lamdbaInvokeStub, momentStub, uuidStub);
+            getCurrentInstructionsStub, alterInstructionStatesStub, lambdaInvokeStub, momentStub, uuidStub);
     });
 
     it('Updates message instruction', async () => {
@@ -781,7 +781,7 @@ describe('*** UNIT TESTING MESSAGE LISTING ****', () => {
 
     beforeEach(() => {
         testHelper.resetStubs(insertMessageInstructionStub, updateMessageInstructionStub, 
-            getCurrentInstructionsStub, alterInstructionStatesStub, lamdbaInvokeStub, momentStub, uuidStub);
+            getCurrentInstructionsStub, alterInstructionStatesStub, lambdaInvokeStub, momentStub, uuidStub);
     });
 
     it('Returns list of active user messages', async () => {

@@ -30,11 +30,11 @@ const isTournamentFinishedStub = sinon.stub();
 const endTournamentStub = sinon.stub();
 
 const publishMultiUserStub = sinon.stub();
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 
 class MockLambdaClient {
     constructor () {
-        this.invoke = lamdbaInvokeStub;
+        this.invoke = lambdaInvokeStub;
     }
 }
 
@@ -77,7 +77,7 @@ describe('*** UNIT TEST BOOST TOURNAMENT END HANDLING', () => {
 
     beforeEach(() => (testHelper.resetStubs(
         fetchBoostStub, findAccountsStub, findBoostLogsStub, updateBoostAccountStub, redemptionHandlerStub, publishMultiUserStub,
-        lamdbaInvokeStub, isTournamentFinishedStub, endTournamentStub, flipBoostStatusStub, findUsersForAccountsStub
+        lambdaInvokeStub, isTournamentFinishedStub, endTournamentStub, flipBoostStatusStub, findUsersForAccountsStub
     )));
 
     const formAccountResponse = (accountUserMap) => [{ boostId: testBoostId, accountUserMap }];

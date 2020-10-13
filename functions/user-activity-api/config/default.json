@@ -77,7 +77,8 @@
     },
     "payment": {
         "test": false,
-        "dummy": "OFF"
+        "dummy": "OFF",
+        "checkForHalt": false
     },
     "bank": {
         "hash": "sha512",

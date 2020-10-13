@@ -13,7 +13,7 @@ const proxyquire = require('proxyquire').noCallThru();
 
 const helper = require('./test.helper');
 
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 
 const snsPublishStub = sinon.stub();
 const safeEmailStub = sinon.stub();
@@ -26,7 +26,7 @@ const redisSetStub = sinon.stub();
 
 class MockLambdaClient {
     constructor () { 
-        this.invoke = lamdbaInvokeStub; 
+        this.invoke = lambdaInvokeStub; 
     }
 }
 
@@ -66,7 +66,7 @@ const wrapEventSqs = (event) => ({
     Records: [{ body: JSON.stringify({ Message: JSON.stringify(event) }) }]
 });
 
-const resetStubs = () => helper.resetStubs(lamdbaInvokeStub, fetchTransactionStub, redisGetStub, redisSetStub, safeEmailStub, sendEventToQueueStub);
+const resetStubs = () => helper.resetStubs(lambdaInvokeStub, fetchTransactionStub, redisGetStub, redisSetStub, safeEmailStub, sendEventToQueueStub);
 
 describe('*** UNIT TEST WITHDRAWAL CANCELLED ***', () => {
     const testTimestamp = moment().format();
@@ -89,7 +89,7 @@ describe('*** UNIT TEST WITHDRAWAL CANCELLED ***', () => {
         const profileInvocation = helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: mockUserId, includeContactMethod: false });
         const testProfile = { personalName: 'Jane', familyName: 'Doe', emailAddress: 'someonelse@jupitersave.com' };
         const testProfilePayload = { Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify(testProfile)}) };
-        lamdbaInvokeStub.returns({ promise: () => (testProfilePayload) });
+        lambdaInvokeStub.returns({ promise: () => (testProfilePayload) });
 
         fetchTransactionStub.resolves({ settlementStatus: 'CANCELLED', humanReference: 'JDOE1010' });
         safeEmailStub.resolves({ result: 'SUCCESS' });
@@ -110,7 +110,7 @@ describe('*** UNIT TEST WITHDRAWAL CANCELLED ***', () => {
 
         expect(resultOfHandle).to.exist;
         expect(resultOfHandle).to.deep.equal([{ statusCode: 200 }]);
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(profileInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(profileInvocation);
         expect(fetchTransactionStub).to.have.been.calledOnceWithExactly(testTxId);
         expect(safeEmailStub).to.have.been.calledOnceWithExactly(safeEmailParams);
     });
@@ -131,7 +131,7 @@ describe('*** UNIT TEST WITHDRAWAL CANCELLED ***', () => {
             context: { accountId: 'account-id', transactionId: 'transaction-id', newStatus: 'CANCELLED' }
         };
 
-        lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify(testProfile)})})});
+        lambdaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify(testProfile)})})});
 
         fetchTransactionStub.resolves({ settlementStatus: 'CANCELLED' });
 
@@ -139,7 +139,7 @@ describe('*** UNIT TEST WITHDRAWAL CANCELLED ***', () => {
         const resultOfHandle = await eventHandler.handleBatchOfQueuedEvents(sqsBatch);
         expect(resultOfHandle).to.exist;
 
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(userProfileInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(userProfileInvocation);
 
         const boostProcessPayload = {
             userId: mockUserId,

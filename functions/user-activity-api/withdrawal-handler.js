@@ -165,6 +165,14 @@ const updateBankAccountVerificationStatus = async (systemWideUserId, verificatio
 const checkAndLogBankVerification = async (systemWideUserId) => {
     const cachedDetails = await redis.get(systemWideUserId);
     const bankDetails = JSON.parse(cachedDetails);
+
+    // remove when not in present context (i.e., need to lock down admin route again)
+    if (!bankDetails) {
+        logger('Nothing to do, likely admin call');
+        const logContext = { cause: 'No bank details, must be admin manual process' };
+        await publisher.publishUserEvent(systemWideUserId, 'BANK_VERIFICATION_MANUAL', { context: logContext });
+        return;
+    }
     
     if (Reflect.has(bankDetails, 'verificationStatus') && bankDetails.verificationStatus !== 'PENDING') {
         logger('Already done a check, no need to repeat, return');
@@ -304,15 +312,17 @@ const calculateAvailableBalance = async (accountId, currency) => {
 module.exports.setWithdrawalBankAccount = async (event) => {
     try {
         logger('Initiating withdrawal ...');
-        const authParams = event.requestContext ? event.requestContext.authorizer : null;
-        if (!authParams || !authParams.systemWideUserId) {
+        const authParams = opsUtil.extractUserDetails(event);
+        if (!opsUtil.isDirectInvokeAdminOrSelf(event)) {
           return { statusCode: status('Forbidden'), message: 'User ID not found in context' };
         }
         
-        await publisher.publishUserEvent(authParams.systemWideUserId, 'WITHDRAWAL_EVENT_INITIATED');
         const withdrawalInformation = JSON.parse(event.body);
         const { accountId, bankDetails } = withdrawalInformation;
-        const { systemWideUserId } = authParams;
+        
+        // see note below about interaction of this and admin/self check above
+        const systemWideUserId = withdrawalInformation.systemWideUserId || authParams.systemWideUserId;
+        await publisher.publishUserEvent(systemWideUserId, 'WITHDRAWAL_EVENT_INITIATED');
 
         // dispatch a series of events: cache the bank account, send off bank account for verification, etc.
         const [userProfile, priorUserSaves, currency, floatVars] = await Promise.all([
@@ -383,16 +393,15 @@ const constructParametersForPotentialInterest = async (withdrawalInformation, ca
  */
 module.exports.setWithdrawalAmount = async (event) => {
     try {
-        const authParams = event.requestContext ? event.requestContext.authorizer : null;
-        if (!authParams || !authParams.systemWideUserId) {
+        const authParams = opsUtil.extractUserDetails(event);
+        if (!opsUtil.isDirectInvokeAdminOrSelf(event)) {
           return { statusCode: status('Forbidden'), message: 'User ID not found in context' };
         }
 
-        // do a check first, before proceeding onwards
-        const { systemWideUserId } = authParams;
-        logger('Setting withdrawal amount for user: ', systemWideUserId, ' with params: ', event.body);
-
-        const withdrawalInformation = JSON.parse(event.body);
+        const withdrawalInformation = opsUtil.extractParamsFromEvent(event);
+        const systemWideUserId = withdrawalInformation.systemWideUserId || authParams.systemWideUserId;
+        
+        logger('Setting withdrawal amount for user: ', systemWideUserId, ' with params: ', withdrawalInformation);
         
         if (!withdrawalInformation.amount || !withdrawalInformation.unit || !withdrawalInformation.currency) {
             logger('Withdrawal amount failed validation, responding with failure');
@@ -476,14 +485,16 @@ const abortTransactionIncludingLogging = async ({ transactionId, systemWideUserI
  */
 module.exports.confirmWithdrawal = async (event) => {
     try {
-        const authParams = event.requestContext ? event.requestContext.authorizer : null;
-        if (!authParams || !authParams.systemWideUserId) {
+        const authParams = opsUtil.extractUserDetails(event);
+        if (!opsUtil.isDirectInvokeAdminOrSelf(event)) {
           return { statusCode: status('Forbidden'), message: 'User ID not found in context' };
         }
 
-        const { systemWideUserId } = authParams;
-
         const withdrawalInformation = JSON.parse(event.body);
+
+        // if user is not admin and system wider user ID is present and not equal to user, check above will throw the error
+        const systemWideUserId = withdrawalInformation.systemWideUserId || authParams.systemWideUserId;
+
         if (!withdrawalInformation.transactionId) {
             return invalidRequestResponse('Requires a transaction Id');
         } else if (!withdrawalInformation.userDecision || ['CANCEL', 'WITHDRAW'].indexOf(withdrawalInformation.userDecision) < 0) {

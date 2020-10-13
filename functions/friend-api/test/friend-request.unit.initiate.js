@@ -20,7 +20,7 @@ const helper = require('./test-helper');
 const sendSmsStub = sinon.stub();
 const sendEmailStub = sinon.stub();
 const randomWordStub = sinon.stub();
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 const fetchProfileStub = sinon.stub();
 const ignoreRequestStub = sinon.stub();
 const publishUserEventStub = sinon.stub();
@@ -38,7 +38,7 @@ const testCreationTime = moment().format();
 
 class MockLambdaClient {
     constructor () {
-        this.invoke = lamdbaInvokeStub;
+        this.invoke = lambdaInvokeStub;
     }
 }
 
@@ -73,7 +73,7 @@ const handler = proxyquire('../friend-request-handler', {
 });
 
 const resetStubs = () => helper.resetStubs(fetchProfileStub, insertFriendRequestStub, countMutualFriendsStub, publishUserEventStub,
-    fetchActiveCodesStub, randomWordStub, sendEmailStub, sendSmsStub, fetchAllRequestsStub, ignoreRequestStub, lamdbaInvokeStub);
+    fetchActiveCodesStub, randomWordStub, sendEmailStub, sendSmsStub, fetchAllRequestsStub, ignoreRequestStub, lambdaInvokeStub);
 
 
 describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
@@ -156,7 +156,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
         insertFriendRequestStub.resolves(mockFriendRequest({ targetUserId: testTargetUserId, requestedShareItems }));
 
         const profileResult = { Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify({ systemWideUserId: testTargetUserId })})};
-        lamdbaInvokeStub.returns({ promise: () => profileResult });
+        lambdaInvokeStub.returns({ promise: () => profileResult });
 
         fetchProfileStub.withArgs({ systemWideUserId: testTargetUserId }).resolves(testProfile);
         publishUserEventStub.resolves({ result: 'SUCCESS' });
@@ -168,7 +168,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
         
         const expectedProfileCallBody = { phoneOrEmail: 'user@email.com', countryCode: 'ZAF' };
         const expectedLambdaInvoke = helper.wrapLambdaInvoc('profile_find_by_details', false, expectedProfileCallBody);
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedLambdaInvoke);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(expectedLambdaInvoke);
         expect(insertFriendRequestStub).to.have.been.calledOnceWithExactly(insertionArgs);
 
         expect(publishUserEventStub).to.have.been.calledTwice;
@@ -208,7 +208,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
 
         const testEvent = helper.wrapParamsWithPath({ targetPhoneOrEmail: '27632310922', requestedShareItems, customShareMessage }, 'initiate', testInitiatedUserId);
 
-        lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 404 })})});
+        lambdaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 404 })})});
         
         insertFriendRequestStub.withArgs(insertionArgs).resolves(mockFriendRequest({ targetContactDetails: testContactDetails, requestedShareItems }));
         fetchProfileStub.withArgs({ systemWideUserId: testInitiatedUserId }).resolves(testProfile);
@@ -225,7 +225,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
 
         const expectedProfileCallBody = { phoneOrEmail: '27632310922', countryCode: 'ZAF' };
         const expectedLambdaInvoke = helper.wrapLambdaInvoc('profile_find_by_details', false, expectedProfileCallBody);
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedLambdaInvoke);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(expectedLambdaInvoke);
         
         expect(sendSmsStub).to.have.been.calledOnceWithExactly(sendSmsArgs);
         
@@ -272,7 +272,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
         const testPayload = { targetPhoneOrEmail: 'juitsung@yuan.com', requestedShareItems, customShareMessage };
         const testEvent = helper.wrapParamsWithPath(testPayload, 'initiate', testInitiatedUserId);
 
-        lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 404 })})});
+        lambdaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 404 })})});
 
         insertFriendRequestStub.resolves(mockFriendRequest({ targetContactDetails: testContactDetails, requestedShareItems }));
         fetchProfileStub.withArgs({ systemWideUserId: testInitiatedUserId }).resolves(testProfile);
@@ -285,7 +285,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
 
         expect(insertionResult).to.deep.equal(helper.wrapResponse(expectedFriendReq));
 
-        expect(lamdbaInvokeStub).to.have.been.calledOnce;
+        expect(lambdaInvokeStub).to.have.been.calledOnce;
         expect(insertFriendRequestStub).to.have.been.calledOnceWithExactly(insertionArgs);
         expect(fetchProfileStub).to.have.been.calledOnceWithExactly({ systemWideUserId: testInitiatedUserId });
         expect(sendEmailStub).to.have.been.calledOnceWithExactly(sendEmailArgs);
@@ -329,7 +329,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
         const testPayload = { targetPhoneOrEmail: 'juitsung@yuan.com', requestedShareItems, customShareMessage };
         const testEvent = helper.wrapParamsWithPath(testPayload, 'initiate', testInitiatedUserId);
 
-        lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 404 })})});
+        lambdaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 404 })})});
 
         insertFriendRequestStub.resolves(mockFriendRequest({ targetContactDetails: testContactDetails, requestedShareItems }));
         
@@ -364,7 +364,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
         expect(insertionResult).to.exist;
         expect(insertionResult).to.deep.equal({ statusCode: 403 });
         expect(insertFriendRequestStub).to.have.not.been.called;
-        expect(lamdbaInvokeStub).to.not.have.been.called;
+        expect(lambdaInvokeStub).to.not.have.been.called;
     });
 
     it('Fails on invalid parameters', async () => {
@@ -374,7 +374,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
         expect(insertionResult).to.exist;
         expect(insertionResult).to.deep.equal(helper.wrapResponse(expectedResult, 500));
         expect(insertFriendRequestStub).to.have.not.been.called;
-        expect(lamdbaInvokeStub).to.not.have.been.called;
+        expect(lambdaInvokeStub).to.not.have.been.called;
     });
 
 });

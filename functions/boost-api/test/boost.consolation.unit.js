@@ -14,13 +14,13 @@ chai.use(require('sinon-chai'));
 const publishStub = sinon.stub();
 const publishMultiStub = sinon.stub();
 
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 
 const momentStub = sinon.stub();
 
 class MockLambdaClient {
     constructor () {
-        this.invoke = lamdbaInvokeStub;
+        this.invoke = lambdaInvokeStub;
     }
 }
 
@@ -70,7 +70,7 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
     });
 
     beforeEach(() => {
-        helper.resetStubs(lamdbaInvokeStub, publishMultiStub, publishStub, momentStub);
+        helper.resetStubs(lambdaInvokeStub, publishMultiStub, publishStub, momentStub);
         momentStub.returns(moment());
     });
 
@@ -118,8 +118,8 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
         const mockWinnerAllocationResult = mockAllocResult(1);
         const mockConsolationAllocResult = mockAllocResult(3);
 
-        lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse(mockWinnerAllocationResult)});
-        lamdbaInvokeStub.onSecondCall().returns({ promise: () => helper.mockLambdaResponse(mockConsolationAllocResult) });
+        lambdaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse(mockWinnerAllocationResult)});
+        lambdaInvokeStub.onSecondCall().returns({ promise: () => helper.mockLambdaResponse(mockConsolationAllocResult) });
 
         publishStub.resolves({ result: 'SUCCESS' });
 
@@ -150,9 +150,9 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
 
         expect(resultOfConsolation).to.deep.equal(expectedResult);
 
-        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(expectedBoostAllocInvocation);
-        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(expectedConsolationAllocInvocation);
-        expect(lamdbaInvokeStub).to.have.been.calledTwice;
+        expect(lambdaInvokeStub).to.have.been.calledWithExactly(expectedBoostAllocInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledWithExactly(expectedConsolationAllocInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledTwice;
 
         expect(publishStub.callCount).to.equal(4);
         expect(publishStub).to.have.been.calledWith('user-id-1', 'BOOST_REDEEMED');
@@ -188,8 +188,8 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
         const mockWinnerAllocationResult = mockAllocResult(1);
         const mockConsolationAllocResult = mockAllocResult(2);
 
-        lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse(mockWinnerAllocationResult)});
-        lamdbaInvokeStub.onSecondCall().returns({ promise: () => helper.mockLambdaResponse(mockConsolationAllocResult) });
+        lambdaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse(mockWinnerAllocationResult)});
+        lambdaInvokeStub.onSecondCall().returns({ promise: () => helper.mockLambdaResponse(mockConsolationAllocResult) });
         publishStub.resolves({ result: 'SUCCESS' });
 
         const mockBoost = {
@@ -243,9 +243,9 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
 
         expect(resultOfConsolation).to.deep.equal(expectedResult);
 
-        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(expectedBoostAllocInvocation);
-        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(expectedConsolationAllocInvocation);
-        expect(lamdbaInvokeStub).to.have.been.calledTwice;
+        expect(lambdaInvokeStub).to.have.been.calledWithExactly(expectedBoostAllocInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledWithExactly(expectedConsolationAllocInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledTwice;
         
         expect(publishStub.callCount).to.equal(4);
 
@@ -293,8 +293,8 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
         const mockAllocationResult = mockAllocResult(1);
         const mockConsoleResult = mockAllocResult(1);
 
-        lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse(mockAllocationResult)});
-        lamdbaInvokeStub.onSecondCall().returns({ promise: () => helper.mockLambdaResponse(mockConsoleResult)});
+        lambdaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse(mockAllocationResult)});
+        lambdaInvokeStub.onSecondCall().returns({ promise: () => helper.mockLambdaResponse(mockConsoleResult)});
 
         publishStub.resolves({ result: 'SUCCESS' });
 
@@ -343,9 +343,9 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
         };
         expect(resultOfConsolation).to.deep.equal(expectedResult);
 
-        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(expectedBoostAllocInvocation);
-        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(expectedConsolationAllocInvocation);
-        expect(lamdbaInvokeStub).to.have.been.calledTwice;
+        expect(lambdaInvokeStub).to.have.been.calledWithExactly(expectedBoostAllocInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledWithExactly(expectedConsolationAllocInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledTwice;
 
         expect(publishStub.callCount).to.equal(4);
     });

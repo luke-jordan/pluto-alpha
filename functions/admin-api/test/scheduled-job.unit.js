@@ -28,7 +28,7 @@ const getLastFloatAccrualTimeStub = sinon.stub();
 const fetchPendingTransactionsForAllUsersStub = sinon.stub();
 const rdsExpireHangingTransactionsStub = sinon.stub();
 
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 const momentStub = sinon.stub();
 
 const MILLIS_IN_DAY = 86400000;
@@ -36,7 +36,7 @@ const DAYS_IN_A_YEAR = 365;
 
 class MockLambdaClient {
     constructor () {
-        this.invoke = lamdbaInvokeStub;
+        this.invoke = lambdaInvokeStub;
     }
 }
 
@@ -102,7 +102,7 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
     };
 
     beforeEach(() => helper.resetStubs(
-        listClientFloatsStub, getFloatBalanceAndFlowsStub, getLastFloatAccrualTimeStub, lamdbaInvokeStub, momentStub,
+        listClientFloatsStub, getFloatBalanceAndFlowsStub, getLastFloatAccrualTimeStub, lambdaInvokeStub, momentStub,
         sendSystemEmailStub, rdsExpireHangingTransactionsStub, expireBoostsStub, publishMultiUserEventStub,
         checkAllFloatsStub, fetchUserIdsForAccountsStub, fetchPendingTransactionsForAllUsersStub
     ));
@@ -162,7 +162,7 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
             InvocationType: 'RequestResponse',
             Payload: JSON.stringify(testAccrualPayload)
         };
-        lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse(testAccrualInvocationResults) });
+        lambdaInvokeStub.returns({ promise: () => helper.mockLambdaResponse(testAccrualInvocationResults) });
         sendSystemEmailStub.resolves(sendSystemEmailReponse);
 
         const result = await handler.runRegularJobs(testEvent);
@@ -177,7 +177,7 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
         
         expect(momentStub).to.have.been.calledOnce;
        
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(argsForLambdaExecutingAccrualRate);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(argsForLambdaExecutingAccrualRate);
 
         const expectedAccrualData = {
             clientId: testClientId,

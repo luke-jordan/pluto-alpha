@@ -20,11 +20,11 @@ const insertBoostLogStub = sinon.stub();
 
 const redemptionHandlerStub = sinon.stub();
 
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 
 class MockLambdaClient {
     constructor () {
-        this.invoke = lamdbaInvokeStub;
+        this.invoke = lambdaInvokeStub;
     }
 }
 
@@ -57,7 +57,7 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
     const testAccountId = uuid();
 
     beforeEach(() => testHelper.resetStubs(
-        fetchBoostStub, fetchAccountStatusStub, updateBoostAccountStub, updateBoostRedeemedStub, getAccountIdForUserStub, redemptionHandlerStub, insertBoostLogStub, lamdbaInvokeStub
+        fetchBoostStub, fetchAccountStatusStub, updateBoostAccountStub, updateBoostRedeemedStub, getAccountIdForUserStub, redemptionHandlerStub, insertBoostLogStub, lambdaInvokeStub
     ));
 
     it('Redeems when game is won', async () => {
@@ -167,7 +167,7 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
         fetchBoostStub.resolves(boostAsRelevant);
         getAccountIdForUserStub.resolves(testAccountId);
         fetchAccountStatusStub.withArgs(testBoostId, testAccountId).resolves({ boostStatus: 'UNLOCKED' });
-        lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 202 }) });
+        lambdaInvokeStub.returns({ promise: () => ({ StatusCode: 202 }) });
 
         updateBoostAccountStub.resolves([{ boostId: testBoostId, updatedTime: moment().valueOf() }]);
 
@@ -206,7 +206,7 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
         expect(updateBoostRedeemedStub).to.not.have.been.called;
         
         const expiryInvocation = testHelper.wrapLambdaInvoc(config.get('lambdas.boostExpire'), true, { });
-        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(expiryInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledWithExactly(expiryInvocation);
     });
 
     it('Sends no status back if allows replays', async () => {
@@ -278,7 +278,7 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
         };
 
         expect(updateBoostAccountStub).to.have.been.calledOnceWithExactly([expectedUpdateInstruction]);
-        testHelper.expectNoCalls(redemptionHandlerStub, updateBoostRedeemedStub, lamdbaInvokeStub);
+        testHelper.expectNoCalls(redemptionHandlerStub, updateBoostRedeemedStub, lambdaInvokeStub);
     });
 
     it('Records response properly if it is a tournament with replay, but no status change', async () => {
@@ -308,7 +308,7 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
         fetchBoostStub.resolves(boostAsRelevant);
         getAccountIdForUserStub.resolves(testAccountId);
         fetchAccountStatusStub.withArgs(testBoostId, testAccountId).resolves({ boostStatus: 'PENDING' });
-        lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 202 }) });
+        lambdaInvokeStub.returns({ promise: () => ({ StatusCode: 202 }) });
 
         const expectedResult = { 
             result: 'TOURNAMENT_ENTERED', 
@@ -333,7 +333,7 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
         expect(redemptionHandlerStub).to.not.have.been.called;
         expect(updateBoostRedeemedStub).to.not.have.been.called;
 
-        expect(lamdbaInvokeStub).to.not.have.been.called; // expiry will have no way to know
+        expect(lambdaInvokeStub).to.not.have.been.called; // expiry will have no way to know
     });
 
     it('Fails on boost not unlocked and not allow repeat play', async () => {

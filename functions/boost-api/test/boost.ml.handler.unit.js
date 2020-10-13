@@ -18,7 +18,7 @@ const proxyquire = require('proxyquire').noCallThru();
 const tinyPostStub = sinon.stub();
 const findUserIdsStub = sinon.stub();
 const updateStatusStub = sinon.stub();
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 const findBoostLogStub = sinon.stub();
 const fetchMlBoostsStub = sinon.stub();
 const fetchAudienceStub = sinon.stub();
@@ -30,7 +30,7 @@ const momentStub = sinon.stub();
 
 class MockLambdaClient {
     constructor () {
-        this.invoke = lamdbaInvokeStub;
+        this.invoke = lambdaInvokeStub;
     }
 }
 
@@ -99,7 +99,7 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
     });
 
     beforeEach(() => helper.resetStubs(fetchMlBoostsStub, fetchAudienceStub, updateStatusStub, accountStatusStub, extractAccountIdsStub,
-        findUserIdsStub, tinyPostStub, findBoostLogStub, lamdbaInvokeStub, publishEventStub));
+        findUserIdsStub, tinyPostStub, findBoostLogStub, lambdaInvokeStub, publishEventStub));
 
     it('Handles ml boost that are only offered once', async () => {
         const mockAccountIds = ['account-id-1', 'account-id-2'];
@@ -144,7 +144,7 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
             body: JSON.stringify([{ 'user_id': 'user-id-1', 'should_offer': true }])
         });
 
-        lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 200 })});
+        lambdaInvokeStub.returns({ promise: () => ({ StatusCode: 200 })});
 
         momentStub.returns(mockMoment.clone());
         updateStatusStub.resolves([{ boostId: testBoostId, updatedTime: testUpdatedTime }]);
@@ -159,8 +159,8 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
         
         expect(tinyPostStub).to.have.been.calledOnceWithExactly(tinyOptions);
         
-        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(audienceInvocation);
-        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(msgInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledWithExactly(audienceInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledWithExactly(msgInvocation);
         
         expect(extractAccountIdsStub).to.have.been.calledOnceWithExactly(testAudienceId);
         
@@ -223,7 +223,7 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
             body: JSON.stringify([offerDecision('user-id-1', true), offerDecision('user-id-2', false), offerDecision('user-id-3', true)])
         });
 
-        lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 200 }) });
+        lambdaInvokeStub.returns({ promise: () => ({ StatusCode: 200 }) });
 
         updateStatusStub.resolves([{ boostId: testBoostId, updatedTime: testUpdatedTime }]);
 
@@ -243,8 +243,8 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
         expect(findUserIdsStub).to.have.been.calledWithExactly(['account-id-1', 'account-id-2', 'account-id-3'], true);
         expect(tinyPostStub).to.have.been.calledOnceWithExactly(tinyOptions);
         
-        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(audienceInvocation);
-        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(msgInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledWithExactly(audienceInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledWithExactly(msgInvocation);
         
         const expectedStatusUpdateInstruction = {
             boostId: testBoostId,
@@ -273,7 +273,7 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
 
         const mockMoment = moment();
         momentStub.returns(mockMoment.clone());
-        lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 200 }) });
+        lambdaInvokeStub.returns({ promise: () => ({ StatusCode: 200 }) });
         updateStatusStub.resolves([{ boostId: testBoostId, updatedTime: testUpdatedTime }]);
 
         const resultOfBoost = await handler.processMlBoosts({});

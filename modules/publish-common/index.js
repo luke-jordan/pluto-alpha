@@ -270,6 +270,7 @@ module.exports.sendToDlq = async (dlqName, event, err) => {
         logger('Sending to SQS DLQ: ', params);
         const sqsResult = await sqs.sendMessage(params).promise();
         logger('Result of sqs transmission:', sqsResult);
+        return { result: 'SUCCESS' };
     } catch (error) {
         logger('FATAL_ERROR: ', error);
     }

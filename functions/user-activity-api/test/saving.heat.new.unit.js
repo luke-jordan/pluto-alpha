@@ -1,11 +1,16 @@
 'use strict';
 
+
+// const logger = require('debug')('jupiter:heat:test');
 const moment = require('moment');
+
+const uuid = require('uuid/v4');
 const helper = require('./test.helper');
 
 const chai = require('chai');
 const sinon = require('sinon');
 chai.use(require('sinon-chai'));
+chai.use(require('chai-as-promised'));
 const { expect } = chai;
 
 const proxyquire = require('proxyquire');
@@ -16,7 +21,11 @@ const insertPointLogStub = sinon.stub();
 
 const establishUserStateStub = sinon.stub();
 const updateUserStateStub = sinon.stub();
+
+const obtainStateUsersStub = sinon.stub();
 const obtainUserLevelStub = sinon.stub();
+const obtainActivitiesStub = sinon.stub();
+const fetchUserLevelStub = sinon.stub();
 
 const sumPointsStub = sinon.stub();
 const pointHistoryStub = sinon.stub();
@@ -40,7 +49,10 @@ const handler = proxyquire('../heat-handler', {
         'obtainPointLevels': pointLevelsStub,
         'establishUserState': establishUserStateStub,
         'updateUserState': updateUserStateStub,
+        'obtainAllUsersWithState': obtainStateUsersStub,
         'obtainUserLevels': obtainUserLevelStub,
+        'obtainLatestActivities': obtainActivitiesStub,
+        'fetchUserLevel': fetchUserLevelStub,
         '@noCallThru': true
     },
     'aws-sdk': {
@@ -64,7 +76,7 @@ const handler = proxyquire('../heat-handler', {
 
 const resetStubs = () => helper.resetStubs(
     obtainPointsStub, insertPointLogStub, sumPointsStub, pointHistoryStub, filterEventStub, pointLevelsStub, establishUserStateStub, updateUserStateStub,
-    lambdaInvokeStub, redisGetStub, redisMGetStub, redisSetStub, publishEventStub
+    lambdaInvokeStub, redisGetStub, redisMGetStub, redisSetStub, publishEventStub, obtainUserLevelStub, obtainActivitiesStub, fetchUserLevelStub
 );
 
 describe('*** USER ACTIVITY *** INSERT POINT RECORD', () => {
@@ -124,7 +136,13 @@ describe('*** USER ACTIVITY *** INSERT POINT RECORD', () => {
         const expectedContext = { numberPoints: 7, awardedForEvent: 'SAVING_PAYMENT_SUCCESSFUL' }; // for the moment ; also, nb : filter out HEAT_POINTS_AWARDED on SQS sub
         expect(publishEventStub).to.have.been.calledOnceWithExactly('user1', 'HEAT_POINTS_AWARDED', { context: expectedContext });
 
-        // todo : cover the expectations
+        expect(redisMGetStub).to.have.been.calledOnceWithExactly(['USER_PROFILE::user1']);
+
+        expect(sumPointsStub).to.have.been.calledTwice;
+        expect(sumPointsStub).to.have.been.calledWithExactly(['user1'], sinon.match.any, sinon.match.any);
+        expect(sumPointsStub).to.have.been.calledWithExactly(['user1'], sinon.match.any);
+
+        expect(obtainUserLevelStub).to.have.been.calledOnceWithExactly(['user1']);
     });
 
     it('Handles single event, found, insert points, user cached', async () => {
@@ -187,7 +205,20 @@ describe('*** USER ACTIVITY *** INSERT POINT RECORD', () => {
         const expectedSecondInsertion = { eventPointMatchId: 'second', userId: 'userY', numberPoints: 5, eventType: 'BOOST_REDEEMED', referenceTime: mockRefTime2.format() };
         expect(insertPointLogStub).to.have.been.calledOnceWithExactly([expectedFirstInsertion, expectedSecondInsertion]);
 
+        const expectedFirstContext = { context: { awardedForEvent: 'SAVING_PAYMENT_SUCCESSFUL', numberPoints: 10 }};
+        const expectedSecondContext = { context: { awardedForEvent: 'BOOST_REDEEMED', numberPoints: 5 }};
+
         expect(publishEventStub).to.have.been.calledTwice;
+        expect(publishEventStub).to.have.been.calledWithExactly('user3', 'HEAT_POINTS_AWARDED', expectedFirstContext);
+        expect(publishEventStub).to.have.been.calledWithExactly('userY', 'HEAT_POINTS_AWARDED', expectedSecondContext);
+
+        expect(redisMGetStub).to.have.been.calledOnceWithExactly(['USER_PROFILE::user3', 'USER_PROFILE::userY']);
+
+        expect(sumPointsStub).to.have.been.calledTwice;
+        expect(sumPointsStub).to.have.been.calledWithExactly(['user3', 'userY'], sinon.match.any, sinon.match.any);
+        expect(sumPointsStub).to.have.been.calledWithExactly(['user3', 'userY'], sinon.match.any);
+
+        expect(obtainUserLevelStub).to.have.been.calledOnceWithExactly(['user3', 'userY']);
     });
 
     it('Does nothing when none found', async () => {
@@ -206,48 +237,68 @@ describe('*** USER ACTIVITY *** FETCH POINTS', () => {
     beforeEach(resetStubs);
 
     it('Sums for single user, simple, with default dates, via API call', async () => {
-        // obtaining etc is covered above, so here just stub the cache
-        redisGetStub.resolves(JSON.stringify({ clientId: 'some_client', floatId: 'some_float' }));
-        
-        sumPointsStub.resolves({ 'user1': 105 });
-        // should also test case of no levels set
-        pointLevelsStub.resolves([{ minimumPoints: 50, name: 'Cold' }, { minimumPoints: 100, name: 'Hot' }]);
+       const mockUserLevel = {
+            userPointsPrior: 25,
+            userPointsCurrent: 36,
+            levelName: 'Cold',
+            levelColor: 'Blue',
+            levelColorCode: '#0000ff',
+            minumumPoints: 50
+        };
+
+        fetchUserLevelStub.resolves(mockUserLevel);
 
         const mockEvent = helper.wrapQueryParamEvent(null, 'user1');
 
         const resultOfHandle = await handler.fetchUserHeat(mockEvent);
         const resultBody = helper.standardOkayChecks(resultOfHandle);
-        expect(resultBody).to.deep.equal({ currentPoints: 105, currentLevel: { minimumPoints: 100, name: 'Hot' } });
 
-        // not super happy about the nulls, but cleanest for now to retain flexibility in here
-        expect(sumPointsStub).to.have.been.calledOnceWithExactly(['user1'], null, null);
-        expect(pointLevelsStub).to.have.been.calledOnceWithExactly('some_client', 'some_float');
+        expect(resultBody).to.deep.equal({ currentLevel: mockUserLevel });
+        expect(fetchUserLevelStub).to.have.been.calledOnceWithExactly('user1');
     });
 
-    it('Sums for multiple users, specified dates', async () => {
-        const mockStart = moment().subtract(30, 'days');
-        const mockEnd = moment();
+    it('Sums for multiple users', async () => {
+        const mockLatestEventTime = moment().format();
+        
+        const mockUserIds = ['user1', 'user5', 'user10'];
+        const mockTxTypesToInclude = ['USER_SAVING_EVENT', 'WITHDRAWAL'];
 
         const mockEvent = {
-            userIds: ['user1', 'user5', 'user10'],
-            startTimeMillis: mockStart.valueOf(),
-            endTimeMillis: mockEnd.valueOf()
+            userIds: mockUserIds,
+            includeLastActivityOfType: mockTxTypesToInclude
         };
 
-        const pointSums = { 'user1': 105, 'user5': 200, 'user10': 3 }; 
-        sumPointsStub.resolves(pointSums);
+        obtainUserLevelStub.resolves({ 'user1': 'hot-level-id', 'user5': 'blazing-level-id', 'user10': 'cold-level-id' });
 
-        const pointLevels = [{ minimumPoints: 100, name: 'Hot' }, { minimumPoints: 200, name: 'Blazing' }];
-        pointLevelsStub.resolves(pointLevels);
+        obtainActivitiesStub.resolves({
+            user1: { USER_SAVING_EVENT: { creationTime: mockLatestEventTime }},
+            user5: { WITHDRAWAL: { creationTime: mockLatestEventTime }},
+            user10: { USER_SAVING_EVENT: { creationTime: mockLatestEventTime }}
+        });
 
         const resultOfHandle = await handler.fetchUserHeat(mockEvent);
-        const { userPointMap } = resultOfHandle;
-        
-        expect(userPointMap).to.deep.equal({
-            'user1': { currentPoints: 105, currentLevel: pointLevels[0] },
-            'user5': { currentPoints: 200, currentLevel: pointLevels[1] },
-            'user10': { currentPoints: 3, currentLevel: null }
+        expect(resultOfHandle).to.deep.equal({
+            statusCode: 200,
+            userHeatMap: {
+                user1: { currentLevel: 'hot-level-id', recentActivity: { USER_SAVING_EVENT: { creationTime: mockLatestEventTime }}},
+                user5: { currentLevel: 'blazing-level-id', recentActivity: { WITHDRAWAL: { creationTime: mockLatestEventTime }}},
+                user10: { currentLevel: 'cold-level-id', recentActivity: { USER_SAVING_EVENT: { creationTime: mockLatestEventTime }}}
+            }
         });
+
+        expect(obtainUserLevelStub).to.have.been.calledOnceWithExactly(mockUserIds, true);
+        expect(obtainActivitiesStub).to.have.been.calledOnceWithExactly(mockUserIds, mockTxTypesToInclude);
+    });
+
+    it('Handles invalid events and thrown errors', async () => {
+        // On invalid event
+        await expect(handler.fetchUserHeat({ httpMethod: 'GET' })).to.eventually.deep.equal({ statusCode: 403 });
+
+        fetchUserLevelStub.throws(new Error('Error!'));
+        const mockEvent = helper.wrapQueryParamEvent(null, 'user1');
+
+        // On thrown error
+        await expect(handler.fetchUserHeat(mockEvent)).to.eventually.deep.equal({ statusCode: 500 });
     });
 
     // not needed yet
@@ -272,6 +323,80 @@ describe('*** USER ACTIVITY *** FETCH POINTS', () => {
         };
 
         expect(resultBody).to.deep.equal(mockPointHistory.map(transformPointRecord));
+    });
+
+});
+
+describe('*** UNIT TEST HEAT CALCULATION ***', async () => {
+    const testSystemId = uuid();
+    const testLevelId = uuid();
+
+    const mockClientId = 'client-id';
+    const mockFloatId = 'float-id';
+
+    const mockProfileStringified = JSON.stringify({
+        systemWideUserId: testSystemId,
+        clientId: mockClientId,
+        floatId: mockFloatId
+    });
+
+    const mockProfileResult = helper.mockLambdaResponse(JSON.stringify({ body: mockProfileStringified }));
+
+    beforeEach(() => helper.resetStubs(obtainStateUsersStub, redisMGetStub, lambdaInvokeStub, pointLevelsStub, sumPointsStub));
+
+    it('Calculates heat score for all users', async () => {
+        obtainStateUsersStub.resolves([testSystemId]);
+
+        redisMGetStub.onFirstCall().resolves([]);
+        redisMGetStub.onSecondCall().resolves([mockProfileStringified]);
+
+        lambdaInvokeStub.returns({ promise: () => mockProfileResult });
+        pointLevelsStub.resolves([{ levelId: testLevelId, clientId: mockClientId, floatId: mockFloatId }]);
+
+        sumPointsStub.onFirstCall().resolves({ [testSystemId]: 55 });
+        sumPointsStub.onSecondCall().resolves({ [testSystemId]: 144 });
+
+        obtainUserLevelStub.resolves({ [testSystemId]: 'basic-level-id' });
+
+        pointLevelsStub.resolves([
+            { levelId: 'basic-level-id', minimumPoints: 50, name: 'Cold' },
+            { levelId: 'higher-level-id', minimumPoints: 100, name: 'Hot' }
+        ]);
+
+        const resultOfCalc = await handler.calculateHeatStateForAllUsers({});
+        expect(resultOfCalc).to.deep.equal({ statusCode: 200, usersUpdated: 1 });
+
+        expect(obtainStateUsersStub).to.have.been.calledOnceWithExactly();
+
+        expect(redisMGetStub).to.have.been.calledTwice;
+        expect(redisMGetStub.getCall(0).args[0]).to.deep.equal([`USER_PROFILE::${testSystemId}`]);
+        expect(redisMGetStub.getCall(1).args[0]).to.deep.equal([`USER_PROFILE::${testSystemId}`]);
+
+        const expectedProfileInvocation = helper.wrapLambdaInvoc('profile_fetch', false, { systemWideUserId: testSystemId });
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(expectedProfileInvocation);
+
+        expect(sumPointsStub).to.have.been.calledTwice;
+        expect(sumPointsStub).to.have.been.calledWithExactly([testSystemId], sinon.match.any, sinon.match.any);
+        expect(sumPointsStub).to.have.been.calledWithExactly([testSystemId], sinon.match.any);
+
+        const expectedPublishContext = {
+            context: {
+                priorLevel: { levelId: 'basic-level-id', minimumPoints: 50, name: 'Cold' },
+                newLevel: { levelId: 'higher-level-id', minimumPoints: 100, name: 'Hot' }
+            }
+        };
+
+        expect(publishEventStub).to.have.been.calledOnceWithExactly(testSystemId, 'HEAT_LEVEL_UP', expectedPublishContext);
+    });
+
+    it('Handles thrown errors and no users with state', async () => {
+        obtainStateUsersStub.resolves([]);
+        await expect(handler.calculateHeatStateForAllUsers({ })).to.eventually.deep.equal({ statusCode: 200, usersUpdated: 0 });
+
+        obtainStateUsersStub.reset();
+
+        obtainStateUsersStub.throws(new Error('Error!'));
+        await expect(handler.calculateHeatStateForAllUsers({ })).to.eventually.deep.equal({ statusCode: 500, error: JSON.stringify('Error!') });
     });
 
 });

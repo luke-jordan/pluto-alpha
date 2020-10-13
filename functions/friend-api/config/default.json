@@ -27,7 +27,7 @@
     },
     "lambdas": {
         "sendOutboundMessages": "outbound_comms_send",
-        "calcSavingHeat": "user_save_heat_fetch",
+        "calcSavingHeat": "user_save_heat_read",
         "lookupByContactDetails": "profile_find_by_details",
         "referralDetails": "referral_verify"
     },
