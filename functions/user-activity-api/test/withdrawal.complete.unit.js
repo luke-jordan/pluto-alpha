@@ -49,7 +49,7 @@ const handler = proxyquire('../withdrawal-handler', {
     },
     './persistence/rds': {
         'fetchTransaction': fetchTransactionStub,
-        'sumAccountBalance': sumAccountBalanceStub,
+        'calculateWithdrawalBalance': sumAccountBalanceStub,
         'getOwnerInfoForAccount': getOwnerInfoForAccountStub,
         'addTransactionToAccount': addTransactionToAccountStub,
         'updateTxSettlementStatus': updateTxSettlementStatusStub,

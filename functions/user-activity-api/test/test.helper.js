@@ -52,9 +52,9 @@ module.exports.wrapEvent = (requestBody, systemWideUserId, userRole = 'ORDINARY_
     }
 });
 
-module.exports.standardOkayChecks = (result) => {
+module.exports.standardOkayChecks = (result, statusCode = 200) => {
     expect(result).to.exist;
-    expect(result).to.have.property('statusCode', 200);
+    expect(result).to.have.property('statusCode', statusCode);
     expect(result).to.have.property('body');
 
     if (result.headers) {

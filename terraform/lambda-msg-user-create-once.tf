@@ -8,9 +8,9 @@ resource "aws_lambda_function" "message_user_create_once" {
   function_name                  = var.message_user_create_once_lambda_function_name
   role                           = aws_iam_role.message_user_create_once_role.arn
   handler                        = "message-creating-handler.createUserMessages"
-  memory_size                    = 256
+  memory_size                    = 512
   runtime                        = "nodejs12.x"
-  timeout                        = 60
+  timeout                        = 90
   tags                           = {"environment"  = "${terraform.workspace}"}
   
   s3_bucket = "pluto.lambda.${terraform.workspace}"

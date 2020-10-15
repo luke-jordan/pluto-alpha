@@ -322,13 +322,13 @@ describe('*** UNIT TEST ADMIN FLOAT HANDLER ***', () => {
     });
 
     it('Adjusts accrual vars', async () => {
-
         const existingFloatVars = {
             currency: testCurrency,
             accrualRateAnnualBps: '',
             bonusPoolShareOfAccrual: '',
             clientShareOfAccrual: '',
-            prudentialFactor: ''
+            prudentialFactor: '',
+            lockedSaveBonus: { }
         };
 
         const updateFloatVarsArgs = {
@@ -338,7 +338,8 @@ describe('*** UNIT TEST ADMIN FLOAT HANDLER ***', () => {
                 accrualRateAnnualBps: '',
                 bonusPoolShareOfAccrual: '',
                 clientShareOfAccrual: '',
-                prudentialFactor: ''
+                prudentialFactor: '',
+                lockedSaveBonus: { 30: 1.01, 60: 1.05, 90: 1.1 }
             }
         };
 
@@ -352,7 +353,8 @@ describe('*** UNIT TEST ADMIN FLOAT HANDLER ***', () => {
                     accrualRateAnnualBps: existingFloatVars.accrualRateAnnualBps,
                     bonusPoolShareOfAccrual: existingFloatVars.bonusPoolShareOfAccrual,
                     clientShareOfAccrual: existingFloatVars.clientShareOfAccrual,
-                    prudentialFactor: existingFloatVars.prudentialFactor
+                    prudentialFactor: existingFloatVars.prudentialFactor,
+                    lockedSaveBonus: existingFloatVars.lockedSaveBonus
                 },
                 newState: updateFloatVarsArgs.newPrincipalVars
             }
@@ -380,7 +382,8 @@ describe('*** UNIT TEST ADMIN FLOAT HANDLER ***', () => {
                     accrualRateAnnualBps: '',
                     bonusPoolShareOfAccrual: '',
                     clientShareOfAccrual: '',
-                    prudentialFactor: ''
+                    prudentialFactor: '',
+                    lockedSaveBonus: { 30: 1.01, 60: 1.05, 90: 1.1 }
                 }
             })
         };
