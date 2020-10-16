@@ -189,7 +189,6 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
         fetchTxStub.resolves(testTx);
         lockTxStub.resolves({ updatedTime: testUpdatedTime });
 
-        fetchAccountsStub.resolves([testAccountId]);
         fetchFloatVarsStub.resolves({ bonusPoolSystemWideId: 'principal_bonus_pool' });
 
         lambdaInvokeStub.onFirstCall().returns({ promise: () => mockLambdaResponse(testUserProfile) });
@@ -202,6 +201,8 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
 
         const testEventBody = { transactionId: testTxId, daysToLock: 30, lockBonusAmount: testBonusAmount };
         const testEvent = testHelper.wrapEvent(testEventBody, testSystemId, 'ORDINARY_USER');
+        
+        Reflect.deleteProperty(testEvent, 'httpMethod'); // added by test helper for withdrawal tests
 
         const resultOfLock = await handler.lockSettledSave(testEvent);
         const resultBody = testHelper.standardOkayChecks(resultOfLock);
@@ -262,7 +263,7 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
         };
 
         expect(publishStub).to.have.been.calledOnceWithExactly(testSystemId, 'USER_LOCKED_SAVE', expectedLogOptions);
-        expect(fetchAccountsStub).to.have.been.calledOnceWithExactly(testSystemId);
+        expect(fetchAccountsStub).to.have.not.been.called;
     });
 
     it('Http route, locks user saving event, verifies user-account ownership', async () => {
@@ -371,6 +372,7 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
         
         const invalidTx = { ...testTx };
         invalidTx.transactionType = 'WITHDRAWAL';
+
         fetchTxStub.resolves(invalidTx);
         fetchAccountsStub.resolves([testAccountId]);
 
@@ -380,6 +382,7 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
 
         invalidTx.transactionType = 'USER_SAVING_EVENT';
         invalidTx.settlementStatus = 'PENDING';
+
         fetchTxStub.resolves(invalidTx);
 
         // On non-SETTLED transaction
