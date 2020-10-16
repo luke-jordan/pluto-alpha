@@ -245,7 +245,7 @@ module.exports.calculateWithdrawalBalance = async (accountId, currency, time = m
 
     // For obtaining pending withdrawals
     const sumWithdrawalsQuery = `select sum(amount), unit from ${accountTxTable} where account_id = $1 and currency = $2 and ` +
-        `settlement_status = $3 and transaction_type = $4 and group by unit`;
+        `settlement_status = $3 and transaction_type = $4 group by unit`;
 
     const balanceQueryValues = [accountId, currency, 'SETTLED', 'ACCRUED', time.unix(), ...transTypesToInclude];
     const withdrawalQueryValues = [accountId, currency, 'PENDING', 'WIHDRAWAL'];

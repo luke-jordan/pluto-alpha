@@ -143,7 +143,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
             'transaction_type in ($6, $7, $8, $9, $10) group by unit';
 
         const expectedWithdrawalsQuery = 'select sum(amount), unit from transaction_data.core_transaction_ledger where account_id = $1 and ' +
-            'currency = $2 and settlement_status = $3 and transaction_type = $4 and group by unit';
+            'currency = $2 and settlement_status = $3 and transaction_type = $4 group by unit';
 
         expect(queryStub).to.have.been.calledTwice;
         expect(queryStub).to.have.been.calledWithExactly(expectedBalanceQuery, [testAccountId, 'USD', 'SETTLED', 'ACCRUED', testTime.unix(), ...expectedTxTypes]);
