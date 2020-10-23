@@ -61,7 +61,7 @@ to generate a README from all the docstrings in the directory. For more informat
 
 # Core APIs and Lambdas
 
-## Admin API Core Lambdas
+## Admin API λ-Functions
 
 
 <dl>
@@ -110,7 +110,7 @@ return with the function ooutput.</p>
 </dl>
 
 
-## Audience Selection Lambdas
+## Audience Selection λ-Functions
 
 
 <dl>
@@ -128,7 +128,7 @@ If the audience is to be persisted, set persistSelection to true and pass these 
 </dd>
 </dl>
 
-## Boost API Lambdas
+## Boost API λ-Functions
 
 
 <dl>
@@ -223,7 +223,7 @@ has been exceeded. If any are found they are removed from cache.</p>
 </dd>
 </dl>
 
-## Float API Lambdas
+## Float API λ-Functions
 
 
 <dl>
@@ -273,7 +273,7 @@ would then be distributed to users.</p>
 </dl>
 
 
-## Friend API Lambdas
+## Friend API λ-Functions
 
 
 <dl>
@@ -333,7 +333,7 @@ and API GW resource proliferation. Note: try-catch robustness is inside the meth
 </dd>
 </dl>
 
-## Referral API Lambdas
+## Referral API λ-Functions
 
 
 <dl>
@@ -356,7 +356,7 @@ it to existing users. As it is, future users can have boost from their referral 
 </dd>
 </dl>
 
-## Snippet API Lambdas
+## Snippet API λ-Functions
 
 
 <dl>
@@ -398,7 +398,7 @@ those are returned first, if not then previously viewed snippets are returned.</
 </dd>
 </dl>
 
-## Third Party Related Lambdas
+## Third Party Related λ-Functions
 
 <dl>
 <dt><a href="#initialize">initialize(event)</a></dt>
@@ -442,7 +442,7 @@ This format also applies the below sendEmails function.</p>
 </dd>
 </dl>
 
-## User Activity API Lambdas
+## User Activity API λ-Functions
 
 
 <dl>
@@ -484,7 +484,7 @@ and cache savings heat scores for all accounts.</p>
 </dd>
 </dl>
 
-## User Existence API Lambdas
+## User Existence API λ-Functions
 
 ## Functions
 
@@ -497,7 +497,7 @@ and cache savings heat scores for all accounts.</p>
 </dd>
 </dl>
 
-## User Messaging API Lambdas
+## User Messaging API λ-Functions
 
 <dl>
 <dt><a href="#placeParamsInTemplate">placeParamsInTemplate(template, passedParameters)</a></dt>
