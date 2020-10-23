@@ -38,7 +38,7 @@ All the tests should be running successfully.
 
 
 
-## TERRAFORM
+## Terraform
 After applying terraform:
 `terraform workspace select staging`
 `terraform apply -var 'deploy_code_commit_hash=058c7f3729dd375e0983e09b276a2a3caa0df3dd' -var 'aws_access_key=****************' -var 'aws_secret_access_key=***********' -var 'db_user=aaabbbccc' -var 'db_password=aaabbbccc'`
@@ -60,21 +60,8 @@ $ jsdoc2md *.js > README.md
 to generate a README from all the docstrings in the directory. For more information see https://github.com/jsdoc2md/jsdoc-to-markdown
 
 # Core APIs and Lambdas
-Within the functions directory are lambda functions that constitute the following APIs
-* Admin API
-* Audience Selection 
-* Boost API
-* Float API
-* Friend API
-* Referral API
-* Snippet API
-* Third Party Related Lambdas
-* User Activity API
-* User Existence API
-* User Messaging API
 
 ## Admin API Core Lambdas
----
 
 
 <dl>
@@ -124,7 +111,7 @@ return with the function ooutput.</p>
 
 
 ## Audience Selection Lambdas
----
+
 
 <dl>
 <dt><a href="#addTableAndClientId">addTableAndClientId(selection, clientId, tableKey)</a></dt>
@@ -142,7 +129,7 @@ If the audience is to be persisted, set persistSelection to true and pass these 
 </dl>
 
 ## Boost API Lambdas
----
+
 
 <dl>
 <dt><a href="#listBoosts">listBoosts(event)</a></dt>
@@ -237,7 +224,7 @@ has been exceeded. If any are found they are removed from cache.</p>
 </dl>
 
 ## Float API Lambdas
----
+
 
 <dl>
 <dt><a href="#accrue">accrue(event)</a></dt>
@@ -287,7 +274,7 @@ would then be distributed to users.</p>
 
 
 ## Friend API Lambdas
----
+
 
 <dl>
 <dt><a href="#fetchFriendAlert">fetchFriendAlert()</a></dt>
@@ -347,7 +334,7 @@ and API GW resource proliferation. Note: try-catch robustness is inside the meth
 </dl>
 
 ## Referral API Lambdas
----
+
 
 <dl>
 <dt><a href="#defineReferralContext">defineReferralContext(params)</a></dt>
@@ -370,7 +357,7 @@ it to existing users. As it is, future users can have boost from their referral 
 </dl>
 
 ## Snippet API Lambdas
----
+
 
 <dl>
 <dt><a href="#listSnippets">listSnippets(event)</a></dt>
@@ -412,7 +399,7 @@ those are returned first, if not then previously viewed snippets are returned.</
 </dl>
 
 ## Third Party Related Lambdas
----
+
 <dl>
 <dt><a href="#initialize">initialize(event)</a></dt>
 <dd><p>This function enables verifications on consumer bank account details to determine the state and 
@@ -456,7 +443,7 @@ This format also applies the below sendEmails function.</p>
 </dl>
 
 ## User Activity API Lambdas
----
+
 
 <dl>
 <dt><a href="#balance">balance(event)</a></dt>
@@ -498,7 +485,7 @@ and cache savings heat scores for all accounts.</p>
 </dl>
 
 ## User Existence API Lambdas
----
+
 ## Functions
 
 <dl>
@@ -511,7 +498,7 @@ and cache savings heat scores for all accounts.</p>
 </dl>
 
 ## User Messaging API Lambdas
----
+
 <dl>
 <dt><a href="#placeParamsInTemplate">placeParamsInTemplate(template, passedParameters)</a></dt>
 <dd><p>NOTE: This is only for custom params supplied with the message-creation event. System defined params should be left alone.
