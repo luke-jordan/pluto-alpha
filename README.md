@@ -36,29 +36,6 @@ N/B: The above command is contained in the file `link_common_modules.sh` for eas
 
 All the tests should be running successfully.
 
-
-
-## Terraform
-After applying terraform:
-`terraform workspace select staging`
-`terraform apply -var 'deploy_code_commit_hash=058c7f3729dd375e0983e09b276a2a3caa0df3dd' -var 'aws_access_key=****************' -var 'aws_secret_access_key=***********' -var 'db_user=aaabbbccc' -var 'db_password=aaabbbccc'`
-
-API requests can be sent to :
-`curl -vvv -X POST  https://[staging|master].jupiterapp.net/verify-jwt`
-
-## Generating Documentation From Docstrings
-
-Each function directory includes a README file created from the docstrings within the code. To regenenate the README after making changes to the code and related docstrings, install jsdoc2md using the command
-
-```
-$ npm install --save-dev jsdoc-to-markdown
-```
- then run
- ```
-$ jsdoc2md *.js > README.md
-```
-to generate a README from all the docstrings in the directory. For more information see https://github.com/jsdoc2md/jsdoc-to-markdown
-
 # Project Structure
 
 The core codebase consists of the following directories:
@@ -95,3 +72,23 @@ The `modules` directory contains utility functions used in all APIs within the `
 
 ## Terraform
 The `terraform` directory contains all terraform configuration files for resource allocations and deployments.
+
+After applying terraform:
+`terraform workspace select staging`
+`terraform apply -var 'deploy_code_commit_hash=058c7f3729dd375e0983e09b276a2a3caa0df3dd' -var 'aws_access_key=****************' -var 'aws_secret_access_key=***********' -var 'db_user=aaabbbccc' -var 'db_password=aaabbbccc'`
+
+API requests can be sent to :
+`curl -vvv -X POST  https://[staging|master].jupiterapp.net/verify-jwt`
+
+## Generating Documentation From Docstrings
+
+Each function directory includes a README file created from the docstrings within the code. To regenenate the README after making changes to the code and related docstrings, install jsdoc2md using the command
+
+```
+$ npm install --save-dev jsdoc-to-markdown
+```
+ then run
+ ```
+$ jsdoc2md *.js > README.md
+```
+to generate a README from all the docstrings in the directory. For more information see https://github.com/jsdoc2md/jsdoc-to-markdown
