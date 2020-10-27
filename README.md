@@ -1,13 +1,13 @@
-![Alt text](logo.svg?raw=true "Jupiter Logo")
+<!--lint disable no-literal-urls-->
+<p align="center">
+  <!-- <a href="https://jupitersave.com/"> -->
+    <img alt="Jupiter Savings" src="logo.svg" width="400" height="300"/>
+  </a>
+</p>
 
-# POLICIES AND LOCAL DEVELOPMENT
+Jupiter is a savings app that rewards you for saving.
 
-The master branch is protected and will not accept pull requests from any branch aside from staging. 
-
-The staging branch is not protected against pushes but will accept pull requests from development branches. Every PR to staging requires code review 
-security and linting to all pass, as well as at least one code review. New branches should fork from the current staging branch. 
-Pull requests should aim for 400-500 lines of code at a time to facilitate reviews. Larger PRs will require more reviews before acceptance.
-It is mandatory that all developers use git-secrets as a safe-guard against credentials being commited to the repository. Installation and usage instructions may be found here https://github.com/awslabs/git-secrets .
+<!-- ![Alt text](logo.svg?raw=true "Jupiter Logo") -->
 
 ## Quickstart => Install packages, link modules and run tests
 Please install Nodejs if you don't have it installed: <https://nodejs.org/en/>.
@@ -38,7 +38,7 @@ N/B: The above command is contained in the file `link_common_modules.sh` for eas
 
 All the tests should be running successfully.
 
-# Project Structure
+## Project Structure
 
 The core codebase consists of the following directories:
 - `functions`
@@ -47,24 +47,24 @@ The core codebase consists of the following directories:
 
 The contents of these directories are described below.
 
-## Functions
+### Functions
 All core APIs may be found in the `functions` directory. These APIs are listed below, with a brief description of their core operations.
 
-- `admin api` (API for admin interface Functions include float, savings-heat, and user management)
-- `audience selection` (API for boost audience selection)
-- `boost api` (API for core boost operations, e.g., boost creation, automation and redemption. Also includes boost admin functions)
-- `float api` (API for float management, handles float accruals, allocations and capitalizations)
-- `friend api` (API for friends feature, contains functions for friend management, e.g., friend requests and alerts)
-- `referral api` (API for referral code management, includes functions for redeeming referral based boosts)
-- `snippet api` (API for snippet feature, contains functions for snippet management)
-- `third parties` (This directory contains functions that handle third party API integrations)
-- `user activity api` (API for user interface, e.g., functions for fetching user balance, history, pending transactions, savings heat, locking saves and general user events)
-- `user existence api` (Contains functions for validating user existence)
-- `user maessaging api` (API for user message management, i.e., system notifications to user. Includes functions for message creation, selection and triggering)
+- `admin-api` (API for admin interface Functions include float, savings-heat, and user management)
+- `audience-selection` (API for boost audience selection)
+- `boos-api` (API for core boost operations, e.g., boost creation, automation and redemption. Also includes boost admin functions)
+- `float-api` (API for float management, handles float accruals, allocations and capitalizations)
+- `friend-api` (API for friends feature, contains functions for friend management, e.g., friend requests and alerts)
+- `referral-api` (API for referral code management, includes functions for redeeming referral based boosts)
+- `snippet-api` (API for snippet feature, contains functions for snippet management)
+- `third-parties` (This directory contains functions that handle third party API integrations)
+- `user-activity-api` (API for user interface, e.g., functions for fetching user balance, history, pending transactions, savings heat, locking saves and general user events)
+- `user-existence-api` (Contains functions for validating user existence)
+- `user-maessaging-api` (API for user message management, i.e., system notifications to user. Includes functions for message creation, selection and triggering)
 
 The `functions` directory also includes a `db-migration` and `warmup` folder. `db-migration` contains functions for Postgresql database migrations. `warmup` contains functions responsible for keeping connections to core lambdas warm (fast).
 
-## Modules
+### Modules
 The `modules` directory contains utility functions used in all APIs within the `functions` directory. These include persistence functions for database management, event/response wrappers, and dispatch functions for event publishing and system notifications (SMS and email). The contents of the `modules` directory are briefly described below.
 
 - `dynamo-common` (Contains essential functions that make it easier to work with dynamo-db)
@@ -72,7 +72,7 @@ The `modules` directory contains utility functions used in all APIs within the `
 - `publish-common` (Dispatch functions for event publishing and system notifications)
 - `ops-util-common` (Core utilities used throughout the codebase, e.g., event/response wrappers, currency unit converters, event parsers, and common validators)
 
-## Terraform
+### Terraform
 The `terraform` directory contains all Terraform configuration files for resource allocations and deployments.
 
 After applying terraform:
@@ -82,7 +82,7 @@ After applying terraform:
 API requests can be sent to :
 `curl -vvv -X POST  https://[staging|master].jupiterapp.net/verify-jwt`
 
-# Integerations
+## Integerations
 
 The APIs listed above also take advantage of external APIs that provide the following services:
 
@@ -92,26 +92,35 @@ The APIs listed above also take advantage of external APIs that provide the foll
 - Message Dispatching (SendGrid)
 - Payment URLs (Ozow)
 
-## Jupiter Auth Integerations
+### Jupiter Auth Integerations
 
 This API provides authentication services for user registration, user login (token and one-time-password generation) as well as servifces for user profile and password management.
 
 
-## pVerify Integrations
+### pVerify Integrations
 
-Provides Know-Your-User services such as user identity validation and bank verifications.
+The pbVerify Credit Bureau API provides Know-Your-User services such as user identity validation and bank verifications.
 
-## Finworks Integrations
+### Finworks Integrations
 
 The Finworks API provides services for managing funds within a users account. It is used to handle user deposits, withdrawals, and get the market value of a user account.
 
-## SendGrid Integerations
+### SendGrid Integerations
 
-Provides functions for the robust handling of email dispatches.
+SendGrid provides functions for the robust handling of email dispatches.
 
-## Ozow Integrations
+### Ozow Integrations
 
-Used to generate a secure url from which a user can make a deposit into their account.
+Ozow's API is used to generate a secure url from which a user can make a deposit into their account.
+
+## Contributing to Jupiter: Policies and Local Development
+
+The master branch is protected and will not accept pull requests from any branch aside from staging. 
+
+The staging branch is not protected against pushes but will accept pull requests from development branches. Every PR to staging requires code review 
+security and linting to all pass, as well as at least one code review. New branches should fork from the current staging branch. 
+Pull requests should aim for 400-500 lines of code at a time to facilitate reviews. Larger PRs will require more reviews before acceptance.
+It is mandatory that all developers use git-secrets as a safe-guard against credentials being commited to the repository. Installation and usage instructions may be found here https://github.com/awslabs/git-secrets .
 
 ## Generating Documentation From Docstrings
 
