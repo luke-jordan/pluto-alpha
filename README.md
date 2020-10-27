@@ -98,18 +98,18 @@ API requests can be sent to :
 
 The APIs listed above also take advantage of external APIs that provide the following services:
 
-1. Authentication (Jupiter Auth Service)
-2. KYC Verifications (pbVerify Credit Bureau)
-3. User Account Management (Finworks)
-4. Message Dispatching (SendGrid)
-5. Payment URLs (Ozow)
+- [Authentication (Jupiter Auth Service)](#jupiter-auth-integrations) 
+- [KYC Verifications (pbVerify Credit Bureau)](#pbverify-integrations)
+- [User Account Management (Finworks)](#finworks-integrations)
+- [Message Dispatching (SendGrid)](#sendgrid-integrations)
+- [Payment URLs (Ozow)](#ozow-integrations)
 
-### Jupiter Auth Integerations
+### Jupiter Auth Integrations
 
 This API provides authentication services for user registration, user login (token and one-time-password generation) as well as servifces for user profile and password management.
 
 
-### pVerify Integrations
+### pbVerify Integrations
 
 The pbVerify Credit Bureau API provides Know-Your-User services such as user identity validation and bank verifications.
 
@@ -117,7 +117,7 @@ The pbVerify Credit Bureau API provides Know-Your-User services such as user ide
 
 The Finworks API provides services for managing funds within a users account. It is used to handle user deposits, withdrawals, and get the market value of a user account.
 
-### SendGrid Integerations
+### SendGrid Integrations
 
 SendGrid provides functions for the robust handling of email dispatches.
 
