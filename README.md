@@ -98,11 +98,11 @@ API requests can be sent to :
 
 The APIs listed above also take advantage of external APIs that provide the following services:
 
-- [Authentication (Jupiter Auth Service)](#jupiter-auth-integrations) 
-- [KYC Verifications (pbVerify Credit Bureau)](#pbverify-integrations)
-- [User Account Management (Finworks)](#finworks-integrations)
-- [Message Dispatching (SendGrid)](#sendgrid-integrations)
-- [Payment URLs (Ozow)](#ozow-integrations)
+1. Authentication ([Jupiter Auth Service](#jupiter-auth-integrations))
+2. KYC Verifications ([pbVerify Credit Bureau](#pbverify-integrations))
+3. User Account Management ([Finworks](#finworks-integrations))
+4. Message Dispatching ([SendGrid](#sendgrid-integrations))
+5. Payment URLs ([Ozow](#ozow-integrations))
 
 ### Jupiter Auth Integrations
 
