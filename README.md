@@ -1,13 +1,6 @@
-<!--lint disable no-literal-urls-->
-<p align="center">
-  <!-- <a href="https://jupitersave.com/"> -->
-    <img alt="Jupiter Savings" src="logo.svg" width="400" height="300"/>
-  </a>
-</p>
+![Alt text](logo.svg?raw=true "Jupiter Logo")
 
 Jupiter is a savings app that rewards you for saving.
-
-<!-- ![Alt text](logo.svg?raw=true "Jupiter Logo") -->
 
 ## Quickstart => Install packages, link modules and run tests
 Please install Nodejs if you don't have it installed: <https://nodejs.org/en/>.
