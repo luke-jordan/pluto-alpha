@@ -19,24 +19,8 @@
   * [Generating Documentation From Docstrings](#generating-documentation-from-docstrings)
 
 
-
-Jupiter Auth Integerations
-This API provides authentication services for user registration, user login (token and one-time-password generation) as well as servifces for user profile and password management.
-
-pVerify Integrations
-The pbVerify Credit Bureau API provides Know-Your-User services such as user identity validation and bank verifications.
-
-Finworks Integrations
-The Finworks API provides services for managing funds within a users account. It is used to handle user deposits, withdrawals, and get the market value of a user account.
-
-SendGrid Integerations
-SendGrid provides functions for the robust handling of email dispatches.
-
-Ozow Integrations
-Ozow's API is used to generate a secure url from which a user can make a deposit into their account.
-
 ## Quick Start
-This quickstart civers the basics of installing packages, linking modules, and running tests.
+This quickstart covers the basics of installing packages, linking modules, and running tests.
 
 Please install Nodejs if you don't have it installed: <https://nodejs.org/en/>.
 
