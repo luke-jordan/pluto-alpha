@@ -9,7 +9,7 @@
 
 <!-- ![Alt text](logo.svg?raw=true "Jupiter Logo") -->
 
-# Table of Contents
+## Table of Contents
 
 * [Quick Start](#quick-start)
 * [Project Structure](#project-structure)
