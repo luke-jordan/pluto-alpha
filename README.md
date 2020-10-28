@@ -84,7 +84,7 @@ The `modules` directory contains utility functions used in all APIs within the `
 - `publish-common` (Dispatch functions for event publishing and system notifications)
 - `ops-util-common` (Core utilities used throughout the codebase, e.g., event/response wrappers, currency unit converters, event parsers, and common validators)
 
-### Terraform and CI
+### Terraform and CircleCI
 The `terraform` directory contains all Terraform configuration files for resource allocations and deployments.
 
 After applying terraform:
@@ -93,6 +93,10 @@ After applying terraform:
 
 API requests can be sent to :
 `curl -vvv -X POST  https://[staging|master].jupiterapp.net/verify-jwt`
+
+
+With regards to CircleCI there is a hidden `.circleci` folder in the project's root directory which contains a `config.yml` used in specifying how each commit to the repository should be linted, tested, and deployed to staging. When creating new Jupiter methods or APIs make sure that they are included in the `config.yml` file where necessary. The `.circleci` folder also contains helper files used in merging packages, installing dependencies, as well as testing and linting. These files help ensure the CI process runs as quickly and efficiently as possible. **Understanding these configuration files is essential.**
+
 
 ## Integrations
 
