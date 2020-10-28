@@ -1,17 +1,17 @@
 variable "save_initiate_lambda_function_name" {
   default = "save_initiate"
-  type = "string"
+  type = string
 }
 
 resource "aws_lambda_function" "save_initiate" {
 
   function_name                  = "${var.save_initiate_lambda_function_name}"
-  role                           = "${aws_iam_role.save_initiate_role.arn}"
+  role                           = aws_iam_role.save_initiate_role.arn
   handler                        = "saving-handler.initiatePendingSave"
   memory_size                    = 256
   runtime                        = "nodejs12.x"
   timeout                        = 60
-  tags                           = {"environment"  = "${terraform.workspace}"}
+  tags                           = {"environment"  = terraform.workspace}
   
   s3_bucket = "pluto.lambda.${terraform.workspace}"
   s3_key = "user_activity_api/${var.deploy_code_commit_hash}.zip"
@@ -23,7 +23,7 @@ resource "aws_lambda_function" "save_initiate" {
         jsonencode(
           {
               "aws": {
-                "region": "${var.aws_default_region[terraform.workspace]}"
+                "region": var.aws_default_region[terraform.workspace]
               },
               "db": {
                 "host": local.database_config.host,
@@ -38,10 +38,10 @@ resource "aws_lambda_function" "save_initiate" {
               },
               "publishing": {
                 "userEvents": {
-                    "topicArn": "${var.user_event_topic_arn[terraform.workspace]}"
+                    "topicArn": var.user_event_topic_arn[terraform.workspace]
                 },
                 "hash": {
-                  "key": "${var.log_hashing_secret[terraform.workspace]}"
+                  "key": var.log_hashing_secret[terraform.workspace]
                 }
               },
               "cache": {

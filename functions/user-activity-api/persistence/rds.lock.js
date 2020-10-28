@@ -35,6 +35,8 @@ module.exports.findAccountsForUser = async (userId = 'some-user-uid') => {
 module.exports.lockTransaction = async (transactionId, daysToLock) => {
     const lockedUntilTime = moment().add(daysToLock, 'days').format();
 
+    logger('Locking ID: ', transactionId, ' until: ', lockedUntilTime);
+    
     const updateDef = { 
         key: { transactionId },
         value: { settlementStatus: 'LOCKED', lockedUntilTime },

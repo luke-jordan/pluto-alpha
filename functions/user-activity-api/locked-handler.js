@@ -17,8 +17,6 @@ AWS.config.update({ region: config.get('aws.region') });
 
 const lambda = new AWS.Lambda();
 
-const extractLambdaBody = (lambdaResult) => JSON.parse(JSON.parse(lambdaResult['Payload']).body);
-
 const wrapLambdaInvocation = (payload, nameKey, sync = true) => ({
     FunctionName: config.get(`lambdas.${nameKey}`),
     InvocationType: sync ? 'RequestResponse' : 'Event',
@@ -57,8 +55,8 @@ const calculateBonusForLockedSave = (lockedSaveInterestMap, baseAmount) => {
     const resultOfCalculation = lockedSaveInterestMap.map((daysAndInterest) => {
         const interestRate = Object.values(daysAndInterest)[0];
         const daysToCalculate = Object.keys(daysAndInterest)[0];
-        const calculatedInterestEarned = interestHelper.calculateEstimatedInterestEarned({ ...baseAmount, daysToCalculate }, 'HUNDREDTH_CENT', interestRate);
-        return { [daysToCalculate]: calculatedInterestEarned };
+        const { amount, unit, currency } = interestHelper.calculateEstimatedInterestEarned({ ...baseAmount, daysToCalculate }, 'HUNDREDTH_CENT', interestRate);
+        return { [daysToCalculate]: { amount: Math.round(amount), unit, currency } };
     });
 
     return resultOfCalculation;
@@ -87,10 +85,12 @@ module.exports.previewBonus = async (event) => {
         const { clientId, floatId, baseAmount, daysToPreview } = opsUtil.extractParamsFromEvent(event);
         logger('Previewing locked save bonus for client id: ', clientId, ' and float id: ', floatId);
 
-        const { accrualRateAnnualBps, lockedSaveBonus } = await dynamo.fetchFloatVarsForBalanceCalc(clientId, floatId);
-        logger('Got accrual rate: ', accrualRateAnnualBps, 'And locked save bonus details: ', lockedSaveBonus);
+        const floatProjectionVars = await dynamo.fetchFloatVarsForBalanceCalc(clientId, floatId);
+        const interestRate = interestHelper.calculateInterestRate(floatProjectionVars);
+        const { lockedSaveBonus } = floatProjectionVars;
+        logger('Got interest rate: ', interestRate.toString(), 'And locked save bonus details: ', lockedSaveBonus);
 
-        const lockedSaveInterestMap = mapLockedSaveDaysToInterest(lockedSaveBonus, accrualRateAnnualBps, daysToPreview);
+        const lockedSaveInterestMap = mapLockedSaveDaysToInterest(lockedSaveBonus, interestRate, daysToPreview);
         logger('Mapped days to preview to corresponding multipliers: ', lockedSaveInterestMap);
 
         const calculatedLockedSaveBonus = calculateBonusForLockedSave(lockedSaveInterestMap, baseAmount);
@@ -106,16 +106,8 @@ module.exports.previewBonus = async (event) => {
     }
 };
 
-const fetchUserProfile = async (systemWideUserId) => {
-    const profileFetchInvocation = wrapLambdaInvocation({ systemWideUserId }, 'fetchProfile');
-    const profileFetchResult = await lambda.invoke(profileFetchInvocation).promise();
-    logger('Result of profile fetch: ', profileFetchResult);
-
-    return extractLambdaBody(profileFetchResult);
-};
-
-const createBoostForLockedTx = async (systemWideUserId, transactionId, lockBonusAmount, daysToLock) => {
-    const { clientId, floatId } = await fetchUserProfile(systemWideUserId);
+const createBoostForLockedTx = async (systemWideUserId, transactionDetails, lockBonusAmount, daysToLock) => {
+    const { clientId, floatId, transactionId } = transactionDetails;
     logger('Got user client and float id: ', { clientId, floatId });
 
     const { bonusPoolSystemWideId } = await dynamo.fetchFloatVarsForBalanceCalc(clientId, floatId);
@@ -189,6 +181,7 @@ const isUserTxAccountOwner = async (systemWideUserId, transactionToLock) => {
 /**
  * The function locks save transactions whose settlement status is SETTLED and creates a boost that
  * will be triggered when the lock expires.
+ * TODO: alter this to calculate the bonus amount using the daysToLock (using methods from preview), getting clientId + floatId from transaction
  * @param {object} event An admin, user, http, or direct invocation event.
  * @property {string} transactionId The identifier of the transaction to be locked.
  * @property {object} lockBonusAmount A standard amount dict, the boost amount to be awarded to the user after the lock expired
@@ -222,12 +215,12 @@ module.exports.lockSettledSave = async (event) => {
             return { statusCode: 400 };
         }
     
-        const resultOfLock = await persistence.lockTransaction(transactionToLock, daysToLock);
+        const resultOfLock = await persistence.lockTransaction(transactionId, daysToLock);
         logger('Result of lock: ', resultOfLock);
 
         const updatedTime = moment(resultOfLock.updatedTime);
 
-        const resultOfBoost = await createBoostForLockedTx(systemWideUserId, transactionId, lockBonusAmount, daysToLock);
+        const resultOfBoost = await createBoostForLockedTx(systemWideUserId, transactionToLock, lockBonusAmount, daysToLock);
         logger('Result of boost creation for locked tx: ', resultOfBoost);
         
         const logOptions = {
@@ -246,12 +239,33 @@ module.exports.lockSettledSave = async (event) => {
     
         await publisher.publishUserEvent(systemWideUserId, 'USER_LOCKED_SAVE', logOptions);
 
+        // also return the amount boosted (see not above about calculating that in here)
         return opsUtil.wrapResponse({ result: 'SUCCESS' });
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return opsUtil.wrapResponse({ message: err.message }, 500);
     }
 };
+
+/**
+ * Director (usual pattern). Can leave auth handling and error catching to the sub-methods for now.
+ * @param {object} event 
+ */
+module.exports.directLockRequest = async (event) => {
+    const { operation } = opsUtil.extractPathAndParams(event);
+    logger('Extracted operation from path: ', operation);
+
+    if (operation === 'preview') {
+        return exports.previewBonus(event);
+    } else if (operation === 'confirm') {
+        return exports.lockSettledSave(event);
+    }
+
+    logger('FATAL_ERROR: Unknown operation in lock handler, event: ', event);
+    return { statusCode: 400 };
+};
+
+// SECTION FOR FINDING EXPIRED LOCKS AND RELEASING THEM
 
 const publishLockExpired = async (unlockedTx) => {
     const logOptions = {

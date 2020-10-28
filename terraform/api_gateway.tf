@@ -400,6 +400,45 @@ resource "aws_api_gateway_integration" "save_payment_result" {
   uri                     = aws_lambda_function.save_payment_complete.invoke_arn
 }
 
+// SAVE LOCKS START HERE
+
+resource "aws_api_gateway_resource" "save_lock_path_root" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  parent_id     = aws_api_gateway_resource.save_path_root.id
+  path_part     = "lock"
+}
+
+resource "aws_api_gateway_resource" "save_lock_manage" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  parent_id     = aws_api_gateway_resource.save_lock_path_root.id
+  path_part     = "{proxy+}" 
+}
+
+resource "aws_api_gateway_method" "save_lock_manage" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  resource_id   = aws_api_gateway_resource.save_lock_manage.id
+  http_method   = "ANY"
+  authorization = "CUSTOM"
+  authorizer_id = aws_api_gateway_authorizer.jwt_authorizer.id
+}
+
+resource "aws_lambda_permission" "save_lock_manage" {
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.save_lock.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
+}
+
+resource "aws_api_gateway_integration" "save_lock_manage" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  resource_id   = aws_api_gateway_resource.save_lock_manage.id
+  http_method   = aws_api_gateway_method.save_lock_manage.http_method
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.save_lock.invoke_arn
+}
+
 /////////////// ACCOUNT BALANCE LAMBDA (WRAPPER ONLY, SIMPLE GET) -- MAIN LAMBDA ONLY FOR INVOKE /////////////////////////////////////////////////
 
 resource "aws_api_gateway_method" "balance_fetch_wrapper" {
