@@ -64,7 +64,7 @@ All core APIs may be found in the `functions` directory. These APIs are listed b
 
 - `admin-api` (API for admin interface. Functions include float, saving-heat, and user management)
 - `audience-selection` (API for boost audience selection)
-- `boos-api` (API for core boost operations, e.g., boost creation, automation and redemption. Also includes boost admin functions)
+- `boost-api` (API for core boost operations, e.g., boost creation, automation and redemption. Also includes boost admin functions)
 - `float-api` (API for float management, handles float accrual, allocation and capitalization)
 - `friend-api` (API for friends feature, contains functions for friend management, e.g., friend requests and alerts)
 - `referral-api` (API for referral code management, includes functions for redeeming referral based boosts)
@@ -159,7 +159,7 @@ $ npm install -g jsdoc-to-markdown
 $ cd <target directory>
 $ jsdoc2md *.js > README.md
 ```
-This will generate a README from all the docstrings in the current working directory.
+This will generate a README from all the Javascript docstrings in the current working directory.
 
 
 
