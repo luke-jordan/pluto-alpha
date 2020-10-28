@@ -60,17 +60,17 @@ The core codebase consists of the following directories:
 The contents of these directories are described below.
 
 ### Functions
-All core APIs may be found in the `functions` directory. These APIs are listed below, with a brief description of their core operations.
+All core APIs may be found in the `functions` directory. These APIs are listed below with a brief description of their operations.
 
-- `admin-api` (API for admin interface Functions include float, savings-heat, and user management)
+- `admin-api` (API for admin interface. Functions include float, saving-heat, and user management)
 - `audience-selection` (API for boost audience selection)
 - `boos-api` (API for core boost operations, e.g., boost creation, automation and redemption. Also includes boost admin functions)
-- `float-api` (API for float management, handles float accruals, allocations and capitalizations)
+- `float-api` (API for float management, handles float accrual, allocation and capitalization)
 - `friend-api` (API for friends feature, contains functions for friend management, e.g., friend requests and alerts)
 - `referral-api` (API for referral code management, includes functions for redeeming referral based boosts)
 - `snippet-api` (API for snippet feature, contains functions for snippet management)
 - `third-parties` (This directory contains functions that handle third party API integrations)
-- `user-activity-api` (API for user interface, e.g., functions for fetching user balance, history, pending transactions, savings heat, locking saves and general user events)
+- `user-activity-api` (API for user interface, e.g., functions for fetching user balance, history, pending transactions, savings heat, and locked saves)
 - `user-existence-api` (Contains functions for validating user existence)
 - `user-maessaging-api` (API for user message management, i.e., system notifications to user. Includes functions for message creation, selection and triggering)
 
@@ -80,11 +80,11 @@ The `functions` directory also includes a `db-migration` and `warmup` folder. `d
 The `modules` directory contains utility functions used in all APIs within the `functions` directory. These include persistence functions for database management, event/response wrappers, and dispatch functions for event publishing and system notifications (SMS and email). The contents of the `modules` directory are briefly described below.
 
 - `dynamo-common` (Contains essential functions that make it easier to work with dynamo-db)
-- `rds-common` (Core functions used in working with RDS)
+- `rds-common` (Core functions used in working with AWS RDS ())
 - `publish-common` (Dispatch functions for event publishing and system notifications)
 - `ops-util-common` (Core utilities used throughout the codebase, e.g., event/response wrappers, currency unit converters, event parsers, and common validators)
 
-### Terraform
+### Terraform and CI
 The `terraform` directory contains all Terraform configuration files for resource allocations and deployments.
 
 After applying terraform:
@@ -106,8 +106,18 @@ The APIs listed above also take advantage of external APIs that provide the foll
 
 ### Jupiter Auth Integrations
 
-This API provides authentication services for user registration, user login (token and one-time-password generation) as well as servifces for user profile and password management.
+This API provides authentication services for user registration, user login (token and one-time-password generation) as well as services for user profile and password management. Naturally, this is the most extensive integration of an external API. Essential services provided by Jupiter Auth are listed below:
 
+* User registration
+* User login
+* Event authorization
+* Admin management (seeding initial admin user)
+* Garbage collection (for the cleanup of incomplete profiles, i.e., aborted registrations)
+* OTP generation
+* Password management (password creation, encryption, persistence, and updates)
+* Event logging
+* Security questions
+* User profile management (profile creation, updates, and validations)
 
 ### pbVerify Integrations
 
@@ -138,14 +148,14 @@ It is mandatory that all developers use git-secrets as a safe-guard against cred
 
 ### Generating Documentation From Docstrings
 
-Each function directory includes a README file created from the docstrings within the code. To regenenate the README after making changes to the code and related docstrings, install jsdoc2md using the command
+Each api in the `functions` directory includes a README file created from the docstrings within the code. To regenenate the README after making changes to the code and related docstrings, install jsdoc2md using the command
 
 ```
-$ npm install --save-dev jsdoc-to-markdown
-```
- then run
- ```
+$ npm install -g jsdoc-to-markdown
+$ cd <target directory>
 $ jsdoc2md *.js > README.md
 ```
-to generate a README from all the docstrings in the directory. For more information see https://github.com/jsdoc2md/jsdoc-to-markdown
+This will generate a README from all the docstrings in the current working directory.
+
+
 
