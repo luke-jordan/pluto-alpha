@@ -97,7 +97,7 @@ describe('*** UNIT TEST LOCKED SAVE BONUS PREVIEW ***', () => {
             '1': { amount: 0, unit: 'HUNDREDTH_CENT', currency: 'USD' },
             '4': { amount: 2, unit: 'HUNDREDTH_CENT', currency: 'USD' },
             '30': { amount: 15, unit: 'HUNDREDTH_CENT', currency: 'USD' },
-            '67': { amount: 35, unit: 'HUNDREDTH_CENT', currency: 'USD' }
+            '67': { amount: 33, unit: 'HUNDREDTH_CENT', currency: 'USD' }
         };
         
         expect(resultBody).to.deep.equal(expectedResult);
@@ -199,7 +199,16 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
         fetchTxStub.resolves(testTx);
         lockTxStub.resolves({ updatedTime: testUpdatedTime });
 
-        fetchFloatVarsStub.resolves({ bonusPoolSystemWideId: 'principal_bonus_pool' });
+        const testFloatProjectionVars = {
+            prudentialFactor: 0.1,
+            accrualRateAnnualBps: 250,
+            bonusPoolShareOfAccrual: 1 / 7.25,
+            clientShareOfAccrual: 0.25 / 7.25,
+            lockedSaveBonus: { 30: 1.01, 60: 1.05, 90: 1.1 },
+            bonusPoolSystemWideId: 'principal_bonus_pool'
+        };
+
+        fetchFloatVarsStub.resolves(testFloatProjectionVars);
 
         lambdaInvokeStub.onFirstCall().returns({ promise: () => mockLambdaResponse(testUserProfile) });
         lambdaInvokeStub.onSecondCall().returns({ promise: () => ({ statusCode: 200 })});
@@ -209,6 +218,7 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
         momentStub.onSecondCall().returns({ add: () => testBoostExpiryTime, valueOf: () => testBoostExpiryTime.valueOf() });
         momentStub.onThirdCall().returns({ add: () => lockExpiryTime, valueOf: () => lockExpiryTime.valueOf() });
 
+
         const testEventBody = { transactionId: testTxId, daysToLock: 30, lockBonusAmount: testBonusAmount };
         const testEvent = testHelper.wrapEvent(testEventBody, testSystemId, 'ORDINARY_USER');
         
@@ -217,7 +227,7 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
         const resultOfLock = await handler.lockSettledSave(testEvent);
         const resultBody = testHelper.standardOkayChecks(resultOfLock);
 
-        expect(resultBody).to.deep.equal({ result: 'SUCCESS' });
+        expect(resultBody).to.deep.equal({ result: 'SUCCESS', boostAmount: { amount: 15, unit: 'HUNDREDTH_CENT', currency: 'USD' }});
         
         expect(fetchTxStub).to.have.been.calledOnceWithExactly(testTxId);
         expect(lockTxStub).to.have.been.calledOnceWithExactly(testTxId, 30);
@@ -238,8 +248,8 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
             creatingUserId: testSystemId,
             label: 'Locked Save Boost',
             boostTypeCategory: 'LOCKED::SIMPLE_LOCK',
-            boostAmountOffered: '10000::HUNDREDTH_CENT::USD',
-            boostBudget: 10000,
+            boostAmountOffered: '15::HUNDREDTH_CENT::USD',
+            boostBudget: 15,
             boostSource: expectedBoostSource,
             endTimeMillis: testBoostExpiryTime.valueOf(),
             boostAudienceType: 'INDIVIDUAL',
@@ -252,7 +262,7 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
 
         expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(expectedBoostInvocation);
 
-        expect(fetchFloatVarsStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId);
+        expect(fetchFloatVarsStub).to.have.been.calledWithExactly(testClientId, testFloatId);
 
         const expectedLogOptions = {
             initiator: testSystemId,
@@ -280,7 +290,16 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
         fetchTxStub.resolves(testTx);
         fetchAccountsStub.resolves([testAccountId]);
 
-        fetchFloatVarsStub.resolves({ bonusPoolSystemWideId: 'principal_bonus_pool' });
+        const testFloatProjectionVars = {
+            prudentialFactor: 0.1,
+            accrualRateAnnualBps: 250,
+            bonusPoolShareOfAccrual: 1 / 7.25,
+            clientShareOfAccrual: 0.25 / 7.25,
+            lockedSaveBonus: { 30: 1.01, 60: 1.05, 90: 1.1 },
+            bonusPoolSystemWideId: 'principal_bonus_pool'
+        };
+
+        fetchFloatVarsStub.resolves(testFloatProjectionVars);
         lockTxStub.resolves({ updatedTime: testUpdatedTime });
 
         lambdaInvokeStub.onFirstCall().returns({ promise: () => mockLambdaResponse(testUserProfile) });
@@ -297,12 +316,12 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
         const resultOfLock = await handler.lockSettledSave(testEvent);
         const resultBody = testHelper.standardOkayChecks(resultOfLock);
 
-        expect(resultBody).to.deep.equal({ result: 'SUCCESS' });
+        expect(resultBody).to.deep.equal({ result: 'SUCCESS', boostAmount: { amount: 22, unit: 'HUNDREDTH_CENT', currency: 'USD' }});
         
         expect(fetchTxStub).to.have.been.calledOnceWithExactly(testTxId);
         expect(lockTxStub).to.have.been.calledOnceWithExactly(testTxId, 30);
 
-        expect(fetchFloatVarsStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId);
+        expect(fetchFloatVarsStub).to.have.been.calledWithExactly(testClientId, testFloatId);
         expect(fetchAccountsStub).to.have.been.calledOnceWithExactly(testSystemId);
 
         const expectedBoostSource = {
@@ -321,8 +340,8 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
             creatingUserId: testSystemId,
             label: 'Locked Save Boost',
             boostTypeCategory: 'LOCKED::SIMPLE_LOCK',
-            boostAmountOffered: '15000::HUNDREDTH_CENT::USD',
-            boostBudget: 15000,
+            boostAmountOffered: '22::HUNDREDTH_CENT::USD',
+            boostBudget: 22,
             boostSource: expectedBoostSource,
             endTimeMillis: testBoostExpiryTime.valueOf(),
             boostAudienceType: 'INDIVIDUAL',
