@@ -71,7 +71,8 @@ describe('*** UNIT TEST LOCKED SAVE BONUS PREVIEW ***', () => {
             prudentialFactor: 0.1,
             accrualRateAnnualBps: 250,
             bonusPoolShareOfAccrual: 1 / 7.25,
-            clientShareOfAccrual: 0.25 / 7.25
+            clientShareOfAccrual: 0.25 / 7.25,
+            lockedSaveBonus: { 30: 1.01, 60: 1.05, 90: 1.1 }
         };
 
         fetchFloatVarsStub.resolves(testFloatProjectionVars);
@@ -96,9 +97,44 @@ describe('*** UNIT TEST LOCKED SAVE BONUS PREVIEW ***', () => {
             '1': { amount: 0, unit: 'HUNDREDTH_CENT', currency: 'USD' },
             '4': { amount: 2, unit: 'HUNDREDTH_CENT', currency: 'USD' },
             '30': { amount: 15, unit: 'HUNDREDTH_CENT', currency: 'USD' },
-            '67': { amount: 33, unit: 'HUNDREDTH_CENT', currency: 'USD' }
+            '67': { amount: 35, unit: 'HUNDREDTH_CENT', currency: 'USD' }
         };
         
+        expect(resultBody).to.deep.equal(expectedResult);
+        expect(fetchFloatVarsStub).to.have.been.calledOnceWithExactly('some_client', 'primary_cash');
+    });
+
+    it('Uses default multiplier where locked save bonus not in client-float vars', async () => {
+        fetchFloatVarsStub.resolves({
+            prudentialFactor: 0.1,
+            accrualRateAnnualBps: 250,
+            bonusPoolShareOfAccrual: 1 / 7.25,
+            clientShareOfAccrual: 0.25 / 7.25
+        });
+
+        const testEventBody = {
+            clientId: 'some_client',
+            floatId: 'primary_cash',
+            daysToPreview: [1, 4, 30, 67],
+            baseAmount: {
+                amount: 10000,
+                unit: 'HUNDREDTH_CENT',
+                currency: 'USD'
+            }
+        };
+
+        const testEvent = testHelper.wrapEvent(testEventBody, testSystemId, 'ORDINARY_USER');
+
+        const resultOfPreview = await handler.previewBonus(testEvent);
+        const resultBody = testHelper.standardOkayChecks(resultOfPreview);
+
+        const expectedResult = {
+            '1': { amount: 0, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+            '4': { amount: 2, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+            '30': { amount: 15, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+            '67': { amount: 33, unit: 'HUNDREDTH_CENT', currency: 'USD' }
+        };
+
         expect(resultBody).to.deep.equal(expectedResult);
         expect(fetchFloatVarsStub).to.have.been.calledOnceWithExactly('some_client', 'primary_cash');
     });
