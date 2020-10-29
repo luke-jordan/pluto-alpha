@@ -429,34 +429,6 @@ describe('*** UNIT TEST SAVINGS HEAT PERSISTENCE FUNCTIONS ***', () => {
         expect(resultOfFetch).to.deep.equal([testAccountId, testAccountId, testAccountId, testAccountId]);
     });
 
-    it('Sums total amount saved by user over lifetime', async () => {
-        const selectQuery = `select sum(amount), unit from ${accountTxTable} where account_id = $1 and currency = $2 and ` +
-            `settlement_status = $3 and transaction_type = $4 group by unit`;
-        const selectValues = [testAccountId, 'ZAR', 'SETTLED', 'USER_SAVING_EVENT'];
-
-        queryStub.withArgs(selectQuery, selectValues).resolves([{ 'unit': 'HUNDREDTH_CENT', 'sum': testBalance }, { 'unit': 'WHOLE_CENT', 'sum': testBalanceCents }]);
-        const expectedBalance = testBalance + (100 * testBalanceCents);
-
-        const resultOfSum = await rds.sumTotalAmountSaved(testAccountId, 'ZAR');
-
-        expect(resultOfSum).to.exist;
-        expect(resultOfSum).to.deep.equal({ amount: expectedBalance, unit: 'HUNDREDTH_CENT', currency: 'ZAR' });
-    });
-
-    it('Sums total amount saved by user over last month', async () => {
-        const selectQuery = `select sum(amount), unit from ${accountTxTable} where account_id = $1 and currency = $2 and ` +
-            `settlement_status = $3 and transaction_type = $4 and creation_time > $5 and creation_time < $6 group by unit`;
-        const selectValues = [testAccountId, 'ZAR', 'SETTLED', 'USER_SAVING_EVENT', sinon.match.string, sinon.match.string];
-
-        queryStub.withArgs(selectQuery, selectValues).resolves([{ 'unit': 'HUNDREDTH_CENT', 'sum': testBalance }, { 'unit': 'WHOLE_CENT', 'sum': testBalanceCents }]);
-        const expectedBalance = testBalance + (100 * testBalanceCents);
-
-        const resultOfSum = await rds.sumAmountSavedLastMonth(testAccountId, 'ZAR');
-
-        expect(resultOfSum).to.exist;
-        expect(resultOfSum).to.deep.equal({ amount: expectedBalance, unit: 'HUNDREDTH_CENT', currency: 'ZAR' });
-    });
-
     it('Counts number of settled saved in previous month', async () => {
         const selectQuery = `select count(transaction_id) from ${config.get('tables.accountTransactions')} where account_id = $1 and ` +
             `transaction_type = $2 and settlement_status = $3 and creation_time > $4 and creation_time < $5`;

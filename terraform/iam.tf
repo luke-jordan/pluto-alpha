@@ -213,7 +213,7 @@ resource "aws_iam_policy" "lambda_invoke_ops_warmup_access" {
                 "${aws_lambda_function.referral_verify.arn}",
                 "${aws_lambda_function.user_history_aggregate.arn}",
                 "${aws_lambda_function.friend_list.arn}",
-                "${aws_lambda_function.user_save_heat_fetch.arn}"
+                "${aws_lambda_function.user_save_heat_read.arn}"
             ],
             "Condition": {
                 "StringEquals": {
@@ -503,7 +503,6 @@ resource "aws_iam_policy" "lambda_invoke_saving_heat_access" {
                 "lambda:InvokeAsync"
             ],
             "Resource": [
-                "${aws_lambda_function.user_save_heat_fetch.arn}",
                 "${aws_lambda_function.user_save_heat_read.arn}"
             ]
         }
@@ -707,7 +706,7 @@ resource "aws_iam_policy" "friend_request_manage_lambda_policy" {
             "Resource": [
                 "${aws_lambda_function.referral_verify.arn}",
                 "${aws_lambda_function.outbound_comms_send.arn}",
-                "${aws_lambda_function.user_save_heat_fetch.arn}"
+                "${aws_lambda_function.user_save_heat_read.arn}"
             ]
         },
         {

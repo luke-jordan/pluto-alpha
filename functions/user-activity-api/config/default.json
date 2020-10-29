@@ -66,7 +66,6 @@
         "addTxToBalanceSheet": "balance_sheet_acc_update",
         "userBankVerify": "bank_account_verify",
         "sendOutboundMessages": "outbound_comms_send",
-        "calcSavingHeat": "user_save_heat_fetch",
         "connectFriendReferral": "friend_referral_connect",
         "createBoost": "boost_create"
     },
