@@ -33,7 +33,7 @@ resource "aws_db_instance" "rds" {
   identifier             = "${terraform.workspace}-database-pg"
   allocated_storage      = "${var.db_allocated_storage}"
   engine                 = "postgres"
-  engine_version         = "10.10"
+  engine_version         = "10.13"
   allow_major_version_upgrade = true
   instance_class         = "db.t2.micro"
   name                   = "${var.db_name}"
