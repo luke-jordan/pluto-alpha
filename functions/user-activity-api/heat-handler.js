@@ -308,6 +308,11 @@ const fetchHeatForUsers = async (params) => {
 
 module.exports.fetchUserHeat = async (event) => {
     try {
+        if (opsUtil.isWarmup(event)) {
+            logger('Keeping warm, just return positive');
+            return { statusCode: 200 };
+        }
+
         if (!opsUtil.isDirectInvokeAdminOrSelf(event)) {
             return { statusCode: 403 };
         }

@@ -127,7 +127,7 @@ const createBoostForLockedTx = async (systemWideUserId, transactionDetails, lock
     const boostPayload = {
         creatingUserId: systemWideUserId,
         label: 'Locked Save Boost',
-        boostTypeCategory: 'LOCKED::SIMPLE_LOCK',
+        boostTypeCategory: 'SIMPLE::LOCKED_SAVE',
         boostAmountOffered: opsUtil.convertAmountDictToString(lockBonusAmount),
         boostBudget: lockBonusAmount.amount,
         boostSource,

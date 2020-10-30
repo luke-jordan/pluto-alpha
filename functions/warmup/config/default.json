@@ -13,6 +13,6 @@
         "referral_verify", 
         "friend_list", 
         "boost_user_list",
-        "user_save_heat_fetch"
+        "user_save_heat_read"
     ]
 }
