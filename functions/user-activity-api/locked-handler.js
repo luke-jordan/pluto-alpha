@@ -247,24 +247,6 @@ module.exports.lockSettledSave = async (event) => {
     }
 };
 
-/**
- * Director (usual pattern). Can leave auth handling and error catching to the sub-methods for now.
- * @param {object} event 
- */
-module.exports.directLockRequest = async (event) => {
-    const { operation } = opsUtil.extractPathAndParams(event);
-    logger('Extracted operation from path: ', operation);
-
-    if (operation === 'preview') {
-        return exports.previewBonus(event);
-    } else if (operation === 'confirm') {
-        return exports.lockSettledSave(event);
-    }
-
-    logger('FATAL_ERROR: Unknown operation in lock handler, event: ', event);
-    return { statusCode: 400 };
-};
-
 // SECTION FOR FINDING EXPIRED LOCKS AND RELEASING THEM
 
 const publishLockExpired = async (unlockedTx) => {
@@ -309,4 +291,24 @@ module.exports.checkForExpiredLocks = async (event) => {
         logger('FATAL_ERROR:', err);
         return opsUtil.wrapResponse({ message: err.message }, 500);
     }
+};
+
+/**
+ * Director (usual pattern). Can leave auth handling and error catching to the sub-methods for now.
+ * @param {object} event 
+ */
+module.exports.directLockRequest = async (event) => {
+    const { operation } = opsUtil.extractPathAndParams(event);
+    logger('Extracted operation from path: ', operation);
+
+    if (operation === 'preview') {
+        return exports.previewBonus(event);
+    } else if (operation === 'confirm') {
+        return exports.lockSettledSave(event);
+    } else if (operation === 'unlock') {
+        return exports.checkForExpiredLocks(event);
+    }
+
+    logger('FATAL_ERROR: Unknown operation in lock handler, event: ', event);
+    return { statusCode: 400 };
 };

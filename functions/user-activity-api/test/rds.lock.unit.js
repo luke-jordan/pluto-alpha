@@ -83,7 +83,7 @@ describe('*** UNIT TEST RDS LOCK FUNCTIONS ***', () => {
         expect(updateResult).to.exist;
         expect(updateResult).to.deep.equal(testTxIds);
     
-        const expectedQuery = `update ${accountTxTable} set settlement_status = $1 and locked_until_time = null ` +
+        const expectedQuery = `update ${accountTxTable} set settlement_status = $1, locked_until_time = null ` +
             `where settlement_status = $2 and locked_until_time < current_timestamp and ` +
             `transaction_id in ($3, $4) returning updated_time, transaction_id`;
         const expectedValues = ['SETTLED', 'LOCKED', ...testTxIds];

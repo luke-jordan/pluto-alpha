@@ -57,7 +57,7 @@ module.exports.lockTransaction = async (transactionId, daysToLock) => {
  * @param {array} transactionIds An array of transaction ids to be unlocked.
  */
 module.exports.unlockTransactions = async (transactionIds) => {
-    const updateQuery = `update ${config.get('tables.accountTransactions')} set settlement_status = $1 and ` +
+    const updateQuery = `update ${config.get('tables.accountTransactions')} set settlement_status = $1, ` +
         `locked_until_time = null where settlement_status = $2 and locked_until_time < current_timestamp and ` +
         `transaction_id in (${opsUtil.extractArrayIndices(transactionIds, 3)}) returning updated_time, transaction_id`;
 
