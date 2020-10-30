@@ -272,6 +272,40 @@ describe('*** UNIT TEST DYNAMO FLOAT ***', () => {
         expect(docClientUpdateStub).to.have.been.calledOnceWithExactly(expectedUpdateArgs);
     });
 
+    it('Updates locked save bonus', async () => {
+        const testPrincipalVars = {
+            lockedSaveBonus: { 7: 0.5, 14: 0.7, 30: 1.01, 60: 1.05, 90: 1.1 }
+        };
+
+        const params = {
+            newPrincipalVars: testPrincipalVars,
+            clientId: testClientId,
+            floatId: testFloatId
+        };
+
+        const expectedResultFromDB = { 'float_id': testFloatId, 'client_id': testClientId };
+        docClientUpdateStub.returns({ promise: () => ({ Attributes: expectedResultFromDB })});
+
+        const updateResult = await dynamo.updateClientFloatVars(params);
+        expect(updateResult).to.exist;
+
+        const expectedResult = {
+            result: 'SUCCESS',
+            returnedAttributes: { floatId: testFloatId, clientId: testClientId }
+        };
+
+        expect(updateResult).to.deep.equal(expectedResult);
+
+        const expectedUpdateArgs = {
+            TableName: config.get('tables.clientFloatTable'),
+            Key: { 'client_id': testClientId, 'float_id': testFloatId },
+            UpdateExpression: 'set locked_save_bonus = :lsbonus',
+            ExpressionAttributeValues: { ':lsbonus': { 14: 0.7, 30: 1.01, 60: 1.05, 7: 0.5, 90: 1.1 } },
+            ReturnValues: 'ALL_NEW'
+        };
+
+        expect(docClientUpdateStub).to.have.been.calledOnceWithExactly(expectedUpdateArgs);
+    });
 });
 
 describe('*** UNIT TEST REFERRAL CODE ***', () => {

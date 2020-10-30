@@ -42,8 +42,14 @@ const calculateNumberOfDaysPassedSinceDateAndToday = (givenDate) => {
 module.exports.calculateEstimatedInterestEarned = (transactionInformation, calculationUnit = 'HUNDREDTH_CENT', interestRate) => {
     logger(`Calculate estimated interest earned`);
     const interestRateAsBigNumber = new DecimalLight(interestRate);
-    const numberOfDaysSinceSettleTime = calculateNumberOfDaysPassedSinceDateAndToday(transactionInformation.settlementTime);
     const amount = Math.abs(opsUtil.convertToUnit(transactionInformation.amount, transactionInformation.unit, calculationUnit));
+
+    if (!transactionInformation.settlementTime && transactionInformation.daysToCalculate) {
+        const projectedInterest = calculateCompoundInterestUsingDayInterval(amount, interestRateAsBigNumber, transactionInformation.daysToCalculate);
+        return { amount: projectedInterest, unit: calculationUnit, currency: transactionInformation.currency };
+    }
+
+    const numberOfDaysSinceSettleTime = calculateNumberOfDaysPassedSinceDateAndToday(transactionInformation.settlementTime);
     const interestEarned = calculateCompoundInterestUsingDayInterval(amount, interestRateAsBigNumber, numberOfDaysSinceSettleTime);
     return { amount: interestEarned, unit: calculationUnit, currency: transactionInformation.currency };
 };

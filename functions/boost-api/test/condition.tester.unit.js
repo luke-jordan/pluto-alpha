@@ -493,3 +493,50 @@ describe('*** REFERRAL CONDITION ***', () => {
     });
 
 });
+
+describe('*** LOCKED SAVE CONDITION ***', () => {
+    const testTxId = uuid();
+
+    it('Returns true when lock on save expires', async () => {
+        const lockExpiryTimeMillis = moment().subtract(12, 'hours').valueOf();
+        const condition = [`lock_save_expires #{${testTxId}::${lockExpiryTimeMillis}}`];
+        
+        const sampleEvent = {
+            userId: uuid(),
+            eventType: 'LOCK_EXPIRED',
+            eventContext: { transactionId: testTxId }
+        };
+
+        const result = tester.testConditionsForStatus(sampleEvent, condition);
+        expect(result).to.be.true;
+    });
+
+
+    it('Returns false on bad tx id', async () => {
+        const lockExpiryTimeMillis = moment().subtract(12, 'hours').valueOf();
+        const condition = [`lock_save_expires #{${testTxId}::${lockExpiryTimeMillis}}`];
+        
+        const sampleEvent = {
+            userId: uuid(),
+            eventType: 'LOCK_EXPIRED',
+            eventContext: { transactionId: uuid() }
+        };
+
+        const result = tester.testConditionsForStatus(sampleEvent, condition);
+        expect(result).to.be.false;
+    });
+
+    it('Returns false where current time is before lock expiry time', async () => {
+        const lockExpiryTimeMillis = moment().add(12, 'hours').valueOf();
+        const condition = [`lock_save_expires #{${testTxId}::${lockExpiryTimeMillis}}`];
+        
+        const sampleEvent = {
+            userId: uuid(),
+            eventType: 'LOCK_EXPIRED',
+            eventContext: { transactionId: testTxId }
+        };
+
+        const result = tester.testConditionsForStatus(sampleEvent, condition);
+        expect(result).to.be.false;
+    });
+});

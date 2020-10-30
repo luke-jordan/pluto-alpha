@@ -14,13 +14,13 @@ chai.use(require('sinon-chai'));
 const publishStub = sinon.stub();
 const publishMultiStub = sinon.stub();
 
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 
 const momentStub = sinon.stub();
 
 class MockLambdaClient {
     constructor () {
-        this.invoke = lamdbaInvokeStub;
+        this.invoke = lambdaInvokeStub;
     }
 }
 
@@ -44,7 +44,7 @@ const testBonusPoolId = 'some-pool';
 
 describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
 
-    beforeEach(() => helper.resetStubs(lamdbaInvokeStub, publishStub, publishMultiStub));
+    beforeEach(() => helper.resetStubs(lambdaInvokeStub, publishStub, publishMultiStub));
 
     it('Handles random rewards, including units', async () => {
         const testUserId = uuid();
@@ -103,7 +103,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             }
         };
 
-        lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse(mockAllocationResult) });
+        lambdaInvokeStub.returns({ promise: () => helper.mockLambdaResponse(mockAllocationResult) });
         momentStub.returns(moment());
         publishStub.resolves({ result: 'SUCCESS' });
 
@@ -133,7 +133,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
         };
         expect(resultOfRedemption).to.deep.equal(expectedResult);
 
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedAllocationInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(expectedAllocationInvocation);
         expect(publishStub).to.have.been.calledOnce;
     });
 
@@ -205,7 +205,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             }
         };
 
-        lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse(mockAllocationResult) });
+        lambdaInvokeStub.returns({ promise: () => helper.mockLambdaResponse(mockAllocationResult) });
         momentStub.returns(moment());
         publishStub.resolves({ result: 'SUCCESS' });
 
@@ -257,9 +257,9 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
         expect(resultOfRedemption).to.exist;
         expect(resultOfRedemption).to.deep.equal(expectedResult);
 
-        expect(lamdbaInvokeStub).to.have.been.calledTwice;
-        helper.testLambdaInvoke(lamdbaInvokeStub, expectedAllocationInvocation, 1);
-        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(expectedTransferToBonusPoolInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledTwice;
+        helper.testLambdaInvoke(lambdaInvokeStub, expectedAllocationInvocation, 1);
+        expect(lambdaInvokeStub).to.have.been.calledWithExactly(expectedTransferToBonusPoolInvocation);
         
         expect(publishStub).to.have.been.calledOnce;
         expect(publishMultiStub).to.have.been.calledOnce;
@@ -317,7 +317,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
 
         expect(publishStub).to.not.have.been.called;
 
-        expect(lamdbaInvokeStub).to.not.have.been.called;
+        expect(lambdaInvokeStub).to.not.have.been.called;
         expect(publishMultiStub).to.not.have.been.called;
     });
 

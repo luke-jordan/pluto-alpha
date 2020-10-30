@@ -69,9 +69,10 @@ describe('** UNIT TESTING DYNAMO FETCH **', () => {
             'currency', 
             'comparatorRates', 
             'bankDetails', 
+            'lockedSaveBonus',
+            'bonusPoolSystemWideId',
             'haltNewSaves'
         ]; 
-        
         fetchStub.withArgs(config.get('tables.clientFloatVars'), { clientId: testClientId, floatId: testFloatId }, expectedColumns).
             resolves(expectedFloatParameters);
     });

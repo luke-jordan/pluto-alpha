@@ -19,7 +19,7 @@ const proxyquire = require('proxyquire');
 const uuidStub = sinon.stub();
 const momentStub = sinon.stub();
 
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 
 const getObjectStub = sinon.stub();
 const snsPublishStub = sinon.stub();
@@ -48,7 +48,7 @@ class MockS3Client {
 
 class MockLambdaClient {
     constructor () {
-        this.invoke = lamdbaInvokeStub;
+        this.invoke = lambdaInvokeStub;
     }
 }
 
@@ -68,7 +68,7 @@ const resetStubs = () => {
     momentStub.reset();
     snsPublishStub.reset();
     getObjectStub.reset();
-    lamdbaInvokeStub.reset();
+    lambdaInvokeStub.reset();
     sqsSendStub.reset();
     getQueueUrlStub.reset();
 };
@@ -161,7 +161,7 @@ describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
 
         const testTemplate = '<p>Greetings {}, from Jupiter.</p>';
         getObjectStub.withArgs({ Bucket: templateBucket, Key: templateKey }).returns({ promise: () => ({ Body: { toString: () => testTemplate }})});
-        lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse({ result: 'SUCCESS' })});
+        lambdaInvokeStub.returns({ promise: () => mockLambdaResponse({ result: 'SUCCESS' })});
         uuidStub.returns(testMessageId);
 
         const expectedInvocation = {
@@ -193,7 +193,7 @@ describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
         expect(resultOfDispatch).to.exist;
         expect(resultOfDispatch).to.deep.equal({ result: 'SUCCESS' });
         expect(getObjectStub).to.have.been.calledOnceWithExactly({ Bucket: templateBucket, Key: templateKey });
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
     });
 
     it('Sends system email, async lambda call', async () => {
@@ -205,7 +205,7 @@ describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
 
         const testTemplate = '<p>Greetings {}, from Jupiter.</p>';
         getObjectStub.withArgs({ Bucket: templateBucket, Key: templateKey }).returns({ promise: () => ({ Body: { toString: () => testTemplate }})});
-        lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 202, Payload: ''}) });
+        lambdaInvokeStub.returns({ promise: () => ({ StatusCode: 202, Payload: ''}) });
         uuidStub.returns(testMessageId);
 
         const expectedInvocation = {
@@ -236,7 +236,7 @@ describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
         expect(resultOfDispatch).to.exist;
         expect(resultOfDispatch).to.deep.equal({ result: 'SUCCESS' });
         expect(getObjectStub).to.have.been.calledOnceWithExactly({ Bucket: templateBucket, Key: templateKey });
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
     });
 
     it('System email dispatch uses default source address where none is provided', async () => {
@@ -248,7 +248,7 @@ describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
 
         const testTemplate = '<p>Greetings {}, from Jupiter.</p>';
         getObjectStub.withArgs({ Bucket: templateBucket, Key: templateKey }).returns({ promise: () => ({ Body: { toString: () => testTemplate }})});
-        lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse({ result: 'SUCCESS' })});
+        lambdaInvokeStub.returns({ promise: () => mockLambdaResponse({ result: 'SUCCESS' })});
         uuidStub.returns(testMessageId);
 
         const expectedInvocation = {
@@ -278,7 +278,7 @@ describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
         expect(resultOfDispatch).to.exist;
         expect(resultOfDispatch).to.deep.equal({ result: 'SUCCESS' });
         expect(getObjectStub).to.have.been.calledOnceWithExactly({ Bucket: templateBucket, Key: templateKey });
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
     });
 
     it('Handles the publication of multiple user events at once', async () => {

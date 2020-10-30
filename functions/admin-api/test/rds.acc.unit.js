@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('jupiter:admin:rds-test');
+const logger = require('debug')('jupiter:admin:test');
 const config = require('config');
 const moment = require('moment');
 const uuid = require('uuid/v4');
@@ -32,6 +32,13 @@ const persistence = proxyquire('../persistence/rds.account', {
 });
 
 describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
+    const testTransactionId = uuid();
+    const testAccountId = uuid();
+    const testAdminId = uuid();
+    const testUserId = uuid();
+
+    const testCreationTime = moment().format();
+    const testUpdatedTime = moment().format();
 
     const accountTable = config.get('tables.accountTable');
     const transactionTable = config.get('tables.transactionTable');
@@ -153,7 +160,6 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
     });
 
     it('Fetches a users pending transactions', async () => {
-        const testUserId = uuid();
         const startDate = moment();
 
         const expectedQuery = `select transaction_id, ${accountTable}.account_id, ${transactionTable}.creation_time, ` + 
@@ -174,9 +180,6 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
     });
 
     it('Expires hanging transactions', async () => {
-        const testTransactionId = uuid();
-        const testCreationTime = moment().format();
-
         const expectedUpdateQuery = `update ${transactionTable} set settlement_status = $1 where settlement_status in ` + 
             `($2, $3, $4) and creation_time < $5 returning transaction_id, creation_time`;
         const expectedValues = [
@@ -203,7 +206,6 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
     });
 
     it('Fetches IDs for accounts', async () => {
-        const testUserId = uuid();
         const firstAccountId = uuid();
         const secondAccountId = uuid();
         const thirdAccountId = uuid();
@@ -232,13 +234,17 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
         expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, accountIds);
     });
 
+    it('Fetches account details', async () => {
+        queryStub.resolves([{ 'account_id': testAccountId, 'flags': ['TEST::FLAG']}]);
+
+        const resultOfFetch = await persistence.getAccountDetails(testUserId);
+        expect(resultOfFetch).to.deep.equal({ accountId: testAccountId, flags: ['TEST::FLAG'] });
+        
+        const expectedQuery = 'select account_id, flags from account_data.core_account_ledger where owner_user_id = $1';
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, [testUserId]);
+    });
+
     it('Adjusts transaction status', async () => {
-        const testUpdatedTime = moment().format();
-
-        const testTransactionId = uuid();
-        const testAdminId = uuid();
-        const testUserId = uuid();
-
         const updateQuery = 'update transaction_data.core_transaction_ledger set settlement_status = $1 where transaction_id = $2 returning settlement_status, updated_time';
         const updateValues = ['SETTLED', testTransactionId];
 
@@ -266,10 +272,6 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
     });
 
     it('Adjusts transaction amount', async () => {
-        const testUpdatedTime = moment().format();
-
-        const testTransactionId = uuid();
-
         const updateQuery = 'update transaction_data.core_transaction_ledger set amount = $1, unit = $2, currency = $3 where ' +
             'transaction_id = $4 returning amount, unit, currency, updated_time';
         const updateValues = [10000, 'HUNDREDTH_CENT', 'USD', testTransactionId];
@@ -292,13 +294,6 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
     });
 
     it('Inserts account log', async () => {
-        const testCreationTime = moment().format();
-
-        const testTransactionId = uuid();
-        const testAccountId = uuid();
-        const testAdminId = uuid();
-        const testUserId = uuid();
-
         const insertQuery = 'insert into account_data.account_log (log_id, creating_user_id, account_id, transaction_id, log_type, log_context) values %L returning creation_time';
         const insertColumns = '${logId}, ${creatingUserId}, ${accountId}, ${transactionId}, ${logType}, ${logContext}';
 
@@ -340,13 +335,6 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
     });
 
     it('Account log insertion fetches relevent account id where not provided in parameters', async () => {
-        const testCreationTime = moment().format();
-
-        const testTransactionId = uuid();
-        const testAccountId = uuid();
-        const testAdminId = uuid();
-        const testUserId = uuid();
-
         const allowedColumns = 'transaction_id, account_id, creation_time, updated_time, transaction_type, settlement_status, settlement_time, client_id, float_id, amount, currency, unit, human_reference, tags, flags';
         const selectQuery = `select ${allowedColumns} from transaction_data.core_transaction_ledger where transaction_id = $1`; 
         const insertQuery = 'insert into account_data.account_log (log_id, creating_user_id, account_id, transaction_id, log_type, log_context) values %L returning creation_time';
@@ -391,9 +379,6 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
     });
 
     it('Finds user from reference', async () => {
-
-        const testUserId = uuid();
-
         const params = {
             searchValue: 'TEST_VALUE',
             bsheetPrefix: 'TEST_PREFIX'
@@ -437,8 +422,6 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
 
     it('Finds balance sheet tag', async () => {
 
-        const testAccountId = uuid();
-
         const params = { accountId: testAccountId, tagPrefix: 'TEST_PREFIX' };
 
         const selectQuery = `select tags from ${config.get('tables.accountTable')} where account_id = $1`;
@@ -467,9 +450,6 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
     });
 
     it('Updates balance sheet tag', async () => {
-        const testUserId = uuid();
-        const testAccountId = uuid();
-
         const selectQuery = 'select tags from account_data.core_account_ledger where account_id = $1';
         const updateQuery = 'update account_data.core_account_ledger set tags = array_append(tags, $1) where account_id = $2 returning owner_user_id, tags';
         const updateValues = ['TEST_PREFIX::NEW_IDENTIFIER', testAccountId];
@@ -500,9 +480,6 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
     });
 
     it('Balance sheet tag update replaces old identifier with new', async () => {
-        const testUserId = uuid();
-        const testAccountId = uuid();
-
         const selectQuery = 'select tags from account_data.core_account_ledger where account_id = $1';
         const updateQuery = 'update account_data.core_account_ledger set tags = array_replace(tags, $1, $2) where account_id = $3 returning owner_user_id, tags';
         const updateValues = ['TEST_PREFIX::OLD_IDENTIFIER', 'TEST_PREFIX::NEW_IDENTIFIER', testAccountId];
@@ -530,8 +507,6 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
     });
 
     it('Balance sheet tag update returns null on update failure', async () => {
-        const testAccountId = uuid();
-
         const selectQuery = 'select tags from account_data.core_account_ledger where account_id = $1';
         const updateQuery = 'update account_data.core_account_ledger set tags = array_replace(tags, $1, $2) where account_id = $3 returning owner_user_id, tags';
         const updateValues = ['TEST_PREFIX::OLD_IDENTIFIER', 'TEST_PREFIX::NEW_IDENTIFIER', testAccountId];

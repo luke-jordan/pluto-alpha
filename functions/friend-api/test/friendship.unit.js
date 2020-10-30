@@ -15,7 +15,7 @@ const expect = chai.expect;
 const helper = require('./test-helper');
 
 const redisGetStub = sinon.stub();
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 const countMutualFriendsStub = sinon.stub();
 const fetchAccountStub = sinon.stub();
 const fetchProfileStub = sinon.stub();
@@ -33,7 +33,7 @@ class MockRedis {
 
 class MockLambdaClient {
     constructor () {
-        this.invoke = lamdbaInvokeStub;
+        this.invoke = lambdaInvokeStub;
     }
 }
 
@@ -54,7 +54,7 @@ const handler = proxyquire('../friend-handler', {
     'ioredis': MockRedis
 });
 
-const resetStubs = () => helper.resetStubs(fetchProfileStub, deactivateFriendshipStub, lamdbaInvokeStub);
+const resetStubs = () => helper.resetStubs(fetchProfileStub, deactivateFriendshipStub, lambdaInvokeStub);
 
 describe('*** UNIT TEST FRIENDSHIP REMOVAL ***', () => {
     const testUpdatedTime = moment().format();

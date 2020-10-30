@@ -29,7 +29,8 @@ const FLOAT_KEY_SUBSTITUTIONS = {
     'float_name': ':fname',
     'prudential_factor': ':prud',
     'user_referral_defaults': ':rffdef',
-    'comparator_rates': ':crrates'
+    'comparator_rates': ':crrates',
+    'locked_save_bonus': ':lsbonus'
 };
 
 // because stopPaths on the library is not working and camel case flips labels to upper case on rates map (plus can exclude others later)

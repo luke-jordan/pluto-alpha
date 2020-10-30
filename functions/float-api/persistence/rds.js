@@ -344,7 +344,8 @@ module.exports.obtainAllAccountsWithPriorAllocations = async (floatId, currency,
     const sumQuery = `select account_id, unit, sum(amount) from ${floatTable} inner join ${accountTable} ` +
         `on ${floatTable}.allocated_to_id = ${accountTable}.account_id::varchar ` + 
         `where float_id = $1 and currency = $2 and allocated_to_type = $3 and t_state = $4 group by account_id, unit`;
-    const queryParams = [floatId, currency, entityType, 'SETTLED'];
+    // LOCKED settlement status intentionally excluded (since for locked, the interest is capitalized upfront and included in the boost)
+    const queryParams = [floatId, currency, entityType, 'SETTLED']; 
     
     logger('Assembled sum query: ', sumQuery);
     logger('And values: ', queryParams);

@@ -666,4 +666,5 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
         await expect(rds.updateTxSettlementStatus(params)).to.eventually.be.rejectedWith('Must supply settlement status');
         expect(updateRecordsStub).to.have.not.been.called;
     });
+
 });

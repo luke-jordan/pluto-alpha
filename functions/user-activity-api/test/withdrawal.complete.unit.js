@@ -34,11 +34,11 @@ const checkPriorBankVerificationStub = sinon.stub();
 const storeBankVerificationStub = sinon.stub();
 
 const publishEventStub = sinon.stub();
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 
 class MockLambdaClient {
     constructor () {
-        this.invoke = lamdbaInvokeStub;
+        this.invoke = lambdaInvokeStub;
     }
 }
 
@@ -49,7 +49,7 @@ const handler = proxyquire('../withdrawal-handler', {
     },
     './persistence/rds': {
         'fetchTransaction': fetchTransactionStub,
-        'sumAccountBalance': sumAccountBalanceStub,
+        'calculateWithdrawalBalance': sumAccountBalanceStub,
         'getOwnerInfoForAccount': getOwnerInfoForAccountStub,
         'addTransactionToAccount': addTransactionToAccountStub,
         'updateTxSettlementStatus': updateTxSettlementStatusStub,
@@ -109,7 +109,7 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
     beforeEach(() => {
         helper.resetStubs(
             momentStub, publishEventStub, redisGetStub, redisSetStub, sumAccountBalanceStub, addTransactionToAccountStub, 
-            getOwnerInfoForAccountStub, lamdbaInvokeStub, fetchBankRefInfoStub, generateBankRefStub, 
+            getOwnerInfoForAccountStub, lambdaInvokeStub, fetchBankRefInfoStub, generateBankRefStub, 
             fetchPendingTxStub, checkPriorBankVerificationStub, storeBankVerificationStub
         );
     });
@@ -121,7 +121,7 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
         const mockVerifyStashTime = moment();
 
         redisGetStub.resolves(JSON.stringify(testBankDetails));
-        lamdbaInvokeStub.returns({ promise: () => mockInitializeVerificationResponse });
+        lambdaInvokeStub.returns({ promise: () => mockInitializeVerificationResponse });
         // in _theory_, could use persisted time from verification details stashing, _but_ would mean sequential instead of parallel call,
         // and in no plausible way is the extra few milliseconds of accuracy worth that
         momentStub.returns(mockVerifyStashTime.clone()); 
@@ -168,7 +168,7 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
         expect(redisGetStub).to.have.been.calledWith(testUserId);
         
         const expectedBankInvoke = { operation: 'statusCheck', parameters: { jobId: 'KSDF382' } };
-        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userBankVerify'), false, expectedBankInvoke));
+        expect(lambdaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userBankVerify'), false, expectedBankInvoke));
         
         expect(sumAccountBalanceStub).to.have.been.calledOnceWithExactly(testAccountId, 'USD');
         expect(getOwnerInfoForAccountStub).to.have.been.calledOnceWithExactly(testAccountId);
@@ -196,7 +196,7 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
         const event = helper.wrapEvent({ accountId: testAccountId, amount: -250100.00000000003, unit: 'HUNDREDTH_CENT', currency: 'USD' }, testUserId);
 
         redisGetStub.resolves(JSON.stringify(testBankDetails));
-        lamdbaInvokeStub.returns({ promise: () => mockBankVerifyResponse('VERIFIED') });
+        lambdaInvokeStub.returns({ promise: () => mockBankVerifyResponse('VERIFIED') });
         momentStub.returns(moment());
         
         sumAccountBalanceStub.resolves({ amount: 100000000, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
@@ -235,7 +235,7 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
         expect(resultOfSetting).to.deep.equal(expectedResult);
         expect(redisGetStub).to.have.not.been.called;
         expect(redisGetStub).to.have.not.been.called;
-        expect(lamdbaInvokeStub).to.have.not.been.called;
+        expect(lambdaInvokeStub).to.have.not.been.called;
         expect(sumAccountBalanceStub).to.have.not.been.called;
         expect(getOwnerInfoForAccountStub).to.have.not.been.called;
         expect(addTransactionToAccountStub).to.have.not.been.called;
@@ -282,7 +282,7 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
         
         const mockVerifyPayload = { result: 'FAILED', cause: 'ID number account mismatch' };
         const mockVerifyResult = { StatusCode: 200, Payload: JSON.stringify(mockVerifyPayload) };
-        lamdbaInvokeStub.returns({ promise: () => mockVerifyResult });
+        lambdaInvokeStub.returns({ promise: () => mockVerifyResult });
         
         const mockMoment = moment(); // see notes above about doing this instead of using ddb result to allow parallel
         momentStub.returns(mockMoment.clone());
@@ -330,14 +330,14 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
         const setupStubs = () => {
             momentStub.returns({ add: () => testInitiationTime });
             redisGetStub.resolves(JSON.stringify(testBankDetails));
-            lamdbaInvokeStub.returns({ promise: () => mockVerifyResult });
+            lambdaInvokeStub.returns({ promise: () => mockVerifyResult });
             sumAccountBalanceStub.resolves({ amount: 10, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
         };
 
         const commonAssertions = (resultOfSetting) => {
             expect(resultOfSetting).to.deep.equal(expectedResult);
-            helper.expectNoCalls(redisGetStub, lamdbaInvokeStub, sumAccountBalanceStub, getOwnerInfoForAccountStub, addTransactionToAccountStub);
-            helper.resetStubs(momentStub, publishEventStub, redisGetStub, sumAccountBalanceStub, addTransactionToAccountStub, getOwnerInfoForAccountStub, lamdbaInvokeStub);
+            helper.expectNoCalls(redisGetStub, lambdaInvokeStub, sumAccountBalanceStub, getOwnerInfoForAccountStub, addTransactionToAccountStub);
+            helper.resetStubs(momentStub, publishEventStub, redisGetStub, sumAccountBalanceStub, addTransactionToAccountStub, getOwnerInfoForAccountStub, lambdaInvokeStub);
         };
 
         setupStubs();
@@ -364,7 +364,7 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
 
         momentStub.returns({ add: () => testInitiationTime });
         redisGetStub.resolves(JSON.stringify(testBankDetails));
-        lamdbaInvokeStub.returns({ promise: () => mockBankVerifyResponse('VERIFIED') });
+        lambdaInvokeStub.returns({ promise: () => mockBankVerifyResponse('VERIFIED') });
         sumAccountBalanceStub.resolves({ amount: 120000, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
         fetchPendingTxStub.resolves([{ amount: -2, unit: 'WHOLE_CURRENCY', currency: 'USD', transactionType: 'WITHDRAWAL' }]);
      
@@ -373,7 +373,7 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
 
         expect(resultOfSetting).to.deep.equal(expectedResult);
         expect(sumAccountBalanceStub).to.have.been.calledOnceWithExactly(testAccountId, 'USD');
-        helper.expectNoCalls(redisGetStub, redisGetStub, lamdbaInvokeStub, getOwnerInfoForAccountStub, addTransactionToAccountStub);
+        helper.expectNoCalls(redisGetStub, redisGetStub, lambdaInvokeStub, getOwnerInfoForAccountStub, addTransactionToAccountStub);
     });
 
     it('Catches thrown errors', async () => {
@@ -420,7 +420,7 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
     };
 
     beforeEach(() => {
-        helper.resetStubs(publishEventStub, redisGetStub, redisSetStub, lamdbaInvokeStub, updateTxSettlementStatusStub, fetchTransactionStub, sumAccountBalanceStub);
+        helper.resetStubs(publishEventStub, redisGetStub, redisSetStub, lambdaInvokeStub, updateTxSettlementStatusStub, fetchTransactionStub, sumAccountBalanceStub);
     });
 
     it('Confirms user withdrawal', async () => {
@@ -429,7 +429,7 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
         publishEventStub.resolves({ result: 'SUCCESS' });
         redisGetStub.resolves(JSON.stringify(testBankDetails));
 
-        lamdbaInvokeStub.returns({ promise: () => mockBankVerifyResponse('VERIFIED') });
+        lambdaInvokeStub.returns({ promise: () => mockBankVerifyResponse('VERIFIED') });
         
         const newSumAccount = { amount: 100, unit: 'HUNDREDTH_CENT', currency: 'ZAR', lastTxTime: null }; // tx is not settled yet ...
         sumAccountBalanceStub.resolves(newSumAccount);
@@ -454,7 +454,7 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
         expect(confirmationResult).to.exist;
         expect(confirmationResult).to.deep.equal(expectedResult);
         expect(redisGetStub).to.have.been.calledOnceWithExactly(testUserId);
-        expect(lamdbaInvokeStub).to.not.have.been.called;
+        expect(lambdaInvokeStub).to.not.have.been.called;
         expect(updateTxSettlementStatusStub).to.have.been.calledOnceWithExactly({ transactionId: testTransactionId, settlementStatus: 'PENDING' });
         expect(fetchTransactionStub).to.have.been.calledOnceWithExactly(testTransactionId);
         expect(sumAccountBalanceStub).to.have.been.calledOnceWithExactly(testAccountId, 'ZAR');
@@ -487,7 +487,7 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
         expect(publishEventStub).to.have.been.calledOnceWithExactly(testUserId, 'WITHDRAWAL_EVENT_ABORTED', { context: userLogContext });
 
         expect(redisGetStub).to.have.not.been.called;
-        expect(lamdbaInvokeStub).to.have.not.been.called;
+        expect(lambdaInvokeStub).to.have.not.been.called;
     });
 
     // this operation is too delicate + important to user trust, and the bank account verification services are too
@@ -523,7 +523,7 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
         redisGetStub.resolves(JSON.stringify(mockDetails));
 
         const mockLambdaResponse = mockBankVerifyResponse('FAILED');
-        lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse });
+        lambdaInvokeStub.returns({ promise: () => mockLambdaResponse });
         const mockMoment = moment();
         momentStub.returns(mockMoment.clone());
         
@@ -538,7 +538,7 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
 
         expect(confirmationResult).to.deep.equal(expectedResult);
         expect(redisGetStub).to.have.been.calledWith(testUserId);
-        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userBankVerify'), false, { operation: 'statusCheck', parameters: { jobId: 'KSDF382' }}));
+        expect(lambdaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userBankVerify'), false, { operation: 'statusCheck', parameters: { jobId: 'KSDF382' }}));
 
         const expectedLogOptions = { context: { resultFromVerifier: { jobId: 'KSDF382', result: 'FAILED' } } };
         expect(publishEventStub).to.have.been.calledTwice; // otherwise is confirmation event
@@ -561,7 +561,7 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
         const mockDetails = { ...testBankDetails };
         Reflect.deleteProperty(mockDetails, 'verificationStatus');
         redisGetStub.resolves(JSON.stringify(mockDetails));
-        lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse });
+        lambdaInvokeStub.returns({ promise: () => mockLambdaResponse });
 
         const newSumAccount = { amount: 100, unit: 'HUNDREDTH_CENT', currency: 'ZAR', lastTxTime: null }; // tx is not settled yet ...
         sumAccountBalanceStub.resolves(newSumAccount);
@@ -575,7 +575,7 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
 
         expect(confirmationResult).to.deep.equal(expectedResult);
         expect(redisGetStub).to.have.been.calledWithExactly(testUserId);
-        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userBankVerify'), false, { operation: 'statusCheck', parameters: { jobId: 'KSDF382' }}));
+        expect(lambdaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userBankVerify'), false, { operation: 'statusCheck', parameters: { jobId: 'KSDF382' }}));
         const modifiedBankDetails = { ...testBankDetails };
         modifiedBankDetails.verificationStatus = 'PENDING';
         expect(redisSetStub).to.have.been.calledOnceWithExactly(testUserId, JSON.stringify(modifiedBankDetails), 'EX', 900);
@@ -605,7 +605,7 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
         expect(confirmationResult).to.deep.equal(expectedResult);
         expect(redisGetStub).to.have.been.calledWithExactly(testUserId);
         
-        expect(lamdbaInvokeStub).to.not.have.been.called;
+        expect(lambdaInvokeStub).to.not.have.been.called;
 
         const modifiedBankDetails = { ...invalidBankDetails };
         modifiedBankDetails.verificationStatus = 'MANUAL';
@@ -622,7 +622,7 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
         redisGetStub.resolves(JSON.stringify(mockDetails));
 
         const mockLambdaResponse = mockBankVerifyResponse('ERROR');
-        lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse });
+        lambdaInvokeStub.returns({ promise: () => mockLambdaResponse });
         
         const newSumAccount = { amount: 100, unit: 'HUNDREDTH_CENT', currency: 'ZAR', lastTxTime: null }; // tx is not settled yet ...
         sumAccountBalanceStub.resolves(newSumAccount);
@@ -635,7 +635,7 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
 
         expect(confirmationResult).to.deep.equal(expectedResult);
         expect(redisGetStub).to.have.been.calledWith(testUserId);
-        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userBankVerify'), false, { operation: 'statusCheck', parameters: { jobId: 'KSDF382' }}));
+        expect(lambdaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userBankVerify'), false, { operation: 'statusCheck', parameters: { jobId: 'KSDF382' }}));
 
         const expectedLogOptions = { context: { cause: 'Error on third party bank verification service' } };
         expect(publishEventStub).to.have.been.calledTwice; // otherwise is confirmation event
@@ -652,7 +652,7 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
 
         publishEventStub.resolves({ result: 'SUCCESS' });
         redisGetStub.resolves(JSON.stringify(testBankDetails));
-        lamdbaInvokeStub.returns({ promise: () => mockBankVerifyResponse });
+        lambdaInvokeStub.returns({ promise: () => mockBankVerifyResponse });
         updateTxSettlementStatusStub.resolves();
 
         const expectedResult = { statusCode: 500, body: JSON.stringify('Transaction update returned empty rows') };
@@ -664,7 +664,7 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
         expect(confirmationResult).to.deep.equal(expectedResult);
         expect(redisGetStub).to.have.been.calledOnceWithExactly(testUserId);
         expect(updateTxSettlementStatusStub).to.have.been.calledOnceWithExactly({ transactionId: testTransactionId, settlementStatus: 'PENDING' });
-        helper.expectNoCalls(lamdbaInvokeStub, fetchTransactionStub, sumAccountBalanceStub, publishEventStub);
+        helper.expectNoCalls(lambdaInvokeStub, fetchTransactionStub, sumAccountBalanceStub, publishEventStub);
     });
 
     it('Fails on missing context user id', async () => {
@@ -677,7 +677,7 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
 
         expect(confirmationResult).to.exist;
         expect(confirmationResult).to.deep.equal(expectedResult);
-        helper.expectNoCalls(publishEventStub, redisGetStub, lamdbaInvokeStub, updateTxSettlementStatusStub, fetchTransactionStub);
+        helper.expectNoCalls(publishEventStub, redisGetStub, lambdaInvokeStub, updateTxSettlementStatusStub, fetchTransactionStub);
     });
 
     it('Fails on missing transaction id', async () => {
@@ -690,7 +690,7 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
 
         expect(confirmationResult).to.exist;
         expect(confirmationResult).to.deep.equal(expectedResult);
-        helper.expectNoCalls(publishEventStub, redisGetStub, lamdbaInvokeStub, updateTxSettlementStatusStub, fetchTransactionStub);
+        helper.expectNoCalls(publishEventStub, redisGetStub, lambdaInvokeStub, updateTxSettlementStatusStub, fetchTransactionStub);
     });
 
     it('Fails on missing user decision', async () => {
@@ -703,7 +703,7 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
 
         expect(confirmationResult).to.exist;
         expect(confirmationResult).to.deep.equal(expectedResult);
-        helper.expectNoCalls(publishEventStub, redisGetStub, lamdbaInvokeStub, updateTxSettlementStatusStub, fetchTransactionStub);
+        helper.expectNoCalls(publishEventStub, redisGetStub, lambdaInvokeStub, updateTxSettlementStatusStub, fetchTransactionStub);
     });
 
     it('Catches thrown errors', async () => {
@@ -717,6 +717,6 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
         expect(confirmationResult).to.exist;
         expect(confirmationResult).to.deep.equal({ statusCode: 500, body: JSON.stringify('Error') });
         expect(redisGetStub).to.have.been.calledOnceWithExactly(testUserId);
-        helper.expectNoCalls(publishEventStub, lamdbaInvokeStub, updateTxSettlementStatusStub, fetchTransactionStub);
+        helper.expectNoCalls(publishEventStub, lambdaInvokeStub, updateTxSettlementStatusStub, fetchTransactionStub);
     });
 });

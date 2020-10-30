@@ -31,10 +31,10 @@ const fetchFloatVarsForBalanceCalcStub = sinon.stub();
 
 const checkPriorBankVerificationStub = sinon.stub();
 
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 class MockLambdaClient {
     constructor () {
-        this.invoke = lamdbaInvokeStub;
+        this.invoke = lambdaInvokeStub;
     }
 }
 
@@ -45,7 +45,7 @@ const handler = proxyquire('../withdrawal-handler', {
     },
     './persistence/rds': {
         'countSettledSaves': countSettledSavesStub,
-        'sumAccountBalance': sumAccountBalanceStub,
+        'calculateWithdrawalBalance': sumAccountBalanceStub,
         'getOwnerInfoForAccount': getOwnerInfoForAccountStub,
         'findMostCommonCurrency': findMostCommonCurrencyStub,
         'fetchPendingTransactions': fetchPendingTxStub,
@@ -111,7 +111,7 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
 
     beforeEach(() => {
         helper.resetStubs(
-            publishEventStub, redisGetStub, redisSetStub, lamdbaInvokeStub, sumAccountBalanceStub, 
+            publishEventStub, redisGetStub, redisSetStub, lambdaInvokeStub, sumAccountBalanceStub, 
             fetchPendingTxStub, countSettledSavesStub, findMostCommonCurrencyStub, 
             getOwnerInfoForAccountStub, fetchFloatVarsForBalanceCalcStub, checkPriorBankVerificationStub
         );
@@ -136,8 +136,8 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
         const mockInitializeVerificationResponse = mockInitiateBankResponse('SUCCESS', 'KSDF382');
 
         publishEventStub.resolves({ result: 'SUCCESS' });
-        lamdbaInvokeStub.onFirstCall().returns({ promise: () => mockLambdaResponse(testUserProfile) });
-        lamdbaInvokeStub.onSecondCall().returns({ promise: () => mockInitializeVerificationResponse });
+        lambdaInvokeStub.onFirstCall().returns({ promise: () => mockLambdaResponse(testUserProfile) });
+        lambdaInvokeStub.onSecondCall().returns({ promise: () => mockInitializeVerificationResponse });
         
         countSettledSavesStub.resolves(5);
         findMostCommonCurrencyStub.resolves('ZAR');
@@ -167,9 +167,9 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
 
         expect(checkPriorBankVerificationStub).to.have.been.calledOnceWithExactly(testUserId, testBankDetails);
         
-        expect(lamdbaInvokeStub).to.have.been.calledTwice;
-        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId }));
-        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userBankVerify'), false, mockJobIdPayload));
+        expect(lambdaInvokeStub).to.have.been.calledTwice;
+        expect(lambdaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId }));
+        expect(lambdaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userBankVerify'), false, mockJobIdPayload));
         
         expect(countSettledSavesStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(findMostCommonCurrencyStub).to.have.been.calledOnceWithExactly(testAccountId);
@@ -183,7 +183,7 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
         const event = helper.wrapEvent({ accountId: testAccountId, bankDetails: testBankDetails }, testUserId);
 
         publishEventStub.resolves({ result: 'SUCCESS' });
-        lamdbaInvokeStub.onFirstCall().returns({ promise: () => mockLambdaResponse(testUserProfile) });
+        lambdaInvokeStub.onFirstCall().returns({ promise: () => mockLambdaResponse(testUserProfile) });
         
         countSettledSavesStub.resolves(5);
         findMostCommonCurrencyStub.resolves('USD');
@@ -215,7 +215,7 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
 
         expect(checkPriorBankVerificationStub).to.have.been.calledOnceWithExactly(testUserId, testBankDetails);
         
-        expect(lamdbaInvokeStub).to.have.been.calledOnce; // profile args tested above
+        expect(lambdaInvokeStub).to.have.been.calledOnce; // profile args tested above
         
         expect(countSettledSavesStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(findMostCommonCurrencyStub).to.have.been.calledOnceWithExactly(testAccountId);
@@ -237,8 +237,8 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
         const mockInitializeVerificationResponse = mockInitiateBankResponse('SUCCESS', 'KSDF382');
 
         publishEventStub.resolves({ result: 'SUCCESS' });
-        lamdbaInvokeStub.onFirstCall().returns({ promise: () => mockLambdaResponse(testUserProfile) });
-        lamdbaInvokeStub.onSecondCall().returns({ promise: () => mockInitializeVerificationResponse });
+        lambdaInvokeStub.onFirstCall().returns({ promise: () => mockLambdaResponse(testUserProfile) });
+        lambdaInvokeStub.onSecondCall().returns({ promise: () => mockInitializeVerificationResponse });
         countSettledSavesStub.resolves(0);
         findMostCommonCurrencyStub.resolves('ZAR');
 
@@ -248,7 +248,7 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
 
         expect(resultOfSetting).to.deep.equal(expectedResult);
         expect(publishEventStub).to.have.been.calledOnceWithExactly(testUserId, 'WITHDRAWAL_EVENT_INITIATED');
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId }));
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId }));
         expect(countSettledSavesStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(findMostCommonCurrencyStub).to.have.been.calledOnceWithExactly(testAccountId);
         helper.expectNoCalls(sumAccountBalanceStub, redisSetStub);
@@ -263,7 +263,7 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
 
         expect(resultOfSetting).to.exist;
         expect(resultOfSetting).to.deep.equal(expectedResult);
-        helper.expectNoCalls(publishEventStub, lamdbaInvokeStub, countSettledSavesStub, findMostCommonCurrencyStub, sumAccountBalanceStub, redisSetStub);
+        helper.expectNoCalls(publishEventStub, lambdaInvokeStub, countSettledSavesStub, findMostCommonCurrencyStub, sumAccountBalanceStub, redisSetStub);
     });
 
     it('Logs bank verification failure if job ID is not invoked', async () => {
@@ -291,8 +291,8 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
         };
 
         publishEventStub.resolves({ result: 'SUCCESS' });
-        lamdbaInvokeStub.onFirstCall().returns({ promise: () => mockLambdaResponse(testUserProfile) });
-        lamdbaInvokeStub.onSecondCall().returns({ promise: () => mockInitializeVerificationResponse });
+        lambdaInvokeStub.onFirstCall().returns({ promise: () => mockLambdaResponse(testUserProfile) });
+        lambdaInvokeStub.onSecondCall().returns({ promise: () => mockInitializeVerificationResponse });
         countSettledSavesStub.resolves(5);
         findMostCommonCurrencyStub.resolves('ZAR');
         getOwnerInfoForAccountStub.resolves({ clientId: testClientId, floatId: testFloatId });
@@ -308,9 +308,9 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
         expect(resultOfSetting).to.exist;
         expect(resultOfSetting).to.deep.equal(expectedResult);
         expect(publishEventStub).to.have.been.calledOnceWithExactly(testUserId, 'WITHDRAWAL_EVENT_INITIATED');
-        expect(lamdbaInvokeStub).to.have.been.calledTwice;
-        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId }));
-        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userBankVerify'), false, mockJobIdPayload));
+        expect(lambdaInvokeStub).to.have.been.calledTwice;
+        expect(lambdaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId }));
+        expect(lambdaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userBankVerify'), false, mockJobIdPayload));
         expect(countSettledSavesStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(findMostCommonCurrencyStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(sumAccountBalanceStub).to.have.been.calledOnceWithExactly(testAccountId, 'ZAR');
@@ -342,8 +342,8 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
         const mockInitializeVerificationResponse = mockInitiateBankResponse('FAILED', 'KSDF382');
 
         publishEventStub.resolves({ result: 'SUCCESS' });
-        lamdbaInvokeStub.onFirstCall().returns({ promise: () => mockLambdaResponse(testUserProfile) });
-        lamdbaInvokeStub.onSecondCall().returns({ promise: () => mockInitializeVerificationResponse });
+        lambdaInvokeStub.onFirstCall().returns({ promise: () => mockLambdaResponse(testUserProfile) });
+        lambdaInvokeStub.onSecondCall().returns({ promise: () => mockInitializeVerificationResponse });
 
         countSettledSavesStub.resolves(5);
         findMostCommonCurrencyStub.resolves('ZAR');
@@ -370,9 +370,9 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
         expect(resultOfSetting).to.deep.equal(expectedResult);
         expect(publishEventStub).to.have.been.calledOnceWithExactly(testUserId, 'WITHDRAWAL_EVENT_INITIATED');
         
-        expect(lamdbaInvokeStub).to.have.been.calledTwice;
-        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId }));
-        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userBankVerify'), false, mockJobIdPayload));
+        expect(lambdaInvokeStub).to.have.been.calledTwice;
+        expect(lambdaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId }));
+        expect(lambdaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userBankVerify'), false, mockJobIdPayload));
         
         expect(countSettledSavesStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(findMostCommonCurrencyStub).to.have.been.calledOnceWithExactly(testAccountId);
@@ -393,7 +393,7 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
         expect(resultOfSetting).to.exist;
         expect(resultOfSetting).to.deep.equal({ statusCode: 500, body: JSON.stringify('Internal error') });
         expect(publishEventStub).to.have.been.calledOnceWithExactly(testUserId, 'WITHDRAWAL_EVENT_INITIATED');
-        helper.expectNoCalls(lamdbaInvokeStub, countSettledSavesStub, findMostCommonCurrencyStub, sumAccountBalanceStub, redisSetStub);
+        helper.expectNoCalls(lambdaInvokeStub, countSettledSavesStub, findMostCommonCurrencyStub, sumAccountBalanceStub, redisSetStub);
     });
 
 });

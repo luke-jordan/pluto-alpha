@@ -13,11 +13,11 @@ const helper = require('./test.helper');
 const checkOtpVerifiedStub = sinon.stub();
 const fetchClientFloatVarsStub = sinon.stub();
 const updateClientFloatVarsStub = sinon.stub();
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 
 class MockLambdaClient {
     constructor () {
-        this.invoke = lamdbaInvokeStub;
+        this.invoke = lambdaInvokeStub;
     }
 }
 
@@ -38,7 +38,7 @@ describe('*** UNIT TEST SET REFERENCE RATES FOR FLOAT ***', () => {
     const testClientId = 'some_client';
     const testFloatId = 'primary_mmkt_float';
 
-    beforeEach(() => helper.resetStubs(lamdbaInvokeStub, checkOtpVerifiedStub, updateClientFloatVarsStub));
+    beforeEach(() => helper.resetStubs(lambdaInvokeStub, checkOtpVerifiedStub, updateClientFloatVarsStub));
 
     it('Unit test setting the bank reference rates', async () => {
 

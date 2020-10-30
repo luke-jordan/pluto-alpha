@@ -41,8 +41,8 @@ module.exports.checkForDuplicateSave = async ({ accountId, amount, currency, uni
 module.exports.fetchTransactionsForHistory = async (accountId) => {
     const txTypes = ['USER_SAVING_EVENT', 'WITHDRAWAL', 'BOOST_REDEMPTION', 'CAPITALIZATION', 'BOOST_POOL_FUNDING', 'BOOST_REVOCATION'];
     const query = `select * from ${config.get('tables.accountTransactions')} where account_id = $1 ` +
-        `and settlement_status = $2 and transaction_type in (${opsUtil.extractArrayIndices(txTypes, 3)}) order by creation_time desc`;
-    const rows = await rdsConnection.selectQuery(query, [accountId, 'SETTLED', ...txTypes]);
+        `and settlement_status in ($2, $3) and transaction_type in (${opsUtil.extractArrayIndices(txTypes, 4)}) order by creation_time desc`;
+    const rows = await rdsConnection.selectQuery(query, [accountId, 'SETTLED', 'LOCKED', ...txTypes]);
     return rows.length > 0 ? rows.map((row) => camelizeKeys(row)) : [];
 };
 
@@ -203,14 +203,14 @@ module.exports.sumAccountBalance = async (accountId, currency, time = moment()) 
     const tableToQuery = config.get('tables.accountTransactions');
     
     const transTypesToInclude = ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION', 'BOOST_REVOCATION'];
-    const preTransParamCount = 5;
+    const preTransParamCount = 6;
     
     const transTypeIdxs = opsUtil.extractArrayIndices(transTypesToInclude, preTransParamCount + 1);
 
     const sumQuery = `select sum(amount), unit from ${tableToQuery} where account_id = $1 and currency = $2 and ` +
-        `settlement_status in ($3, $4) and settlement_time < to_timestamp($5) and transaction_type in (${transTypeIdxs}) group by unit`;
+        `settlement_status in ($3, $4, $5) and settlement_time < to_timestamp($6) and transaction_type in (${transTypeIdxs}) group by unit`;
 
-    const params = [accountId, currency, 'SETTLED', 'ACCRUED', time.unix(), ...transTypesToInclude];
+    const params = [accountId, currency, 'SETTLED', 'ACCRUED', 'LOCKED', time.unix(), ...transTypesToInclude];
     logger('Summing with query: ', sumQuery, ' and params: ', params);
 
     const summedRows = await rdsConnection.selectQuery(sumQuery, params);
@@ -231,43 +231,39 @@ module.exports.sumAccountBalance = async (accountId, currency, time = moment()) 
     return { amount: totalBalanceInDefaultUnit, unit: DEFAULT_UNIT, currency, lastTxTime };
 };
 
-module.exports.sumTotalAmountSaved = async (accountId, currency, unit = DEFAULT_UNIT) => {
+// Fetches a users available balance for withdrawal. LOCKED saves are excluded in the amount returned.
+module.exports.calculateWithdrawalBalance = async (accountId, currency, time = moment()) => {
     const accountTxTable = config.get('tables.accountTransactions');
 
-    const sumQuery = `select sum(amount), unit from ${accountTxTable} where account_id = $1 and currency = $2 and ` +
+    const startingIndex = 6;
+    
+    const transTypesToInclude = ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'];
+    const transTypeIdxs = opsUtil.extractArrayIndices(transTypesToInclude, startingIndex);
+
+    const sumBalanceQuery = `select sum(amount), unit from ${accountTxTable} where account_id = $1 and currency = $2 and ` +
+        `settlement_status in ($3, $4) and settlement_time < to_timestamp($5) and transaction_type in (${transTypeIdxs}) group by unit`; 
+
+    // For obtaining pending withdrawals
+    const sumWithdrawalsQuery = `select sum(amount), unit from ${accountTxTable} where account_id = $1 and currency = $2 and ` +
         `settlement_status = $3 and transaction_type = $4 group by unit`;
 
-    const params = [accountId, currency, 'SETTLED', 'USER_SAVING_EVENT'];
-    logger('Summing with query: ', sumQuery, ' and params: ', params);
+    // does _not_ include locked saves 
+    const balanceQueryValues = [accountId, currency, 'SETTLED', 'ACCRUED', time.unix(), ...transTypesToInclude];
+    const withdrawalQueryValues = [accountId, currency, 'PENDING', 'WIHDRAWAL'];
 
-    const summedRows = await rdsConnection.selectQuery(sumQuery, params);
-    logger('Result of unit query: ', summedRows);
+    // Could be done in one query, albiet complexly. Slight performance compromise for readability
+    const [summedBalance, summedWithdrawals] = await Promise.all([
+        rdsConnection.selectQuery(sumBalanceQuery, balanceQueryValues),
+        rdsConnection.selectQuery(sumWithdrawalsQuery, withdrawalQueryValues)
+    ]);
+
+    logger('Got summed balance', summedBalance);
+    logger('And summed pending withdrawals: ', summedWithdrawals);
     
-    const totalAmountInDefaultUnit = opsUtil.sumOverUnits(summedRows, unit);
-    logger('For account ID, RDS calculation yields result: ', totalAmountInDefaultUnit);
+    const totalAmountInDefaultUnit = opsUtil.sumOverUnits([...summedBalance, ...summedWithdrawals], DEFAULT_UNIT);
+    logger('Got summed account balance: ', totalAmountInDefaultUnit);
 
-    return { amount: totalAmountInDefaultUnit, unit, currency };
-};
-
-module.exports.sumAmountSavedLastMonth = async (accountId, currency, unit = DEFAULT_UNIT) => {
-    const accountTxTable = config.get('tables.accountTransactions');
-
-    const startTime = moment().startOf('month').subtract(1, 'month');
-    const endTime = moment().startOf('month');
-    
-    const sumQuery = `select sum(amount), unit from ${accountTxTable} where account_id = $1 and currency = $2 and ` +
-        `settlement_status = $3 and transaction_type = $4 and creation_time > $5 and creation_time < $6 group by unit`;
-
-    const params = [accountId, currency, 'SETTLED', 'USER_SAVING_EVENT', startTime.format(), endTime.format()];
-    logger('Summing with query: ', sumQuery, ' and params: ', params);
-
-    const summedRows = await rdsConnection.selectQuery(sumQuery, params);
-    logger('Result of unit query: ', summedRows);
-    
-    const monthlyAmountInDefaultUnit = opsUtil.sumOverUnits(summedRows, unit);
-    logger('For account ID, ', accountId, ', last months aved calculation yields result: ', monthlyAmountInDefaultUnit);
-
-    return { amount: monthlyAmountInDefaultUnit, unit, currency };
+    return { amount: totalAmountInDefaultUnit, unit: DEFAULT_UNIT, currency };
 };
 
 /**
