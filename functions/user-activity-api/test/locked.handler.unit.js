@@ -247,7 +247,7 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
         const expectedBoostPayload = {
             creatingUserId: testSystemId,
             label: 'Locked Save Boost',
-            boostTypeCategory: 'LOCKED::SIMPLE_LOCK',
+            boostTypeCategory: 'SIMPLE::LOCKED_SAVE',
             boostAmountOffered: '15::HUNDREDTH_CENT::USD',
             boostBudget: 15,
             boostSource: expectedBoostSource,
@@ -339,7 +339,7 @@ describe('*** UNIT TEST LOCK SETTLED SAVE ***', () => {
         const expectedBoostPayload = {
             creatingUserId: testSystemId,
             label: 'Locked Save Boost',
-            boostTypeCategory: 'LOCKED::SIMPLE_LOCK',
+            boostTypeCategory: 'SIMPLE::LOCKED_SAVE',
             boostAmountOffered: '22::HUNDREDTH_CENT::USD',
             boostBudget: 22,
             boostSource: expectedBoostSource,
