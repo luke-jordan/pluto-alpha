@@ -50,7 +50,7 @@ resource "aws_rds_cluster" "pg_rds" {
   cluster_identifier      = "${terraform.workspace}-database-aurora-pg"
   
   engine                  = "aurora-postgresql"
-  engine_version          = "10.7"
+  engine_version          = "10.12"
   engine_mode             = "serverless"
   
   database_name           = var.db_name
