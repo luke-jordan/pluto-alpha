@@ -77,16 +77,16 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
     const testUserId1 = uuid();
 
     const testUserId2 = uuid();
-    const testAccoundIdsMulti = [uuid(), uuid(), uuid()];
+    const testAccountIdsMulti = [uuid(), uuid(), uuid()];
 
     const testBalance = Math.floor(100 * 100 * 100 * Math.random());
     const testBalanceCents = Math.round(testBalance);
 
     const txTable = config.get('tables.accountTransactions');
     const transTypes = ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION', 'BOOST_REVOCATION'];
-    const txIndices = '$6, $7, $8, $9, $10, $11';
-    const sumQuery = `select sum(amount), unit from ${txTable} where account_id = $1 and currency = $2 and ` +
-        `settlement_status in ($3, $4) and settlement_time < to_timestamp($5) and transaction_type in (${txIndices}) group by unit`;
+    const sumQuery = 'select sum(amount), unit from transaction_data.core_transaction_ledger where account_id = $1 and ' +
+        'currency = $2 and settlement_status in ($3, $4, $5) and settlement_time < to_timestamp($6) and ' +
+        'transaction_type in ($7, $8, $9, $10, $11, $12) group by unit';
     // on this one we leave out the accrued
     const latestTxQuery = `select creation_time from ${txTable} where account_id = $1 and currency = $2 and settlement_status = 'SETTLED' ` +
         `and creation_time < to_timestamp($3) order by creation_time desc limit 1`;
@@ -96,12 +96,12 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
     it('Obtain the balance of an account at a point in time correctly', async () => {
         const testTime = moment();
         const testLastTxTime = moment().subtract(5, 'hours');
-        const queryArgs = [testAccountId, 'USD', 'SETTLED', 'ACCRUED', testTime.unix(), ...transTypes];
+        const queryArgs = [testAccountId, 'USD', 'SETTLED', 'ACCRUED', 'LOCKED', testTime.unix(), ...transTypes];
                 
-        queryStub.withArgs(sumQuery, queryArgs).resolves([
+        queryStub.onFirstCall().resolves([
             { 'unit': 'HUNDREDTH_CENT', 'sum': testBalance }, { 'unit': 'WHOLE_CENT', 'sum': testBalanceCents }
         ]);
-        queryStub.withArgs(latestTxQuery, [testAccountId, 'USD', testTime.unix()]).resolves([{ 'creation_time': testLastTxTime.format() }]);
+        queryStub.onSecondCall().resolves([{ 'creation_time': testLastTxTime.format() }]);
 
         const expectedBalance = testBalance + (100 * testBalanceCents);
         
@@ -111,19 +111,27 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
         expect(balanceResult).to.have.property('amount', expectedBalance);
         expect(balanceResult).to.have.property('unit', 'HUNDREDTH_CENT');
         expect(balanceResult.lastTxTime.format()).to.equal(testLastTxTime.format());
+
+        expect(queryStub).to.have.been.calledTwice;
+        expect(queryStub).to.have.been.calledWithExactly(sumQuery, queryArgs);
+        expect(queryStub).to.have.been.calledWithExactly(latestTxQuery, [testAccountId, 'USD', testTime.unix()]);
     });
 
     it('Handle case of no prior transactions properly', async () => {
         const testTime = moment();
-        const queryArgs = [testAccountId, 'USD', 'SETTLED', 'ACCRUED', testTime.unix(), ...transTypes];
+        const queryArgs = [testAccountId, 'USD', 'SETTLED', 'ACCRUED', 'LOCKED', testTime.unix(), ...transTypes];
 
-        queryStub.withArgs(sumQuery, queryArgs).resolves([]);
-        queryStub.withArgs(latestTxQuery, [testAccountId, 'USD', testTime.unix()]).resolves([]);
+        queryStub.onFirstCall().resolves([]);
+        queryStub.onSecondCall().resolves([]);
         
         const balanceResult = await rds.sumAccountBalance(testAccountId, 'USD', testTime);
         
         expect(balanceResult).to.exist;
         expect(balanceResult).to.deep.equal({ amount: 0, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
+
+        expect(queryStub).to.have.been.calledTwice;
+        expect(queryStub).to.have.been.calledWithExactly(sumQuery, queryArgs);
+        expect(queryStub).to.have.been.calledWithExactly(latestTxQuery, [testAccountId, 'USD', testTime.unix()]);
     });
 
     it('Fetches balance available for withdrawals', async () => {
@@ -154,7 +162,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
         // most recent account first
         const findQuery = 'select account_id from account_data.core_account_ledger where owner_user_id = $1 order by creation_time desc';
         queryStub.withArgs(findQuery, [testUserId1]).resolves([{ 'account_id': testAccountId }]);
-        const multiAccountList = testAccoundIdsMulti.map((accountId) => ({ 'account_id': accountId }));
+        const multiAccountList = testAccountIdsMulti.map((accountId) => ({ 'account_id': accountId }));
         queryStub.withArgs(findQuery, [testUserId2]).resolves(multiAccountList);
 
         const resultOfAccountQuerySingle = await rds.findAccountsForUser(testUserId1);
@@ -163,7 +171,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
 
         const resultOfAccountQueryMultiple = await rds.findAccountsForUser(testUserId2);
         expect(resultOfAccountQueryMultiple).to.exist;
-        expect(resultOfAccountQueryMultiple).to.deep.equal(testAccoundIdsMulti);
+        expect(resultOfAccountQueryMultiple).to.deep.equal(testAccountIdsMulti);
 
         expect(queryStub.callCount).to.equal(2);
         expect(queryStub.getCall(0).calledWithExactly(findQuery, [testUserId1])).to.equal(true);
@@ -374,11 +382,6 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
 });
 
 describe('*** UNIT TEST SAVINGS HEAT PERSISTENCE FUNCTIONS ***', () => {
-    const testBalance = Math.floor(100 * 100 * 100 * Math.random());
-    const testBalanceCents = Math.round(testBalance);
-
-    const accountTxTable = config.get('tables.accountTransactions');
-
 
     beforeEach(() => {
         resetStubs();

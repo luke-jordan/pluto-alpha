@@ -51,15 +51,24 @@ const mapLockedSaveDaysToInterest = (lockedSaveBonus, accrualRate, daysToPreview
     return lockedSaveInterestMap;
 };
 
-const calculateBonusForLockedSave = (lockedSaveInterestMap, baseAmount) => {
-    const resultOfCalculation = lockedSaveInterestMap.map((daysAndInterest) => {
-        const interestRate = Object.values(daysAndInterest)[0];
+const calculateBonusForLockedSave = async (clientId, floatId, lockBonusAmount, daysToLock) => {
+    const floatProjectionVars = await dynamo.fetchFloatVarsForBalanceCalc(clientId, floatId);
+    const interestRate = interestHelper.calculateInterestRate(floatProjectionVars);
+    const { lockedSaveBonus } = floatProjectionVars;
+    logger('Got interest rate: ', interestRate.toString(), 'And locked save bonus details: ', lockedSaveBonus);
+
+    const lockedSaveInterestMap = mapLockedSaveDaysToInterest(lockedSaveBonus, interestRate, daysToLock);
+    logger('Mapped locked days to interest rates: ', lockedSaveInterestMap);
+
+    const calculatedLockedSaveBonus = lockedSaveInterestMap.map((daysAndInterest) => {
         const daysToCalculate = Object.keys(daysAndInterest)[0];
-        const { amount, unit, currency } = interestHelper.calculateEstimatedInterestEarned({ ...baseAmount, daysToCalculate }, 'HUNDREDTH_CENT', interestRate);
+        const { amount, unit, currency } = interestHelper.calculateEstimatedInterestEarned({ ...lockBonusAmount, daysToCalculate }, 'HUNDREDTH_CENT', interestRate);
         return { [daysToCalculate]: { amount: Math.round(amount), unit, currency } };
     });
 
-    return resultOfCalculation;
+    logger('Calculated locked save bonus: ', calculatedLockedSaveBonus);
+        
+    return calculatedLockedSaveBonus.reduce((obj, daysBonusMap) => ({ ...obj, ...daysBonusMap }), {});
 };
 
 /**
@@ -84,22 +93,10 @@ module.exports.previewBonus = async (event) => {
 
         const { clientId, floatId, baseAmount, daysToPreview } = opsUtil.extractParamsFromEvent(event);
         logger('Previewing locked save bonus for client id: ', clientId, ' and float id: ', floatId);
+        const bonusPreviews = await calculateBonusForLockedSave(clientId, floatId, baseAmount, daysToPreview);
+        logger('Returning final result: ', bonusPreviews);
 
-        const floatProjectionVars = await dynamo.fetchFloatVarsForBalanceCalc(clientId, floatId);
-        const interestRate = interestHelper.calculateInterestRate(floatProjectionVars);
-        const { lockedSaveBonus } = floatProjectionVars;
-        logger('Got interest rate: ', interestRate.toString(), 'And locked save bonus details: ', lockedSaveBonus);
-
-        const lockedSaveInterestMap = mapLockedSaveDaysToInterest(lockedSaveBonus, interestRate, daysToPreview);
-        logger('Mapped days to preview to corresponding multipliers: ', lockedSaveInterestMap);
-
-        const calculatedLockedSaveBonus = calculateBonusForLockedSave(lockedSaveInterestMap, baseAmount);
-        logger('Calculated locked save bonus for receive days: ', calculatedLockedSaveBonus);
-        
-        const resultObject = calculatedLockedSaveBonus.reduce((obj, daysBonusMap) => ({ ...obj, ...daysBonusMap }), {});
-        logger('Returning final result: ', resultObject);
-
-        return opsUtil.wrapResponse(resultObject);
+        return opsUtil.wrapResponse(bonusPreviews);
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return opsUtil.wrapResponse({ message: err.message }, 500);
@@ -181,7 +178,6 @@ const isUserTxAccountOwner = async (systemWideUserId, transactionToLock) => {
 /**
  * The function locks save transactions whose settlement status is SETTLED and creates a boost that
  * will be triggered when the lock expires.
- * TODO: alter this to calculate the bonus amount using the daysToLock (using methods from preview), getting clientId + floatId from transaction
  * @param {object} event An admin, user, http, or direct invocation event.
  * @property {string} transactionId The identifier of the transaction to be locked.
  * @property {object} lockBonusAmount A standard amount dict, the boost amount to be awarded to the user after the lock expired
@@ -220,7 +216,12 @@ module.exports.lockSettledSave = async (event) => {
 
         const updatedTime = moment(resultOfLock.updatedTime);
 
-        const resultOfBoost = await createBoostForLockedTx(systemWideUserId, transactionToLock, lockBonusAmount, daysToLock);
+        const { clientId, floatId } = transactionToLock;
+
+        const boostAmount = await calculateBonusForLockedSave(clientId, floatId, lockBonusAmount, [daysToLock]);
+        logger('Calculated boost amount based on locked days: ', boostAmount);
+
+        const resultOfBoost = await createBoostForLockedTx(systemWideUserId, transactionToLock, boostAmount[daysToLock], daysToLock);
         logger('Result of boost creation for locked tx: ', resultOfBoost);
         
         const logOptions = {
@@ -239,8 +240,7 @@ module.exports.lockSettledSave = async (event) => {
     
         await publisher.publishUserEvent(systemWideUserId, 'USER_LOCKED_SAVE', logOptions);
 
-        // also return the amount boosted (see not above about calculating that in here)
-        return opsUtil.wrapResponse({ result: 'SUCCESS' });
+        return opsUtil.wrapResponse({ result: 'SUCCESS', boostAmount: boostAmount[daysToLock] });
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return opsUtil.wrapResponse({ message: err.message }, 500);
