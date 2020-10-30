@@ -270,6 +270,9 @@ const publishLockExpired = async (unlockedTx) => {
 module.exports.checkForExpiredLocks = async (event) => {
     try {
         logger('Expired lock handler received event: ', event);
+        if (!opsUtil.isDirectInvokeAdminOrSelf(event, null, true)) {
+            return { statusCode: 403 };
+        }
 
         const lockedTransactions = await persistence.fetchExpiredLockedTransactions();
         logger('Expired locks: ', lockedTransactions);

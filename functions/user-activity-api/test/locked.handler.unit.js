@@ -445,7 +445,7 @@ describe('*** UNIT TEST LOCK EXPIRY SCHEDULED JOB ***', () => {
 
         momentStub.returns(testCurrentTime);
 
-        const resultOfExpire = await handler.checkForExpiredLocks();
+        const resultOfExpire = await handler.checkForExpiredLocks({});
         const resultBody = testHelper.standardOkayChecks(resultOfExpire);
 
         expect(resultBody).to.deep.equal({ result: 'SUCCESS' });
@@ -469,12 +469,12 @@ describe('*** UNIT TEST LOCK EXPIRY SCHEDULED JOB ***', () => {
         fetchLockedTxStub.resolves([]);
         
         // Where there are no locked tx to process
-        await expect(handler.checkForExpiredLocks()).to.eventually.deep.equal({ statusCode: 200 });
+        await expect(handler.checkForExpiredLocks({})).to.eventually.deep.equal({ statusCode: 200 });
 
         fetchLockedTxStub.throws(new Error('Error!'));
 
         // On thrown error
-        const resultOnError = await handler.checkForExpiredLocks();
+        const resultOnError = await handler.checkForExpiredLocks({});
         const resultBody = testHelper.standardOkayChecks(resultOnError, 500);
         expect(resultBody).to.deep.equal({ message: 'Error!'});
     });
