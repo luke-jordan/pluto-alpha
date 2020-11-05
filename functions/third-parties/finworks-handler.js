@@ -219,6 +219,11 @@ const directTransactionEvent = async (event) => {
  */
 module.exports.addTransaction = async (sqsEvent) => {
     logger('Received: ', JSON.stringify(sqsEvent, null, 2));
+
+    if (config.has('finworks.enabled') && !config.get('finworks.enabled')) {
+        return { result: 'DISABLED' };
+    }
+
     const eventBodies = opsUtil.extractSQSEvents(sqsEvent);
     const resultOfDispatch = await Promise.all(eventBodies.map((event) => directTransactionEvent(event)));
     return resultOfDispatch;
